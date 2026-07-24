@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+.next/
+out/
+
+# Environment variables (never commit secrets)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+/coverage
+/.nyc_output
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs and editors
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+.temp
+.tmp

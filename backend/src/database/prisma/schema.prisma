@@ -1,6 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-  output   = "../../../node_modules/.prisma/client"
+  output   = "../../generated/prisma"
 }
 
 datasource db {
@@ -11,9 +11,10 @@ datasource db {
 
 enum Role {
   SUPER_ADMIN
-  ADMIN
-  USER
-  GUEST
+  OWNER
+  STAFF
+  DELIVERY
+  CUSTOMER
 }
 
 enum Plan {
@@ -28,6 +29,18 @@ enum Status {
   SUSPENDED
 }
 
+enum WhatsappProvider {
+  INTERAKT
+  AISENSY
+  GUPSHUP
+  TWILIO
+}
+
+enum EmailProvider {
+  RESEND
+  SMTP
+}
+
 // ─── Tenant ──────────────────────────────────────────────
 
 model Tenant {
@@ -39,7 +52,13 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users User[]
+  users                  User[]
+  businessProfile        BusinessProfile?
+  orderAcceptanceSettings OrderAcceptanceSettings?
+  notificationSettings   NotificationSettings?
+  paymentSettings        PaymentSettings?
+  serviceablePincodes    ServiceablePincode[]
+  rolePermissions        RolePermission[]
 
   @@map("tenants")
 }
@@ -52,7 +71,7 @@ model User {
   passwordHash String
   firstName    String
   lastName     String?
-  role         Role      @default(USER)
+  role         Role      @default(CUSTOMER)
   status       Status    @default(ACTIVE)
   tenantId     String
   isActive     Boolean   @default(true)
@@ -69,6 +88,143 @@ model User {
   @@index([tenantId, status])
   @@index([deletedAt])
   @@map("users")
+}
+
+// ─── Business configuration (white-label, per tenant) ────
+
+model BusinessProfile {
+  id                     String   @id @default(uuid())
+  tenantId               String   @unique
+  displayName            String
+  description            String?
+  logoUrl                String?
+  faviconUrl             String?
+  supportEmail           String?
+  supportPhone           String?
+  whatsappBusinessNumber String?
+  addressLine1           String?
+  addressLine2           String?
+  city                   String?
+  state                  String?
+  country                String?
+  pincode                String?
+  timezone               String   @default("Asia/Kolkata")
+  currency               String   @default("INR")
+  gstNumber              String?
+  themeConfig            Json     @default("{}")
+  defaultLocale          String   @default("en")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("business_profiles")
+}
+
+model OrderAcceptanceSettings {
+  id                  String   @id @default(uuid())
+  tenantId            String   @unique
+  operatingHours      Json     @default("{}")
+  dailyCutoffTime     String?
+  closedDates         Json     @default("[]")
+  isTemporarilyClosed Boolean  @default(false)
+  closureReason       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("order_acceptance_settings")
+}
+
+model ServiceablePincode {
+  id             String   @id @default(uuid())
+  tenantId       String
+  pincode        String
+  deliveryFee    Int      @default(0)
+  minOrderAmount Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, pincode])
+  @@index([tenantId])
+  @@map("serviceable_pincodes")
+}
+
+model NotificationSettings {
+  id                        String            @id @default(uuid())
+  tenantId                  String            @unique
+  whatsappEnabled           Boolean           @default(false)
+  whatsappProvider          WhatsappProvider?
+  whatsappApiKeyEncrypted   String?
+  whatsappConfigEncrypted   Json?
+  whatsappSenderNumber      String?
+  ownerWhatsappNumber       String?
+  emailEnabled              Boolean           @default(false)
+  emailProvider             EmailProvider?
+  emailFromAddress          String?
+  emailFromName             String?
+  emailConfigEncrypted      Json?
+  ownerNotificationEmail    String?
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("notification_settings")
+}
+
+model PaymentSettings {
+  id                             String   @id @default(uuid())
+  tenantId                       String   @unique
+  razorpayKeyId                  String?
+  razorpayKeySecretEncrypted     String?
+  razorpayWebhookSecretEncrypted String?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("payment_settings")
+}
+
+// ─── Permissions (fine-grained, tenant-configurable RBAC) ─
+
+model Permission {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  description String
+  category    String
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  tenantId     String
+  role         Role
+  permissionId String
+  granted      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@unique([tenantId, role, permissionId])
+  @@index([tenantId])
+  @@index([tenantId, role])
+  @@map("role_permissions")
 }
 
 // ─── Refresh Token ───────────────────────────────────────

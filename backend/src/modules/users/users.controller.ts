@@ -42,7 +42,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @Roles(Role.ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.OWNER)
   @ResponseMessage('User created successfully')
   @ApiOperation({ summary: 'Create a new user' })
   @ApiResponse({ status: 201, type: UserResponseDto })
@@ -82,7 +82,7 @@ export class UsersController {
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Soft delete user' })
   @ApiResponse({ status: 204 })

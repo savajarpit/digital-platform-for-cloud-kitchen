@@ -38,8 +38,8 @@ export class CreateUserDto {
   @MaxLength(50)
   lastName?: string;
 
-  @ApiPropertyOptional({ enum: Role, default: Role.USER })
+  @ApiPropertyOptional({ enum: Role, default: Role.CUSTOMER })
   @IsOptional()
   @IsEnum(Role)
-  role?: Role = Role.USER;
+  role?: Role = Role.CUSTOMER;
 }

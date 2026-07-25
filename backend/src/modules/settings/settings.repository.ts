@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import {
   BusinessProfile,
+  NotificationSettings,
   OrderAcceptanceSettings,
 } from '../../generated/prisma';
 
@@ -17,6 +18,14 @@ export class SettingsRepository {
     tenantId: string,
   ): Promise<OrderAcceptanceSettings | null> {
     return this.prisma.orderAcceptanceSettings.findUnique({
+      where: { tenantId },
+    });
+  }
+
+  findNotificationSettings(
+    tenantId: string,
+  ): Promise<NotificationSettings | null> {
+    return this.prisma.notificationSettings.findUnique({
       where: { tenantId },
     });
   }

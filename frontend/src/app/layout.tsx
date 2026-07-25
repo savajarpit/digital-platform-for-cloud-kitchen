@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
 import { getPublicConfig } from "@/lib/api/settings";
 import { buildThemeStyle } from "@/lib/theme/build-theme-style";
+import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
+import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/session-cookies";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -30,11 +34,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [config, locale] = await Promise.all([
+  const [config, locale, cookieStore] = await Promise.all([
     getPublicConfig(),
     getLocale(),
+    cookies(),
   ]);
   const themeStyle = buildThemeStyle(config.themeConfig);
+  const isAuthenticated = cookieStore.has(ACCESS_TOKEN_COOKIE);
 
   return (
     <html
@@ -47,7 +53,15 @@ export default async function RootLayout({
         <style id="brand-theme" dangerouslySetInnerHTML={{ __html: themeStyle }} />
       </head>
       <body className="min-h-full flex flex-col">
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        <NextIntlClientProvider>
+          <Header
+            displayName={config.displayName}
+            logoUrl={config.logoUrl}
+            isAuthenticated={isAuthenticated}
+          />
+          <div className="flex flex-1 flex-col">{children}</div>
+          <Footer config={config} />
+        </NextIntlClientProvider>
       </body>
     </html>
   );

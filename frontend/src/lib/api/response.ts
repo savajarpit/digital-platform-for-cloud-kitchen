@@ -14,4 +14,7 @@ export interface ApiErrorResponse {
   data: null;
   timestamp: string;
   path?: string;
+  /** Machine-readable extras some exceptions attach, e.g. `code: 'ACCOUNT_NOT_VERIFIED'`. */
+  code?: string;
+  [extra: string]: unknown;
 }

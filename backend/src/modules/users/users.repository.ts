@@ -49,4 +49,8 @@ export class UsersRepository {
       data: { deletedAt: new Date() },
     });
   }
+
+  async hardDelete(id: string): Promise<User> {
+    return this.prisma.user.delete({ where: { id } });
+  }
 }

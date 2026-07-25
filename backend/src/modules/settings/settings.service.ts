@@ -9,7 +9,15 @@ import {
 export class SettingsService {
   constructor(private readonly settingsRepo: SettingsRepository) {}
 
-  async getPublicConfig(tenantId: string): Promise<PublicConfigResponseDto> {
+  async getPublicConfig(
+    tenantId: string | undefined,
+  ): Promise<PublicConfigResponseDto> {
+    if (!tenantId) {
+      // No tenant resolved for this request (e.g. hit from the platform
+      // admin host, which isn't tied to any single tenant).
+      throw new NotFoundException('No tenant context for this request');
+    }
+
     const profile = await this.settingsRepo.findBusinessProfile(tenantId);
     if (!profile) {
       throw new NotFoundException('Business profile not configured yet');

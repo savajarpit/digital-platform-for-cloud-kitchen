@@ -1,4 +1,4 @@
-import { API_URL } from "@/lib/config/env";
+import { serverFetch } from "@/lib/api/server-fetch";
 import type { ApiResponse } from "@/lib/api/response";
 
 export interface ThemeConfig {
@@ -29,15 +29,13 @@ export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
 
 /**
  * Fetched server-side on every request (never cached — branding differs per
- * tenant/domain once Phase 0.5 domain resolution lands). Falls back to a
- * neutral default rather than failing the whole page if the backend or a
+ * tenant/domain, resolved via the visitor's own Host header). Falls back to
+ * a neutral default rather than failing the whole page if the backend or a
  * given tenant's business profile isn't reachable/configured yet.
  */
 export async function getPublicConfig(): Promise<PublicConfig> {
   try {
-    const res = await fetch(`${API_URL}/settings/public-config`, {
-      cache: "no-store",
-    });
+    const res = await serverFetch("/settings/public-config");
     if (!res.ok) return DEFAULT_PUBLIC_CONFIG;
 
     const body = (await res.json()) as ApiResponse<PublicConfig>;

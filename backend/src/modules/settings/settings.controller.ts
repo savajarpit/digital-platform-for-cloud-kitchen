@@ -16,7 +16,7 @@ export class SettingsController {
   @ResponseMessage('Public config retrieved successfully')
   @ApiOperation({ summary: 'Get the storefront branding/theme/locale config' })
   @ApiResponse({ status: 200, type: PublicConfigResponseDto })
-  getPublicConfig(@CurrentTenant('id') tenantId: string) {
+  getPublicConfig(@CurrentTenant('id') tenantId: string | undefined) {
     return this.settingsService.getPublicConfig(tenantId);
   }
 }

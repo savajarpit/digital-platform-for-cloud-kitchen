@@ -6,4 +6,7 @@ export default registerAs('app', () => ({
   allowedOrigins: process.env.ALLOWED_ORIGINS?.split(',') || [
     'http://localhost:3000',
   ],
+  // Hostname for the SUPER_ADMIN platform console — recognized by
+  // TenantContextMiddleware and let through without a tenant match.
+  platformAdminHost: process.env.PLATFORM_ADMIN_HOST || undefined,
 }));

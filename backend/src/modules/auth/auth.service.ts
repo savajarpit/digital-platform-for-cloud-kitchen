@@ -5,12 +5,15 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { UsersRepository } from '../users/users.repository';
 import { HashUtil } from '../../common/utils/hash.util';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuthTokens } from './types/auth-tokens.type';
 import { JwtPayload } from '../../common/interfaces/jwt-payload.interface';
+import { WelcomeEmailJob } from '../../shared-modules/queue/processors/mail.processor';
 
 @Injectable()
 export class AuthService {
@@ -18,6 +21,7 @@ export class AuthService {
     private readonly usersRepo: UsersRepository,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
+    @InjectQueue('mail') private readonly mailQueue: Queue,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
@@ -36,6 +40,18 @@ export class AuthService {
           slug: `${dto.email.split('@')[0]}-${Date.now()}`,
         },
       },
+    });
+
+    const welcomeJob: WelcomeEmailJob = {
+      email: user.email,
+      firstName: user.firstName,
+    };
+    await this.mailQueue.add('send-welcome', welcomeJob, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: true,
+      removeOnFail: false,
+      jobId: `send-welcome:${user.id}`,
     });
 
     return this.generateTokens(user.id, user.email, user.role, user.tenantId);

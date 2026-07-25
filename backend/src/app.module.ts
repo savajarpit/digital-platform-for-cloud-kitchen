@@ -11,6 +11,7 @@ import {
   databaseConfig,
   redisConfig,
   stripeConfig,
+  mailConfig,
 } from './config';
 
 // Database
@@ -23,10 +24,15 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 
+// Shared modules
+import { QueueModule } from './shared-modules/queue/queue.module';
+import { TenantResolverModule } from './common/tenant-resolver.module';
+
 // Modules
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -34,7 +40,14 @@ import { UsersModule } from './modules/users/users.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
-      load: [appConfig, jwtConfig, databaseConfig, redisConfig, stripeConfig],
+      load: [
+        appConfig,
+        jwtConfig,
+        databaseConfig,
+        redisConfig,
+        stripeConfig,
+        mailConfig,
+      ],
       validationSchema: Joi.object({
         NODE_ENV: Joi.string()
           .valid('development', 'production', 'test')
@@ -80,10 +93,15 @@ import { UsersModule } from './modules/users/users.module';
     // Switch between Prisma and Mongoose via DB_DRIVER env var
     DB_DRIVER === 'prisma' ? PrismaModule : MongooseConfigModule,
 
+    // ── Shared Modules ───────────────────────────────────
+    TenantResolverModule,
+    QueueModule,
+
     // ── Feature Modules ──────────────────────────────────
     HealthModule,
     AuthModule,
     UsersModule,
+    SettingsModule,
   ],
 
   providers: [

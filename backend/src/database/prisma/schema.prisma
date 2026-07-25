@@ -52,13 +52,13 @@ model Tenant {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users                  User[]
-  businessProfile        BusinessProfile?
+  users                   User[]
+  businessProfile         BusinessProfile?
   orderAcceptanceSettings OrderAcceptanceSettings?
-  notificationSettings   NotificationSettings?
-  paymentSettings        PaymentSettings?
-  serviceablePincodes    ServiceablePincode[]
-  rolePermissions        RolePermission[]
+  notificationSettings    NotificationSettings?
+  paymentSettings         PaymentSettings?
+  serviceablePincodes     ServiceablePincode[]
+  rolePermissions         RolePermission[]
 
   @@map("tenants")
 }
@@ -157,22 +157,22 @@ model ServiceablePincode {
 }
 
 model NotificationSettings {
-  id                        String            @id @default(uuid())
-  tenantId                  String            @unique
-  whatsappEnabled           Boolean           @default(false)
-  whatsappProvider          WhatsappProvider?
-  whatsappApiKeyEncrypted   String?
-  whatsappConfigEncrypted   Json?
-  whatsappSenderNumber      String?
-  ownerWhatsappNumber       String?
-  emailEnabled              Boolean           @default(false)
-  emailProvider             EmailProvider?
-  emailFromAddress          String?
-  emailFromName             String?
-  emailConfigEncrypted      Json?
-  ownerNotificationEmail    String?
-  createdAt                 DateTime          @default(now())
-  updatedAt                 DateTime          @updatedAt
+  id                      String            @id @default(uuid())
+  tenantId                String            @unique
+  whatsappEnabled         Boolean           @default(false)
+  whatsappProvider        WhatsappProvider?
+  whatsappApiKeyEncrypted String?
+  whatsappConfigEncrypted Json?
+  whatsappSenderNumber    String?
+  ownerWhatsappNumber     String?
+  emailEnabled            Boolean           @default(false)
+  emailProvider           EmailProvider?
+  emailFromAddress        String?
+  emailFromName           String?
+  emailConfigEncrypted    Json?
+  ownerNotificationEmail  String?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 

@@ -1,0 +1,14 @@
+import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+
+export class QueryMealsDto {
+  @ApiPropertyOptional({ example: 'b3f1c2a0-...' })
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @ApiPropertyOptional({ example: 'quinoa' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+}

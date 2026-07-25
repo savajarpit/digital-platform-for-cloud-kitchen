@@ -1,34 +1,81 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
+import { Leaf, Mail, MapPin, Phone } from "lucide-react";
 import type { PublicConfig } from "@/lib/api/settings";
 
 export async function Footer({ config }: { config: PublicConfig }) {
   const t = await getTranslations("nav");
   const year = new Date().getFullYear();
+  const hasContact = config.supportEmail || config.supportPhone || config.addressLine1;
 
   return (
-    <footer className="border-t border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-8 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-        <div className="flex flex-col gap-1">
-          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            {config.displayName}
-          </span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
-            &copy; {year} {config.displayName}. All rights reserved.
-          </span>
+    <footer className="mt-20 bg-zinc-900 text-zinc-300 dark:bg-black">
+      <div className="container-app py-12 sm:py-16">
+        <div className={`grid grid-cols-1 gap-8 sm:gap-10 ${hasContact ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600">
+                <Leaf className="h-5 w-5 text-white" />
+              </div>
+              <span className="font-display text-lg font-bold text-white">{config.displayName}</span>
+            </div>
+            <p className="max-w-xs text-sm leading-relaxed text-zinc-400">
+              Fresh, healthy meals delivered to your door.
+            </p>
+          </div>
+
+          <div>
+            <h4 className="mb-4 font-semibold text-white">Explore</h4>
+            <ul className="space-y-2.5 text-sm">
+              <li>
+                <Link href="/menu" className="transition-colors hover:text-primary-400">
+                  {t("menu")}
+                </Link>
+              </li>
+              <li>
+                <Link href="/plans" className="transition-colors hover:text-primary-400">
+                  {t("plans")}
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {hasContact && (
+            <div>
+              <h4 className="mb-4 font-semibold text-white">Contact</h4>
+              <ul className="space-y-3 text-sm">
+                {config.supportPhone && (
+                  <li className="flex items-start gap-3">
+                    <Phone className="mt-0.5 h-4 w-4 shrink-0 text-primary-400" />
+                    <span>{config.supportPhone}</span>
+                  </li>
+                )}
+                {config.supportEmail && (
+                  <li className="flex items-start gap-3">
+                    <Mail className="mt-0.5 h-4 w-4 shrink-0 text-primary-400" />
+                    <span>{config.supportEmail}</span>
+                  </li>
+                )}
+                {config.addressLine1 && (
+                  <li className="flex items-start gap-3">
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-400" />
+                    <span>{config.addressLine1}</span>
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
         </div>
-        <nav className="flex gap-6 text-sm text-zinc-600 dark:text-zinc-400">
-          <Link href="/menu" className="hover:text-primary-600">
-            {t("menu")}
-          </Link>
-          <Link href="/plans" className="hover:text-primary-600">
-            {t("plans")}
-          </Link>
-        </nav>
-      </div>
-      <div className="border-t border-zinc-200 px-4 py-3 text-center text-xs text-zinc-400 dark:border-zinc-800 dark:text-zinc-500">
-        Powered by {process.env.NEXT_PUBLIC_PLATFORM_NAME ?? "our platform"} — orders and
-        content on this site are provided by {config.displayName}.
+
+        <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-zinc-800 pt-6 text-sm text-zinc-500 sm:flex-row">
+          <p>
+            &copy; {year} {config.displayName}. All rights reserved.
+          </p>
+          <p className="text-xs text-zinc-600">
+            Powered by {process.env.NEXT_PUBLIC_PLATFORM_NAME ?? "our platform"} — orders and content
+            on this site are provided by {config.displayName}.
+          </p>
+        </div>
       </div>
     </footer>
   );

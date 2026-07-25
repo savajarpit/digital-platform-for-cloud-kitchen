@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { ApiError, resendOtp, verifyOtp } from "@/lib/api/auth";
+import { useToast } from "@/context/ToastContext";
 
 const RESEND_COOLDOWN_SECONDS = 30;
 
@@ -16,10 +17,9 @@ export function OtpVerificationForm({
   onVerified: () => void;
 }) {
   const t = useTranslations("auth");
+  const { showToast } = useToast();
   const [code, setCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
@@ -30,27 +30,25 @@ export function OtpVerificationForm({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setError(null);
     setIsSubmitting(true);
     try {
       await verifyOtp(userId, code);
+      showToast("Account verified — welcome!", "success");
       onVerified();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("accountNotVerified"));
+      showToast(err instanceof ApiError ? err.message : t("accountNotVerified"), "error");
     } finally {
       setIsSubmitting(false);
     }
   }
 
   async function handleResend() {
-    setError(null);
-    setResendMessage(null);
     try {
       await resendOtp(userId);
-      setResendMessage(t("resendSuccess"));
+      showToast(t("resendSuccess"), "success");
       setCooldown(RESEND_COOLDOWN_SECONDS);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("accountNotVerified"));
+      showToast(err instanceof ApiError ? err.message : t("accountNotVerified"), "error");
     }
   }
 
@@ -80,24 +78,15 @@ export function OtpVerificationForm({
             required
             value={code}
             onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-center text-2xl tracking-[0.5em] focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-600/30 dark:border-zinc-700 dark:bg-zinc-900"
+            className="input text-center text-2xl tracking-[0.5em]"
             placeholder="••••••"
           />
         </div>
 
-        {error && (
-          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-            {error}
-          </p>
-        )}
-        {resendMessage && (
-          <p className="text-sm text-primary-700 dark:text-primary-400">{resendMessage}</p>
-        )}
-
         <button
           type="submit"
           disabled={isSubmitting || code.length !== 6}
-          className="inline-flex items-center justify-center rounded-full bg-primary-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="btn-primary"
         >
           {isSubmitting ? t("verifying") : t("verify")}
         </button>
@@ -106,7 +95,7 @@ export function OtpVerificationForm({
           type="button"
           onClick={handleResend}
           disabled={cooldown > 0}
-          className="text-sm font-medium text-zinc-600 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-400"
+          className="btn-ghost text-sm"
         >
           {cooldown > 0 ? t("resendIn", { seconds: cooldown }) : t("resendCode")}
         </button>

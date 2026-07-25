@@ -14,6 +14,9 @@ export interface PublicConfig {
   themeConfig: ThemeConfig;
   defaultLocale: string;
   currency: string;
+  supportEmail?: string;
+  supportPhone?: string;
+  addressLine1?: string;
 }
 
 export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {

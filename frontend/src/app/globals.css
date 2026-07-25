@@ -16,6 +16,7 @@
   --brand-primary-700: #0f6b30;
   --brand-primary-800: #0b4f24;
   --brand-primary-900: #073818;
+  --brand-primary-950: #042712;
 
   --brand-secondary-50: #f0f9ff;
   --brand-secondary-100: #e0f2fe;
@@ -27,6 +28,7 @@
   --brand-secondary-700: #096b9a;
   --brand-secondary-800: #074f71;
   --brand-secondary-900: #05384f;
+  --brand-secondary-950: #032334;
 
   --brand-accent-50: #fffbeb;
   --brand-accent-100: #fef3c7;
@@ -38,12 +40,13 @@
   --brand-accent-700: #a06608;
   --brand-accent-800: #764a06;
   --brand-accent-900: #543404;
+  --brand-accent-950: #331f02;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-display-sans);
   --font-mono: var(--font-geist-mono);
 
   --color-primary-50: var(--brand-primary-50);
@@ -56,6 +59,7 @@
   --color-primary-700: var(--brand-primary-700);
   --color-primary-800: var(--brand-primary-800);
   --color-primary-900: var(--brand-primary-900);
+  --color-primary-950: var(--brand-primary-950);
 
   --color-secondary-50: var(--brand-secondary-50);
   --color-secondary-100: var(--brand-secondary-100);
@@ -67,6 +71,7 @@
   --color-secondary-700: var(--brand-secondary-700);
   --color-secondary-800: var(--brand-secondary-800);
   --color-secondary-900: var(--brand-secondary-900);
+  --color-secondary-950: var(--brand-secondary-950);
 
   --color-accent-50: var(--brand-accent-50);
   --color-accent-100: var(--brand-accent-100);
@@ -78,6 +83,56 @@
   --color-accent-700: var(--brand-accent-700);
   --color-accent-800: var(--brand-accent-800);
   --color-accent-900: var(--brand-accent-900);
+  --color-accent-950: var(--brand-accent-950);
+
+  /* Design system tokens — mirrors the reference demo's card/button feel. */
+  --shadow-soft: 0 4px 24px -8px rgba(0, 0, 0, 0.12);
+  --shadow-card: 0 2px 16px -4px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 32px -8px var(--brand-primary-600);
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.75rem;
+
+  --animate-fade-up: fade-up 0.5s ease-out forwards;
+  --animate-fade-in: fade-in 0.3s ease-out forwards;
+  --animate-scale-in: scale-in 0.25s ease-out forwards;
+  --animate-slide-in-right: slide-in-right 0.3s ease-out forwards;
+}
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes slide-in-right {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(0);
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -90,5 +145,73 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Buttons show a pointer cursor by default in every browser except when
+   Tailwind's preflight resets it — restore it globally instead of patching
+   every button instance individually. */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+/* Component classes — plain CSS rather than chained `@apply` of custom
+   classes, since Tailwind v4 only lets `@apply` target real utilities. */
+@layer components {
+  .btn-primary,
+  .btn-outline,
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-xl);
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+  .btn-primary:disabled,
+  .btn-outline:disabled,
+  .btn-ghost:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+  .btn-primary:active:not(:disabled),
+  .btn-outline:active:not(:disabled),
+  .btn-ghost:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+  .btn-primary {
+    @apply bg-primary-600 text-white shadow-soft hover:bg-primary-700 hover:shadow-glow;
+  }
+  .btn-outline {
+    @apply border-2 border-primary-600 text-primary-700 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-950;
+  }
+  .btn-ghost {
+    @apply px-4 py-2 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800;
+  }
+  .btn-sm {
+    @apply px-3.5! py-2! text-xs!;
+  }
+  .btn-lg {
+    @apply px-7! py-3.5! text-base!;
+  }
+  .card {
+    @apply rounded-2xl border border-zinc-100 bg-white shadow-card transition-all duration-300 dark:border-zinc-800 dark:bg-zinc-900;
+  }
+  .card-hover {
+    @apply hover:-translate-y-1 hover:shadow-soft;
+  }
+  .input {
+    @apply w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm text-zinc-900 placeholder-zinc-400 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+  .section-title {
+    @apply text-2xl font-bold tracking-tight sm:text-3xl;
+  }
+  .container-app {
+    @apply mx-auto max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
 }

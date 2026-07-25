@@ -1,5 +1,5 @@
 export type ColorScale = Record<
-  "50" | "100" | "200" | "300" | "400" | "500" | "600" | "700" | "800" | "900",
+  "50" | "100" | "200" | "300" | "400" | "500" | "600" | "700" | "800" | "900" | "950",
   string
 >;
 
@@ -20,6 +20,7 @@ const DARKEN_TOWARD_BLACK: Record<string, number> = {
   "700": 0.28,
   "800": 0.42,
   "900": 0.56,
+  "950": 0.7,
 };
 
 function hexToRgb(hex: string): [number, number, number] {

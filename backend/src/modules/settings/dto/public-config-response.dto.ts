@@ -41,6 +41,18 @@ export class PublicConfigResponseDto {
   @Expose()
   currency: string;
 
+  @ApiPropertyOptional()
+  @Expose()
+  supportEmail?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  supportPhone?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  addressLine1?: string;
+
   constructor(partial: Partial<PublicConfigResponseDto>) {
     Object.assign(this, partial);
   }

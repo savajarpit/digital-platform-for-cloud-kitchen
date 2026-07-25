@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
@@ -8,10 +8,11 @@ import { buildThemeStyle } from "@/lib/theme/build-theme-style";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/session-cookies";
+import { ToastProvider } from "@/context/ToastContext";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const displaySans = Plus_Jakarta_Sans({
+  variable: "--font-display-sans",
   subsets: ["latin"],
 });
 
@@ -45,7 +46,7 @@ export default async function RootLayout({
   return (
     <html
       lang={locale}
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${displaySans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
         {/* Per-tenant brand colors — server-rendered so there is never a
@@ -54,13 +55,15 @@ export default async function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <NextIntlClientProvider>
-          <Header
-            displayName={config.displayName}
-            logoUrl={config.logoUrl}
-            isAuthenticated={isAuthenticated}
-          />
-          <div className="flex flex-1 flex-col">{children}</div>
-          <Footer config={config} />
+          <ToastProvider>
+            <Header
+              displayName={config.displayName}
+              logoUrl={config.logoUrl}
+              isAuthenticated={isAuthenticated}
+            />
+            <div className="flex flex-1 flex-col">{children}</div>
+            <Footer config={config} />
+          </ToastProvider>
         </NextIntlClientProvider>
       </body>
     </html>

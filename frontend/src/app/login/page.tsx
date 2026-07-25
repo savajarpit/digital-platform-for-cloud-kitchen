@@ -6,23 +6,25 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { ApiError, login } from "@/lib/api/auth";
 import { OtpVerificationForm } from "@/components/auth/OtpVerificationForm";
+import { FormField } from "@/components/auth/FormField";
+import { useToast } from "@/context/ToastContext";
 
 export default function LoginPage() {
   const t = useTranslations("auth");
   const router = useRouter();
+  const { showToast } = useToast();
 
   const [unverifiedUserId, setUnverifiedUserId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError(null);
 
     const form = new FormData(event.currentTarget);
     setIsSubmitting(true);
     try {
       await login(String(form.get("email") ?? "").trim(), String(form.get("password") ?? ""));
+      showToast("Welcome back!", "success");
       router.push("/");
       router.refresh();
     } catch (err) {
@@ -33,7 +35,7 @@ export default function LoginPage() {
           return;
         }
       }
-      setError(err instanceof ApiError ? err.message : "Something went wrong.");
+      showToast(err instanceof ApiError ? err.message : "Something went wrong.", "error");
     } finally {
       setIsSubmitting(false);
     }
@@ -46,7 +48,7 @@ export default function LoginPage() {
 
   return (
     <main className="flex flex-1 items-center justify-center px-4 py-16 sm:px-6">
-      <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="card w-full max-w-md p-8">
         {unverifiedUserId ? (
           <OtpVerificationForm
             userId={unverifiedUserId}
@@ -55,24 +57,12 @@ export default function LoginPage() {
           />
         ) : (
           <>
-            <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+            <h1 className="font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">
               {t("loginSubtitle")}
             </h1>
 
             <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <label htmlFor="email" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  {t("email")}
-                </label>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-600/30 dark:border-zinc-700 dark:bg-zinc-900"
-                />
-              </div>
+              <FormField id="email" name="email" type="email" label={t("email")} required autoComplete="email" />
 
               <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
@@ -89,21 +79,11 @@ export default function LoginPage() {
                   type="password"
                   required
                   autoComplete="current-password"
-                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm focus:border-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-600/30 dark:border-zinc-700 dark:bg-zinc-900"
+                  className="input"
                 />
               </div>
 
-              {error && (
-                <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-                  {error}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="mt-2 inline-flex items-center justify-center rounded-full bg-primary-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
+              <button type="submit" disabled={isSubmitting} className="btn-primary mt-2">
                 {isSubmitting ? t("loggingIn") : t("login")}
               </button>
             </form>

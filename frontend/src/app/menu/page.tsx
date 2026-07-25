@@ -25,10 +25,8 @@ export default async function MenuPage({
   );
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-6 lg:px-8">
-      <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl dark:text-zinc-100">
-        {t("title")}
-      </h1>
+    <main className="container-app flex-1 py-10">
+      <h1 className="section-title text-zinc-900 dark:text-zinc-100">{t("title")}</h1>
 
       {categories.length > 0 && (
         <nav className="mt-6 flex gap-2 overflow-x-auto pb-2" aria-label="Categories">
@@ -64,8 +62,8 @@ export default async function MenuPage({
         </p>
       ) : (
         <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {meals.map((meal) => (
-            <MealCard key={meal.id} meal={meal} currency={config.currency} />
+          {meals.map((meal, index) => (
+            <MealCard key={meal.id} meal={meal} currency={config.currency} index={index} />
           ))}
         </div>
       )}

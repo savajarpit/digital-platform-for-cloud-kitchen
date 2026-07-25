@@ -30,6 +30,9 @@ export class SettingsService {
       themeConfig: this.parseThemeConfig(profile.themeConfig),
       defaultLocale: profile.defaultLocale,
       currency: profile.currency,
+      supportEmail: profile.supportEmail ?? undefined,
+      supportPhone: profile.supportPhone ?? undefined,
+      addressLine1: profile.addressLine1 ?? undefined,
     });
   }
 

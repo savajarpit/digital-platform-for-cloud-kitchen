@@ -2,9 +2,11 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { Leaf, LogOut, Menu, X } from "lucide-react";
 import { logout } from "@/lib/api/auth";
+import { useToast } from "@/context/ToastContext";
 
 export function Header({
   displayName,
@@ -17,6 +19,8 @@ export function Header({
 }) {
   const t = useTranslations("nav");
   const router = useRouter();
+  const pathname = usePathname();
+  const { showToast } = useToast();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -25,61 +29,65 @@ export function Header({
     { href: "/menu", label: t("menu") },
     { href: "/plans", label: t("plans") },
   ];
+  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   function handleLogout() {
     startTransition(async () => {
       await logout();
+      showToast("Logged out", "info");
       router.push("/");
       router.refresh();
     });
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2 font-bold text-primary-700">
+    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/90 backdrop-blur-lg dark:border-zinc-800 dark:bg-zinc-950/90">
+      <div className="container-app flex h-16 items-center justify-between sm:h-18">
+        <Link href="/" className="group flex items-center gap-2">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={displayName} className="h-8 w-auto" />
+            <img src={logoUrl} alt={displayName} className="h-9 w-auto" />
           ) : (
-            <span className="text-lg">{displayName}</span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600 shadow-glow transition-transform group-hover:scale-110">
+              <Leaf className="h-5 w-5 text-white" />
+            </div>
           )}
+          <span className="font-display text-lg font-bold text-zinc-900 sm:text-xl dark:text-zinc-100">
+            {displayName}
+          </span>
         </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
+        <nav className="hidden items-center gap-1 md:flex">
           {navLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm font-medium text-zinc-600 transition-colors hover:text-primary-600 dark:text-zinc-300"
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                isActive(link.href)
+                  ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                  : "text-zinc-600 hover:bg-zinc-100 hover:text-primary-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              }`}
             >
               {link.label}
             </Link>
           ))}
         </nav>
 
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden items-center gap-2 md:flex">
           {isAuthenticated ? (
-            <button
-              type="button"
-              onClick={handleLogout}
-              disabled={isPending}
-              className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 transition-colors hover:border-primary-600 hover:text-primary-600 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200"
-            >
+            <button type="button" onClick={handleLogout} disabled={isPending} className="btn-outline btn-sm">
+              <LogOut className="h-4 w-4" />
               {t("logout")}
             </button>
           ) : (
             <>
               <Link
                 href="/login"
-                className="text-sm font-medium text-zinc-700 hover:text-primary-600 dark:text-zinc-200"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
                 {t("login")}
               </Link>
-              <Link
-                href="/signup"
-                className="rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary-700"
-              >
+              <Link href="/signup" className="btn-primary btn-sm">
                 {t("signup")}
               </Link>
             </>
@@ -89,44 +97,26 @@ export function Header({
         <button
           type="button"
           onClick={() => setIsMenuOpen((open) => !open)}
-          className="inline-flex items-center justify-center rounded-md p-2 text-zinc-600 md:hidden dark:text-zinc-300"
+          className="rounded-lg p-2.5 text-zinc-600 hover:bg-zinc-100 md:hidden dark:text-zinc-300 dark:hover:bg-zinc-800"
           aria-label="Toggle menu"
           aria-expanded={isMenuOpen}
         >
-          <svg
-            className="h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            {isMenuOpen ? (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            ) : (
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            )}
-          </svg>
+          {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
       {isMenuOpen && (
         <div className="border-t border-zinc-200 px-4 py-4 md:hidden dark:border-zinc-800">
-          <nav className="flex flex-col gap-4">
+          <nav className="flex flex-col gap-1">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium text-zinc-700 dark:text-zinc-200"
+                className={`rounded-lg px-4 py-3 text-sm font-medium ${
+                  isActive(link.href)
+                    ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                    : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                }`}
                 onClick={() => setIsMenuOpen(false)}
               >
                 {link.label}
@@ -137,16 +127,21 @@ export function Header({
                 type="button"
                 onClick={handleLogout}
                 disabled={isPending}
-                className="text-left text-sm font-medium text-zinc-700 dark:text-zinc-200"
+                className="mt-2 flex items-center gap-2 rounded-lg px-4 py-3 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
               >
+                <LogOut className="h-4 w-4" />
                 {t("logout")}
               </button>
             ) : (
               <>
-                <Link href="/login" className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                <Link
+                  href="/login"
+                  className="rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-200"
+                  onClick={() => setIsMenuOpen(false)}
+                >
                   {t("login")}
                 </Link>
-                <Link href="/signup" className="text-sm font-semibold text-primary-600">
+                <Link href="/signup" className="btn-primary mt-2" onClick={() => setIsMenuOpen(false)}>
                   {t("signup")}
                 </Link>
               </>

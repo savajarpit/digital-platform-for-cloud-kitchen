@@ -39,7 +39,8 @@ export class RegisterDto {
 
   @ApiPropertyOptional({
     example: '+919876543210',
-    description: 'WhatsApp-reachable phone number, in E.164 format. Optional — OTP always also goes to email.',
+    description:
+      'WhatsApp-reachable phone number, in E.164 format. Optional — OTP always also goes to email.',
   })
   @IsOptional()
   @Matches(/^\+[1-9]\d{7,14}$/, {

@@ -35,6 +35,7 @@ const OTP_TTL_SECONDS = 600; // 10 minutes
 const OTP_MAX_ATTEMPTS = 5;
 const PASSWORD_RESET_TTL_SECONDS = 900; // 15 minutes
 const QUEUE_ENQUEUE_TIMEOUT_MS = 3000;
+const OTP_SEND_TIMEOUT_MS = 8000;
 
 @Injectable()
 export class AuthService {
@@ -71,7 +72,13 @@ export class AuthService {
     });
 
     try {
-      await this.issueAndSendOtp(tenantId, user.id, user.email, user.firstName, user.phone);
+      await this.issueAndSendOtp(
+        tenantId,
+        user.id,
+        user.email,
+        user.firstName,
+        user.phone,
+      );
     } catch {
       // The user has no way to verify without a delivered code — don't leave
       // an unverifiable, unusable account behind.
@@ -87,7 +94,8 @@ export class AuthService {
   async verifyOtp(dto: VerifyOtpDto): Promise<AuthTokens> {
     const user = await this.usersRepo.findById(dto.userId);
     if (!user) throw new UnauthorizedException('Invalid verification request');
-    if (user.verifiedAt) throw new ConflictException('Account already verified');
+    if (user.verifiedAt)
+      throw new ConflictException('Account already verified');
 
     const attemptsKey = this.otpAttemptsKey(user.tenantId, user.id);
     const attempts = (await this.redis.get<number>(attemptsKey)) ?? 0;
@@ -97,7 +105,9 @@ export class AuthService {
       );
     }
 
-    const stored = await this.redis.get<string>(this.otpKey(user.tenantId, user.id));
+    const stored = await this.redis.get<string>(
+      this.otpKey(user.tenantId, user.id),
+    );
     if (!stored) {
       throw new UnauthorizedException('Code expired — request a new one.');
     }
@@ -140,9 +150,22 @@ export class AuthService {
   async resendOtp(dto: ResendOtpDto): Promise<void> {
     const user = await this.usersRepo.findById(dto.userId);
     if (!user) throw new NotFoundException('Invalid verification request');
-    if (user.verifiedAt) throw new ConflictException('Account already verified');
+    if (user.verifiedAt)
+      throw new ConflictException('Account already verified');
 
-    await this.issueAndSendOtp(user.tenantId, user.id, user.email, user.firstName, user.phone);
+    try {
+      await this.issueAndSendOtp(
+        user.tenantId,
+        user.id,
+        user.email,
+        user.firstName,
+        user.phone,
+      );
+    } catch {
+      throw new ConflictException(
+        'Could not send a verification code — please try again in a moment.',
+      );
+    }
   }
 
   async login(dto: LoginDto): Promise<AuthTokens> {
@@ -220,16 +243,32 @@ export class AuthService {
     const otp = CryptoUtil.generateOtp(6);
     const hashedOtp = await HashUtil.hash(otp);
 
-    await this.redis.set(this.otpKey(tenantId, userId), hashedOtp, OTP_TTL_SECONDS);
+    await this.redis.set(
+      this.otpKey(tenantId, userId),
+      hashedOtp,
+      OTP_TTL_SECONDS,
+    );
     await this.redis.del(this.otpAttemptsKey(tenantId, userId));
 
     const settings = await this.settingsRepo.findNotificationSettings(tenantId);
-    await this.notificationsService.sendOtp(settings, {
+    const sendPromise = this.notificationsService.sendOtp(settings, {
       recipientEmail: email,
       recipientName: firstName,
       recipientWhatsAppNumber: phone ?? undefined,
       otp,
     });
+    // A hung/misconfigured SMTP or WhatsApp BSP must not hang the request —
+    // bound the wait; a late resolution/rejection after that is swallowed,
+    // not left as an unhandled rejection.
+    const result = await withTimeout(
+      sendPromise.then(() => 'sent' as const),
+      OTP_SEND_TIMEOUT_MS,
+    );
+    sendPromise.catch(() => undefined);
+
+    if (result !== 'sent') {
+      throw new Error('Timed out sending verification code');
+    }
   }
 
   private otpKey(tenantId: string, userId: string): string {

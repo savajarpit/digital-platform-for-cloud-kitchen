@@ -29,12 +29,26 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const exceptionResponse =
       exception instanceof HttpException ? exception.getResponse() : null;
 
-    const message =
-      typeof exceptionResponse === 'object' && exceptionResponse !== null
-        ? (exceptionResponse as any).message
-        : exception instanceof Error
-          ? exception.message
-          : 'Internal server error';
+    const isStructuredResponse =
+      typeof exceptionResponse === 'object' && exceptionResponse !== null;
+
+    const message = isStructuredResponse
+      ? (exceptionResponse as any).message
+      : exception instanceof Error
+        ? exception.message
+        : 'Internal server error';
+
+    // Exceptions thrown as `new ForbiddenException({ message, code, ... })`
+    // can carry machine-readable extras (e.g. `code: 'ACCOUNT_NOT_VERIFIED'`)
+    // beyond the message — pass those through so the frontend can branch on
+    // them instead of string-matching the message.
+    const extras = isStructuredResponse
+      ? Object.fromEntries(
+          Object.entries(exceptionResponse as Record<string, unknown>).filter(
+            ([key]) => !['message', 'statusCode', 'error'].includes(key),
+          ),
+        )
+      : {};
 
     this.logger.error(
       `[${request.headers['x-request-id']}] ${request.method} ${request.url} → ${status}`,
@@ -46,6 +60,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message: Array.isArray(message) ? message[0] : message,
       errors: Array.isArray(message) ? message : [message],
       data: null,
+      ...extras,
       timestamp: new Date().toISOString(),
       path: request.url,
       requestId: request.headers['x-request-id'],

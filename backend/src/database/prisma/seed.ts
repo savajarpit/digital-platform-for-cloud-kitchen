@@ -130,8 +130,92 @@ async function main() {
     console.log(
       `Permission catalog synced (${PERMISSION_CATALOG.length} entries).`,
     );
+
+    await seedSampleMenu(prisma);
   } finally {
     await prisma.$disconnect();
+  }
+}
+
+/**
+ * Sample menu data so a freshly-provisioned tenant's storefront isn't empty.
+ * Runs for every tenant that has zero categories — safe to re-run.
+ */
+async function seedSampleMenu(prisma: PrismaClient): Promise<void> {
+  const tenants = await prisma.tenant.findMany({ select: { id: true, name: true } });
+
+  for (const tenant of tenants) {
+    const categoryCount = await prisma.category.count({
+      where: { tenantId: tenant.id },
+    });
+    if (categoryCount > 0) continue;
+
+    const salads = await prisma.category.create({
+      data: { tenantId: tenant.id, name: 'Salads', slug: 'salads', sortOrder: 0 },
+    });
+    const bowls = await prisma.category.create({
+      data: { tenantId: tenant.id, name: 'Bowls', slug: 'bowls', sortOrder: 1 },
+    });
+    const beverages = await prisma.category.create({
+      data: { tenantId: tenant.id, name: 'Beverages', slug: 'beverages', sortOrder: 2 },
+    });
+
+    await prisma.meal.createMany({
+      data: [
+        {
+          tenantId: tenant.id,
+          categoryId: salads.id,
+          name: 'Mediterranean Quinoa Salad',
+          description: 'Quinoa, chickpeas, feta, olives, cherry tomatoes, herb dressing.',
+          priceInPaise: 24900,
+          nutrition: { calories: 420, protein: '18g', carbs: '45g', fat: '16g' },
+          isVegetarian: true,
+          sortOrder: 0,
+        },
+        {
+          tenantId: tenant.id,
+          categoryId: salads.id,
+          name: 'Grilled Chicken Caesar',
+          description: 'Grilled chicken, romaine, parmesan, whole-grain croutons.',
+          priceInPaise: 27900,
+          nutrition: { calories: 480, protein: '38g', carbs: '22g', fat: '24g' },
+          isVegetarian: false,
+          sortOrder: 1,
+        },
+        {
+          tenantId: tenant.id,
+          categoryId: bowls.id,
+          name: 'Peanut Tofu Buddha Bowl',
+          description: 'Brown rice, tofu, edamame, carrots, peanut-lime sauce.',
+          priceInPaise: 26900,
+          nutrition: { calories: 510, protein: '22g', carbs: '58g', fat: '20g' },
+          isVegetarian: true,
+          sortOrder: 0,
+        },
+        {
+          tenantId: tenant.id,
+          categoryId: bowls.id,
+          name: 'Paneer Tikka Millet Bowl',
+          description: 'Millet, grilled paneer tikka, mint chutney, pickled onions.',
+          priceInPaise: 25900,
+          nutrition: { calories: 460, protein: '24g', carbs: '48g', fat: '18g' },
+          isVegetarian: true,
+          sortOrder: 1,
+        },
+        {
+          tenantId: tenant.id,
+          categoryId: beverages.id,
+          name: 'Cold-Pressed Green Juice',
+          description: 'Spinach, cucumber, apple, celery, ginger.',
+          priceInPaise: 12900,
+          nutrition: { calories: 90, protein: '2g', carbs: '20g', fat: '0g' },
+          isVegetarian: true,
+          sortOrder: 0,
+        },
+      ],
+    });
+
+    console.log(`Sample menu seeded for tenant "${tenant.name}".`);
   }
 }
 

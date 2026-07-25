@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
 import { Public } from '../../common/decorators/public.decorator';
+import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import { PublicConfigResponseDto } from './dto/public-config-response.dto';
 
@@ -15,7 +16,7 @@ export class SettingsController {
   @ResponseMessage('Public config retrieved successfully')
   @ApiOperation({ summary: 'Get the storefront branding/theme/locale config' })
   @ApiResponse({ status: 200, type: PublicConfigResponseDto })
-  getPublicConfig() {
-    return this.settingsService.getPublicConfig();
+  getPublicConfig(@CurrentTenant('id') tenantId: string) {
+    return this.settingsService.getPublicConfig(tenantId);
   }
 }

@@ -44,13 +44,14 @@ enum EmailProvider {
 // ─── Tenant ──────────────────────────────────────────────
 
 model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  plan      Plan     @default(FREE)
-  status    Status   @default(ACTIVE)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  customDomain String?  @unique
+  plan         Plan     @default(FREE)
+  status       Status   @default(ACTIVE)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   users                   User[]
   businessProfile         BusinessProfile?

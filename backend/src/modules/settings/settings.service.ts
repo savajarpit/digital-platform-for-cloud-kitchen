@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { SettingsRepository } from './settings.repository';
-import { TenantResolverService } from '../../common/services/tenant-resolver.service';
 import {
   PublicConfigResponseDto,
   ThemeConfigDto,
@@ -8,13 +7,9 @@ import {
 
 @Injectable()
 export class SettingsService {
-  constructor(
-    private readonly settingsRepo: SettingsRepository,
-    private readonly tenantResolver: TenantResolverService,
-  ) {}
+  constructor(private readonly settingsRepo: SettingsRepository) {}
 
-  async getPublicConfig(): Promise<PublicConfigResponseDto> {
-    const tenantId = await this.tenantResolver.getCurrentTenantId();
+  async getPublicConfig(tenantId: string): Promise<PublicConfigResponseDto> {
     const profile = await this.settingsRepo.findBusinessProfile(tenantId);
     if (!profile) {
       throw new NotFoundException('Business profile not configured yet');

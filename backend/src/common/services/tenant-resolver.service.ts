@@ -1,31 +1,56 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
+import { Status } from '../../generated/prisma';
+
+export interface ResolvedTenant {
+  id: string;
+  status: Status;
+}
+
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1']);
 
 /**
- * Single seam for resolving "the current tenant" outside of an authenticated
- * request (e.g. public storefront config). Today this deployment hosts a
- * single tenant, so it returns the one seeded row. When this platform moves
- * to shared multi-tenant SaaS, only this method's body changes (resolve by
- * Host header / custom domain instead) — call sites never do.
+ * Single seam for resolving "the current tenant" from an inbound request.
+ * This is the one place that changed when the platform moved from a
+ * single-tenant-per-deployment model to shared multi-tenant hosting — every
+ * other module always calls through here, never a hardcoded tenant id.
  */
 @Injectable()
 export class TenantResolverService {
-  private cachedTenantId: string | null = null;
-
   constructor(private readonly prisma: PrismaService) {}
 
-  async getCurrentTenantId(): Promise<string> {
-    if (this.cachedTenantId) return this.cachedTenantId;
+  /**
+   * @param host The raw `Host` request header (may include a port, e.g. `localhost:3001`).
+   */
+  async resolveByHost(host: string): Promise<ResolvedTenant> {
+    const hostname = host.split(':')[0].toLowerCase();
 
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { customDomain: hostname },
+      select: { id: true, status: true },
+    });
+    if (tenant) return tenant;
+
+    // No client has this exact domain mapped yet. In local dev (or before a
+    // tenant sets up their domain) fall back to the sole provisioned tenant
+    // rather than failing outright — matches Phase 0's single-tenant seed.
+    if (LOCAL_HOSTNAMES.has(hostname)) {
+      return this.resolveSoleTenant();
+    }
+
+    throw new NotFoundException(
+      `No tenant is configured for host "${hostname}"`,
+    );
+  }
+
+  private async resolveSoleTenant(): Promise<ResolvedTenant> {
     const tenant = await this.prisma.tenant.findFirst({
-      select: { id: true },
+      select: { id: true, status: true },
       orderBy: { createdAt: 'asc' },
     });
     if (!tenant) {
       throw new NotFoundException('No tenant provisioned for this deployment');
     }
-
-    this.cachedTenantId = tenant.id;
-    return tenant.id;
+    return tenant;
   }
 }

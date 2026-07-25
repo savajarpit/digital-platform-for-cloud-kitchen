@@ -1,4 +1,9 @@
-import { Module } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  RequestMethod,
+} from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
@@ -23,6 +28,10 @@ import { MongooseConfigModule } from './database/mongoose/mongoose.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
+import { TenantStatusGuard } from './common/guards/tenant-status.guard';
+
+// Middleware
+import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
 
 // Shared modules
 import { QueueModule } from './shared-modules/queue/queue.module';
@@ -105,11 +114,20 @@ import { SettingsModule } from './modules/settings/settings.module';
   ],
 
   providers: [
+    TenantContextMiddleware,
     // Global guards — order matters
     { provide: APP_GUARD, useClass: JwtAuthGuard }, // 1st — JWT auth
     { provide: APP_GUARD, useClass: RolesGuard }, // 2nd — role check
     { provide: APP_GUARD, useClass: TenantGuard }, // 3rd — tenant isolation
-    { provide: APP_GUARD, useClass: ThrottlerGuard }, // 4th — rate limiting
+    { provide: APP_GUARD, useClass: TenantStatusGuard }, // 4th — tenant must be ACTIVE
+    { provide: APP_GUARD, useClass: ThrottlerGuard }, // 5th — rate limiting
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // Resolves the tenant from the Host header before any guard runs.
+    consumer
+      .apply(TenantContextMiddleware)
+      .forRoutes({ path: '*', method: RequestMethod.ALL });
+  }
+}

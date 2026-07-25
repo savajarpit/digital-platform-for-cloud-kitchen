@@ -5,6 +5,7 @@ import {
   MaxLength,
   IsOptional,
   IsStrongPassword,
+  Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
@@ -35,4 +36,14 @@ export class RegisterDto {
   @IsString()
   @MaxLength(50)
   lastName?: string;
+
+  @ApiPropertyOptional({
+    example: '+919876543210',
+    description: 'WhatsApp-reachable phone number, in E.164 format. Optional — OTP always also goes to email.',
+  })
+  @IsOptional()
+  @Matches(/^\+[1-9]\d{7,14}$/, {
+    message: 'Phone must be in E.164 format, e.g. +919876543210',
+  })
+  phone?: string;
 }

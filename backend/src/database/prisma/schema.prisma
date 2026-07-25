@@ -60,6 +60,8 @@ model Tenant {
   paymentSettings         PaymentSettings?
   serviceablePincodes     ServiceablePincode[]
   rolePermissions         RolePermission[]
+  categories              Category[]
+  meals                   Meal[]
 
   @@map("tenants")
 }
@@ -69,6 +71,7 @@ model Tenant {
 model User {
   id           String    @id @default(uuid())
   email        String    @unique
+  phone        String?
   passwordHash String
   firstName    String
   lastName     String?
@@ -76,6 +79,7 @@ model User {
   status       Status    @default(ACTIVE)
   tenantId     String
   isActive     Boolean   @default(true)
+  verifiedAt   DateTime?
   deletedAt    DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
@@ -226,6 +230,53 @@ model RolePermission {
   @@index([tenantId])
   @@index([tenantId, role])
   @@map("role_permissions")
+}
+
+// ─── Menu (Category + Meal) ──────────────────────────────
+
+model Category {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  slug      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  meals  Meal[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("categories")
+}
+
+model Meal {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  categoryId         String?
+  name               String
+  description        String?
+  imageUrl           String?
+  priceInPaise       Int
+  nutrition          Json      @default("{}")
+  isVegetarian       Boolean   @default(true)
+  isAvailable        Boolean   @default(true)
+  dailyQuantityLimit Int?
+  sortOrder          Int       @default(0)
+  deletedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, categoryId])
+  @@index([tenantId, isAvailable])
+  @@index([deletedAt])
+  @@map("meals")
 }
 
 // ─── Refresh Token ───────────────────────────────────────

@@ -35,6 +35,7 @@ import { TenantContextMiddleware } from './common/middleware/tenant-context.midd
 
 // Shared modules
 import { QueueModule } from './shared-modules/queue/queue.module';
+import { RedisModule } from './shared-modules/cache/redis.module';
 import { TenantResolverModule } from './common/tenant-resolver.module';
 
 // Modules
@@ -42,6 +43,7 @@ import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { MenuModule } from './modules/menu/menu.module';
 
 @Module({
   imports: [
@@ -84,6 +86,7 @@ import { SettingsModule } from './modules/settings/settings.module';
         REDIS_PORT: Joi.number().default(6379),
         REDIS_PASSWORD: Joi.string().allow('').optional(),
         ALLOWED_ORIGINS: Joi.string().default('http://localhost:3000'),
+        ENCRYPTION_KEY: Joi.string().min(32).optional(),
       }),
       validationOptions: {
         abortEarly: true,
@@ -104,6 +107,7 @@ import { SettingsModule } from './modules/settings/settings.module';
 
     // ── Shared Modules ───────────────────────────────────
     TenantResolverModule,
+    RedisModule,
     QueueModule,
 
     // ── Feature Modules ──────────────────────────────────
@@ -111,6 +115,7 @@ import { SettingsModule } from './modules/settings/settings.module';
     AuthModule,
     UsersModule,
     SettingsModule,
+    MenuModule,
   ],
 
   providers: [

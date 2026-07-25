@@ -1,0 +1,50 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong. Please try again.",
+    "retry": "Retry",
+    "currency": "₹"
+  },
+  "nav": {
+    "home": "Home",
+    "menu": "Menu",
+    "plans": "Plans",
+    "cart": "Cart",
+    "account": "My Account",
+    "admin": "Admin",
+    "login": "Log in",
+    "signup": "Sign up",
+    "logout": "Log out"
+  },
+  "home": {
+    "heroCta": "Order Now",
+    "todaysSpecial": "Today's Special",
+    "viewPlans": "View Plans"
+  },
+  "menu": {
+    "title": "Menu",
+    "search": "Search meals",
+    "addToCart": "Add to cart",
+    "outOfStock": "Out of stock"
+  },
+  "cart": {
+    "title": "Your Cart",
+    "empty": "Your cart is empty",
+    "subtotal": "Subtotal",
+    "deliveryFee": "Delivery fee",
+    "total": "Total",
+    "checkout": "Proceed to checkout"
+  },
+  "checkout": {
+    "title": "Checkout",
+    "deliveryDetails": "Delivery details",
+    "payNow": "Pay now"
+  },
+  "auth": {
+    "login": "Log in",
+    "signup": "Create account",
+    "email": "Email",
+    "password": "Password",
+    "forgotPassword": "Forgot password?"
+  }
+}

@@ -11,6 +11,7 @@ export interface PublicConfig {
   displayName: string;
   logoUrl?: string;
   faviconUrl?: string;
+  heroImageUrl?: string;
   themeConfig: ThemeConfig;
   defaultLocale: string;
   currency: string;

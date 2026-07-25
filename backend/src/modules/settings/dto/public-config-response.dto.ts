@@ -28,6 +28,10 @@ export class PublicConfigResponseDto {
   @Expose()
   faviconUrl?: string;
 
+  @ApiPropertyOptional()
+  @Expose()
+  heroImageUrl?: string;
+
   @ApiProperty({ type: ThemeConfigDto })
   @Expose()
   @Type(() => ThemeConfigDto)

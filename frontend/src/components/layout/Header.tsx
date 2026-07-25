@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { Leaf, LogOut, Menu, X } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useToast } from "@/context/ToastContext";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function Header({
   displayName,
@@ -74,6 +75,7 @@ export function Header({
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
+          <ThemeToggle />
           {isAuthenticated ? (
             <button type="button" onClick={handleLogout} disabled={isPending} className="btn-outline btn-sm">
               <LogOut className="h-4 w-4" />
@@ -94,15 +96,18 @@ export function Header({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsMenuOpen((open) => !open)}
-          className="rounded-lg p-2.5 text-zinc-600 hover:bg-zinc-100 md:hidden dark:text-zinc-300 dark:hover:bg-zinc-800"
-          aria-label="Toggle menu"
-          aria-expanded={isMenuOpen}
-        >
-          {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
+        <div className="flex items-center gap-1 md:hidden">
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={() => setIsMenuOpen((open) => !open)}
+            className="rounded-lg p-2.5 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            aria-label="Toggle menu"
+            aria-expanded={isMenuOpen}
+          >
+            {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+        </div>
       </div>
 
       {isMenuOpen && (

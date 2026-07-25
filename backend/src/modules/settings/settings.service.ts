@@ -27,6 +27,7 @@ export class SettingsService {
       displayName: profile.displayName,
       logoUrl: profile.logoUrl ?? undefined,
       faviconUrl: profile.faviconUrl ?? undefined,
+      heroImageUrl: profile.heroImageUrl ?? undefined,
       themeConfig: this.parseThemeConfig(profile.themeConfig),
       defaultLocale: profile.defaultLocale,
       currency: profile.currency,

@@ -9,6 +9,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/session-cookies";
 import { ToastProvider } from "@/context/ToastContext";
+import { THEME_INIT_SCRIPT } from "@/lib/theme/theme-mode";
 import "./globals.css";
 
 const displaySans = Plus_Jakarta_Sans({
@@ -52,6 +53,8 @@ export default async function RootLayout({
         {/* Per-tenant brand colors — server-rendered so there is never a
             flash of default/wrong branding before client JS runs. */}
         <style id="brand-theme" dangerouslySetInnerHTML={{ __html: themeStyle }} />
+        {/* Resolves light/dark before first paint — see theme-mode.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full flex flex-col">
         <NextIntlClientProvider>

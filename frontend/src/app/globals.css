@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Manual dark mode (class on <html>, toggled by ThemeToggle + persisted in
+   localStorage) instead of the default OS-preference-only strategy. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -135,11 +139,18 @@
   }
 }
 
+/* No-JS / before-hydration fallback — once JS runs, the blocking script in
+   layout.tsx sets .dark explicitly and this stops mattering. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+}
+
+:root.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 body {

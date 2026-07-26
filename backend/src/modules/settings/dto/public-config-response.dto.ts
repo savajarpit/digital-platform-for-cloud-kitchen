@@ -57,6 +57,13 @@ export class PublicConfigResponseDto {
   @Expose()
   addressLine1?: string;
 
+  @ApiProperty({
+    example: 2,
+    description: 'How many days ahead a customer may schedule delivery',
+  })
+  @Expose()
+  maxAdvanceOrderDays: number;
+
   constructor(partial: Partial<PublicConfigResponseDto>) {
     Object.assign(this, partial);
   }

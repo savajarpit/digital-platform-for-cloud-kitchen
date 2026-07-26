@@ -27,7 +27,10 @@ export interface Order {
   subtotalInPaise: number;
   deliveryFeeInPaise: number;
   totalInPaise: number;
-  requestedDeliveryTime: string;
+  deliveryDate: string;
+  deliverySlotName: string;
+  deliveryWindowStart: string;
+  deliveryWindowEnd: string;
   razorpayOrderId: string | null;
   notes: string | null;
   createdAt: string;
@@ -39,7 +42,8 @@ export interface CreateOrderInput {
   addressId: string;
   items: { mealId: string; quantity: number }[];
   notes?: string;
-  requestedDeliveryTime: string;
+  deliveryDate: string;
+  deliverySlotId: string;
 }
 
 export interface CreatedOrder {

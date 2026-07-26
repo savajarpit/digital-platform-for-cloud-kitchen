@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import {
   BusinessProfile,
+  DeliverySlot,
   NotificationSettings,
   OrderAcceptanceSettings,
   PaymentSettings,
@@ -33,5 +34,19 @@ export class SettingsRepository {
 
   findPaymentSettings(tenantId: string): Promise<PaymentSettings | null> {
     return this.prisma.paymentSettings.findUnique({ where: { tenantId } });
+  }
+
+  findActiveDeliverySlots(tenantId: string): Promise<DeliverySlot[]> {
+    return this.prisma.deliverySlot.findMany({
+      where: { tenantId, isActive: true },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
+  findDeliverySlotById(
+    tenantId: string,
+    id: string,
+  ): Promise<DeliverySlot | null> {
+    return this.prisma.deliverySlot.findFirst({ where: { id, tenantId } });
   }
 }

@@ -11,6 +11,7 @@ import { ApiError, listAddresses, checkServiceability, type Address, type Servic
 import { createOrder } from "@/lib/api/orders";
 import { verifyPayment } from "@/lib/api/payments";
 import { getOrderWindowStatus } from "@/lib/api/order-window";
+import { getDeliverySlots, type DeliverySlot } from "@/lib/api/delivery-slots";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { AddressForm } from "@/components/addresses/AddressForm";
 import { useToast } from "@/context/ToastContext";
@@ -31,19 +32,10 @@ export default function CheckoutPage() {
   const [windowClosed, setWindowClosed] = useState<string | null>(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [deliveryTime, setDeliveryTime] = useState("");
-
-  // Lazy useState initializer (not useMemo) — computing this reads the
-  // impure Date.now(), which must only ever run once per mount, not on
-  // every render pass.
-  const [minDeliveryTime] = useState(() => {
-    const min = new Date(Date.now() + 30 * 60 * 1000);
-    min.setSeconds(0, 0);
-    // datetime-local expects local time, no timezone suffix.
-    const offset = min.getTimezoneOffset();
-    const local = new Date(min.getTime() - offset * 60 * 1000);
-    return local.toISOString().slice(0, 16);
-  });
+  const [slots, setSlots] = useState<DeliverySlot[]>([]);
+  const [dayOptions, setDayOptions] = useState<{ value: string; label: string }[]>([]);
+  const [selectedDay, setSelectedDay] = useState("");
+  const [selectedSlotId, setSelectedSlotId] = useState("");
 
   useEffect(() => {
     if (items.length === 0) {
@@ -53,6 +45,24 @@ export default function CheckoutPage() {
 
     getOrderWindowStatus().then((status) => {
       if (!status.isAcceptingOrders) setWindowClosed(status.reason ?? "Not currently accepting orders");
+    });
+
+    getDeliverySlots().then((config) => {
+      setSlots(config.slots);
+      const days = Array.from({ length: config.maxAdvanceOrderDays + 1 }, (_, i) => {
+        const date = new Date(Date.now() + i * 24 * 60 * 60 * 1000);
+        const value = date.toISOString().slice(0, 10);
+        const label =
+          i === 0
+            ? t("today")
+            : i === 1
+              ? t("tomorrow")
+              : date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+        return { value, label };
+      });
+      setDayOptions(days);
+      setSelectedDay(days[0]?.value ?? "");
+      setSelectedSlotId(config.slots[0]?.id ?? "");
     });
 
     listAddresses()
@@ -97,13 +107,14 @@ export default function CheckoutPage() {
   );
 
   async function handlePlaceOrder() {
-    if (!selectedAddressId || !deliveryTime) return;
+    if (!selectedAddressId || !selectedDay || !selectedSlotId) return;
     setIsPlacingOrder(true);
     try {
       const { order, razorpayOrderId, razorpayKeyId } = await createOrder({
         addressId: selectedAddressId,
         items: items.map((i) => ({ mealId: i.mealId, quantity: i.quantity })),
-        requestedDeliveryTime: new Date(deliveryTime).toISOString(),
+        deliveryDate: selectedDay,
+        deliverySlotId: selectedSlotId,
       });
 
       await loadRazorpayScript();
@@ -227,17 +238,50 @@ export default function CheckoutPage() {
           <section className="card p-6">
             <h2 className="mb-3 flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100">
               <Clock className="h-4 w-4 text-primary-600" />
-              {t("deliveryTime")}
+              {t("deliverySlot")}
             </h2>
-            <p className="mb-3 text-sm text-zinc-500 dark:text-zinc-400">{t("deliveryTimeHint")}</p>
-            <input
-              type="datetime-local"
-              value={deliveryTime}
-              min={minDeliveryTime}
-              onChange={(e) => setDeliveryTime(e.target.value)}
-              className="input w-full sm:w-auto"
-              required
-            />
+            {slots.length === 0 ? (
+              <p className="text-sm text-amber-700 dark:text-amber-400">{t("noSlots")}</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="deliveryDay" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    {t("deliveryDay")}
+                  </label>
+                  <select
+                    id="deliveryDay"
+                    value={selectedDay}
+                    onChange={(e) => setSelectedDay(e.target.value)}
+                    className="input"
+                  >
+                    {dayOptions.length === 0 && <option value="">{t("selectDay")}</option>}
+                    {dayOptions.map((day) => (
+                      <option key={day.value} value={day.value}>
+                        {day.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label htmlFor="deliverySlot" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    {t("deliverySlot")}
+                  </label>
+                  <select
+                    id="deliverySlot"
+                    value={selectedSlotId}
+                    onChange={(e) => setSelectedSlotId(e.target.value)}
+                    className="input"
+                  >
+                    {!selectedSlotId && <option value="">{t("selectSlot")}</option>}
+                    {slots.map((slot) => (
+                      <option key={slot.id} value={slot.id}>
+                        {slot.name} ({slot.startTime}–{slot.endTime})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="card p-6">
@@ -297,7 +341,8 @@ export default function CheckoutPage() {
             disabled={
               isPlacingOrder ||
               !selectedAddressId ||
-              !deliveryTime ||
+              !selectedDay ||
+              !selectedSlotId ||
               !agreedToTerms ||
               Boolean(windowClosed) ||
               belowMinOrder ||

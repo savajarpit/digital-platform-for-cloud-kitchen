@@ -25,7 +25,11 @@ export interface CreateOrderInput {
   notes?: string;
   items: OrderItemInput[];
   razorpayOrderId: string;
-  requestedDeliveryTime: Date;
+  deliveryDate: Date;
+  deliverySlotId: string;
+  deliverySlotName: string;
+  deliveryWindowStart: string;
+  deliveryWindowEnd: string;
 }
 
 const ORDER_INCLUDE = {
@@ -53,7 +57,11 @@ export class OrdersRepository {
         totalInPaise: input.totalInPaise,
         notes: input.notes,
         razorpayOrderId: input.razorpayOrderId,
-        requestedDeliveryTime: input.requestedDeliveryTime,
+        deliveryDate: input.deliveryDate,
+        deliverySlotId: input.deliverySlotId,
+        deliverySlotName: input.deliverySlotName,
+        deliveryWindowStart: input.deliveryWindowStart,
+        deliveryWindowEnd: input.deliveryWindowEnd,
         items: {
           create: input.items.map((item) => ({
             mealId: item.mealId,

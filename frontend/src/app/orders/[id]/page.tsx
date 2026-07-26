@@ -92,7 +92,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </div>
           <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
             <Clock className="h-4 w-4 shrink-0 text-primary-600" />
-            <span>{new Date(order.requestedDeliveryTime).toLocaleString()}</span>
+            <span>
+              {order.deliverySlotName} ({order.deliveryWindowStart}–{order.deliveryWindowEnd}) ·{" "}
+              {new Date(order.deliveryDate).toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              })}
+            </span>
           </div>
         </div>
 

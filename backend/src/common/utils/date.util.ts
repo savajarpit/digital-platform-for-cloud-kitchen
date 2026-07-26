@@ -18,4 +18,43 @@ export class DateUtil {
   static now(): Date {
     return new Date();
   }
+
+  /** "Now" broken into a tenant-timezone calendar date + minutes-since-midnight. */
+  static getTenantNow(timezone: string): {
+    dateStr: string;
+    minutesSinceMidnight: number;
+  } {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(new Date());
+
+    const map: Record<string, string> = {};
+    for (const part of parts) map[part.type] = part.value;
+
+    return {
+      dateStr: `${map.year}-${map.month}-${map.day}`,
+      minutesSinceMidnight:
+        parseInt(map.hour, 10) * 60 + parseInt(map.minute, 10),
+    };
+  }
+
+  /** Adds `days` to a `YYYY-MM-DD` string, returning the same format. */
+  static addDaysToDateStr(dateStr: string, days: number): string {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().slice(0, 10);
+  }
+
+  /** "HH:mm" → minutes since midnight. */
+  static hhmmToMinutes(hhmm: string): number {
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + (m || 0);
+  }
 }

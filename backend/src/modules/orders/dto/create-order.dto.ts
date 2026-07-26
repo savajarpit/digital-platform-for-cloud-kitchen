@@ -1,11 +1,11 @@
 import {
   ArrayMinSize,
   IsArray,
-  IsDateString,
   IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Min,
   MaxLength,
   ValidateNested,
@@ -43,9 +43,17 @@ export class CreateOrderDto {
   notes?: string;
 
   @ApiProperty({
-    example: '2026-07-26T18:30:00.000Z',
-    description: 'Customer-requested delivery time (ISO 8601)',
+    example: '2026-07-27',
+    description:
+      "Requested delivery date, YYYY-MM-DD, in the tenant's timezone",
   })
-  @IsDateString()
-  requestedDeliveryTime: string;
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'deliveryDate must be in YYYY-MM-DD format',
+  })
+  deliveryDate: string;
+
+  @ApiProperty({ example: 'b3f1c2a0-...' })
+  @IsUUID()
+  deliverySlotId: string;
 }

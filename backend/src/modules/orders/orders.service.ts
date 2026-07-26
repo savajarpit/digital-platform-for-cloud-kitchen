@@ -13,7 +13,9 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { AddressesService } from '../addresses/addresses.service';
 import { MealsService } from '../menu/meals.service';
 import { OrderAcceptanceService } from '../settings/order-acceptance.service';
+import { SettingsRepository } from '../settings/settings.repository';
 import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-client.service';
+import { DateUtil } from '../../common/utils/date.util';
 
 export interface CreatedOrder {
   order: OrderWithDetails;
@@ -28,6 +30,7 @@ export class OrdersService {
     private readonly addressesService: AddressesService,
     private readonly mealsService: MealsService,
     private readonly orderAcceptanceService: OrderAcceptanceService,
+    private readonly settingsRepo: SettingsRepository,
     private readonly razorpayClient: RazorpayClientService,
   ) {}
 
@@ -97,10 +100,31 @@ export class OrdersService {
       ? 0
       : (serviceability.deliveryFeeInPaise ?? 0);
 
-    const requestedDeliveryTime = new Date(dto.requestedDeliveryTime);
-    if (requestedDeliveryTime.getTime() <= Date.now()) {
+    const [profile, slot] = await Promise.all([
+      this.settingsRepo.findBusinessProfile(tenantId),
+      this.settingsRepo.findDeliverySlotById(tenantId, dto.deliverySlotId),
+    ]);
+    if (!slot || !slot.isActive) {
+      throw new BadRequestException('Selected delivery slot is not available.');
+    }
+
+    const timezone = profile?.timezone ?? 'Asia/Kolkata';
+    const maxAdvanceOrderDays = profile?.maxAdvanceOrderDays ?? 2;
+    const { dateStr: todayStr, minutesSinceMidnight: nowMinutes } =
+      DateUtil.getTenantNow(timezone);
+    const maxDateStr = DateUtil.addDaysToDateStr(todayStr, maxAdvanceOrderDays);
+
+    if (dto.deliveryDate < todayStr || dto.deliveryDate > maxDateStr) {
       throw new BadRequestException(
-        'Requested delivery time must be in the future.',
+        `Delivery date must be between ${todayStr} and ${maxDateStr}.`,
+      );
+    }
+    if (
+      dto.deliveryDate === todayStr &&
+      DateUtil.hhmmToMinutes(slot.startTime) <= nowMinutes
+    ) {
+      throw new BadRequestException(
+        'This delivery slot has already started today — pick a later slot or a future date.',
       );
     }
 
@@ -131,7 +155,11 @@ export class OrdersService {
       notes: dto.notes,
       items,
       razorpayOrderId,
-      requestedDeliveryTime,
+      deliveryDate: new Date(`${dto.deliveryDate}T00:00:00.000Z`),
+      deliverySlotId: slot.id,
+      deliverySlotName: slot.name,
+      deliveryWindowStart: slot.startTime,
+      deliveryWindowEnd: slot.endTime,
     });
 
     return { order, razorpayOrderId, razorpayKeyId: keyId };

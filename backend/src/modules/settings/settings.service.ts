@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { SettingsRepository } from './settings.repository';
+import { DeliverySlot } from '../../generated/prisma';
 import {
   PublicConfigResponseDto,
   ThemeConfigDto,
@@ -34,7 +35,18 @@ export class SettingsService {
       supportEmail: profile.supportEmail ?? undefined,
       supportPhone: profile.supportPhone ?? undefined,
       addressLine1: profile.addressLine1 ?? undefined,
+      maxAdvanceOrderDays: profile.maxAdvanceOrderDays,
     });
+  }
+
+  async getDeliverySlots(
+    tenantId: string,
+  ): Promise<{ maxAdvanceOrderDays: number; slots: DeliverySlot[] }> {
+    const [profile, slots] = await Promise.all([
+      this.settingsRepo.findBusinessProfile(tenantId),
+      this.settingsRepo.findActiveDeliverySlots(tenantId),
+    ]);
+    return { maxAdvanceOrderDays: profile?.maxAdvanceOrderDays ?? 2, slots };
   }
 
   private parseThemeConfig(raw: unknown): ThemeConfigDto {

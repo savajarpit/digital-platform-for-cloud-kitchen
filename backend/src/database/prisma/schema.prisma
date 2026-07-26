@@ -80,6 +80,7 @@ model Tenant {
   meals                   Meal[]
   addresses               Address[]
   orders                  Order[]
+  deliverySlots           DeliverySlot[]
 
   @@map("tenants")
 }
@@ -148,6 +149,10 @@ model BusinessProfile {
   deliveryFee             Int?
   minOrderAmount          Int?
   freeDeliveryAboveAmount Int?
+  // How many days ahead a customer may pick for delivery (0 = today only,
+  // 2 = today/tomorrow/day-after). Checkout's day dropdown is bounded by
+  // this, enforced again server-side in OrdersService.
+  maxAdvanceOrderDays     Int      @default(2)
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
@@ -190,6 +195,24 @@ model ServiceablePincode {
   @@unique([tenantId, pincode])
   @@index([tenantId])
   @@map("serviceable_pincodes")
+}
+
+model DeliverySlot {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  startTime String
+  endTime   String
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  orders Order[]
+
+  @@index([tenantId])
+  @@map("delivery_slots")
 }
 
 model NotificationSettings {
@@ -355,17 +378,25 @@ model Order {
   subtotalInPaise      Int
   deliveryFeeInPaise   Int           @default(0)
   totalInPaise         Int
-  requestedDeliveryTime DateTime
+  // The chosen calendar day, and a snapshot of the slot's name/window at
+  // order time — snapshotted like OrderItem's price/name, so a tenant
+  // editing DeliverySlot later never rewrites past order history.
+  deliveryDate         DateTime
+  deliverySlotId       String?
+  deliverySlotName     String
+  deliveryWindowStart  String
+  deliveryWindowEnd    String
   razorpayOrderId      String?       @unique
   razorpayPaymentId    String?
   notes                String?
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
-  tenant  Tenant      @relation(fields: [tenantId], references: [id])
-  user    User        @relation(fields: [userId], references: [id])
-  address Address     @relation(fields: [addressId], references: [id])
-  items   OrderItem[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  address      Address       @relation(fields: [addressId], references: [id])
+  deliverySlot DeliverySlot? @relation(fields: [deliverySlotId], references: [id])
+  items        OrderItem[]
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId])

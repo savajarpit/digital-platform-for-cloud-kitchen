@@ -35,4 +35,14 @@ export class SettingsController {
       throw new NotFoundException('No tenant context for this request');
     return this.orderAcceptanceService.getStatus(tenantId);
   }
+
+  @Public()
+  @Get('delivery-slots')
+  @ResponseMessage('Delivery slots retrieved successfully')
+  @ApiOperation({ summary: 'List the active delivery slots for checkout' })
+  getDeliverySlots(@CurrentTenant('id') tenantId: string | undefined) {
+    if (!tenantId)
+      throw new NotFoundException('No tenant context for this request');
+    return this.settingsService.getDeliverySlots(tenantId);
+  }
 }

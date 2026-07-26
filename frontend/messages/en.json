@@ -52,8 +52,13 @@
     "orderSummary": "Order summary",
     "paymentFailed": "Payment failed or was cancelled — your order hasn't been charged.",
     "verifyingPayment": "Confirming your payment…",
-    "deliveryTime": "Delivery time",
-    "deliveryTimeHint": "When should we deliver this?",
+    "deliveryDay": "Delivery day",
+    "deliverySlot": "Delivery slot",
+    "selectDay": "Select a day",
+    "selectSlot": "Select a slot",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "noSlots": "No delivery slots are configured yet — please check back later.",
     "freeDelivery": "Free delivery"
   },
   "address": {

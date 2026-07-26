@@ -22,6 +22,7 @@ import {
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
@@ -244,6 +245,7 @@ function PincodesCard({
   onChange: (p: ServiceablePincode[]) => void;
 }) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [newPincode, setNewPincode] = useState("");
   const [newFee, setNewFee] = useState("");
   const [adding, setAdding] = useState(false);
@@ -276,14 +278,21 @@ function PincodesCard({
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Remove this pincode?")) return;
-    try {
-      await deleteServiceablePincode(id);
-      onChange(pincodes.filter((p) => p.id !== id));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't remove pincode.", "error");
-    }
+  function handleDelete(id: string) {
+    confirm({
+      message: "Remove this pincode?",
+      confirmLabel: "Remove",
+      processingLabel: "Removing…",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await deleteServiceablePincode(id);
+          onChange(pincodes.filter((p) => p.id !== id));
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't remove pincode.", "error");
+        }
+      },
+    });
   }
 
   return (
@@ -372,6 +381,7 @@ function SlotsCard({
   onChange: (s: DeliverySlot[]) => void;
 }) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [newSlot, setNewSlot] = useState({ name: "", startTime: "", endTime: "" });
   const [adding, setAdding] = useState(false);
 
@@ -399,14 +409,21 @@ function SlotsCard({
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Remove this delivery slot?")) return;
-    try {
-      await deleteDeliverySlot(id);
-      onChange(slots.filter((s) => s.id !== id));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't remove slot.", "error");
-    }
+  function handleDelete(id: string) {
+    confirm({
+      message: "Remove this delivery slot?",
+      confirmLabel: "Remove",
+      processingLabel: "Removing…",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await deleteDeliverySlot(id);
+          onChange(slots.filter((s) => s.id !== id));
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't remove slot.", "error");
+        }
+      },
+    });
   }
 
   return (

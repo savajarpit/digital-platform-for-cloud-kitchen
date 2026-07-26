@@ -170,7 +170,8 @@ button:not(:disabled) {
 @layer components {
   .btn-primary,
   .btn-outline,
-  .btn-ghost {
+  .btn-ghost,
+  .btn-danger {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -183,13 +184,15 @@ button:not(:disabled) {
   }
   .btn-primary:disabled,
   .btn-outline:disabled,
-  .btn-ghost:disabled {
+  .btn-ghost:disabled,
+  .btn-danger:disabled {
     cursor: not-allowed;
     opacity: 0.5;
   }
   .btn-primary:active:not(:disabled),
   .btn-outline:active:not(:disabled),
-  .btn-ghost:active:not(:disabled) {
+  .btn-ghost:active:not(:disabled),
+  .btn-danger:active:not(:disabled) {
     transform: scale(0.97);
   }
   .btn-primary {
@@ -200,6 +203,9 @@ button:not(:disabled) {
   }
   .btn-ghost {
     @apply px-4 py-2 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white shadow-soft hover:bg-red-700;
   }
   .btn-sm {
     @apply px-3.5! py-2! text-xs!;

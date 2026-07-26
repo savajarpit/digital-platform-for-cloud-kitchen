@@ -10,6 +10,7 @@ import { Footer } from "@/components/layout/Footer";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/session-cookies";
 import { decodeJwtRole } from "@/lib/auth/decode-role";
 import { ToastProvider } from "@/context/ToastContext";
+import { ConfirmProvider } from "@/context/ConfirmContext";
 import { THEME_INIT_SCRIPT } from "@/lib/theme/theme-mode";
 import "./globals.css";
 
@@ -63,14 +64,16 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <NextIntlClientProvider>
           <ToastProvider>
-            <Header
-              displayName={config.displayName}
-              logoUrl={config.logoUrl}
-              isAuthenticated={isAuthenticated}
-              isAdmin={isAdmin}
-            />
-            <div className="flex flex-1 flex-col">{children}</div>
-            <Footer config={config} />
+            <ConfirmProvider>
+              <Header
+                displayName={config.displayName}
+                logoUrl={config.logoUrl}
+                isAuthenticated={isAuthenticated}
+                isAdmin={isAdmin}
+              />
+              <div className="flex flex-1 flex-col">{children}</div>
+              <Footer config={config} />
+            </ConfirmProvider>
           </ToastProvider>
         </NextIntlClientProvider>
       </body>

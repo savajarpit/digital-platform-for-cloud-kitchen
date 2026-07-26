@@ -19,6 +19,7 @@ import {
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
@@ -82,6 +83,7 @@ function CategoriesCard({
   onChange: (c: Category[]) => void;
 }) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [adding, setAdding] = useState(false);
@@ -111,14 +113,21 @@ function CategoriesCard({
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this category? Meals in it will become uncategorized.")) return;
-    try {
-      await deleteCategory(id);
-      onChange(categories.filter((c) => c.id !== id));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't delete category.", "error");
-    }
+  function handleDelete(id: string) {
+    confirm({
+      message: "Delete this category? Meals in it will become uncategorized.",
+      confirmLabel: "Delete",
+      processingLabel: "Deleting…",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await deleteCategory(id);
+          onChange(categories.filter((c) => c.id !== id));
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't delete category.", "error");
+        }
+      },
+    });
   }
 
   return (
@@ -213,6 +222,7 @@ function MealsCard({
   onChange: (m: Meal[]) => void;
 }) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
 
   async function handleToggleAvailable(meal: Meal) {
@@ -224,14 +234,21 @@ function MealsCard({
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm("Delete this meal?")) return;
-    try {
-      await deleteMeal(id);
-      onChange(meals.filter((m) => m.id !== id));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't delete meal.", "error");
-    }
+  function handleDelete(id: string) {
+    confirm({
+      message: "Delete this meal?",
+      confirmLabel: "Delete",
+      processingLabel: "Deleting…",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await deleteMeal(id);
+          onChange(meals.filter((m) => m.id !== id));
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't delete meal.", "error");
+        }
+      },
+    });
   }
 
   function categoryName(categoryId: string | null) {

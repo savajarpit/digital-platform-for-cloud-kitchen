@@ -14,11 +14,13 @@ import {
 import { AddressForm } from "@/components/addresses/AddressForm";
 import { AddressCardSkeleton } from "@/components/addresses/AddressCardSkeleton";
 import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
 
 export default function AddressesPage() {
   const t = useTranslations("address");
   const router = useRouter();
   const { showToast } = useToast();
+  const confirm = useConfirm();
 
   const [addresses, setAddresses] = useState<Address[] | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -36,15 +38,23 @@ export default function AddressesPage() {
       });
   }, [router]);
 
-  async function handleDelete(id: string) {
-    if (!confirm(t("deleteConfirm"))) return;
-    try {
-      await deleteAddress(id);
-      setAddresses((prev) => prev?.filter((a) => a.id !== id) ?? null);
-      showToast(t("deleted"), "success");
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Something went wrong.", "error");
-    }
+  function handleDelete(id: string) {
+    confirm({
+      message: t("deleteConfirm"),
+      confirmLabel: t("delete"),
+      processingLabel: t("deleting"),
+      cancelLabel: t("cancel"),
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await deleteAddress(id);
+          setAddresses((prev) => prev?.filter((a) => a.id !== id) ?? null);
+          showToast(t("deleted"), "success");
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Something went wrong.", "error");
+        }
+      },
+    });
   }
 
   async function handleSetDefault(id: string) {

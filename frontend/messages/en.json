@@ -93,6 +93,8 @@
     "updating": "Saving…",
     "updated": "Address updated",
     "edit": "Edit",
+    "delete": "Delete",
+    "deleting": "Deleting…",
     "cancel": "Cancel",
     "empty": "No saved addresses yet.",
     "deleteConfirm": "Delete this address?",

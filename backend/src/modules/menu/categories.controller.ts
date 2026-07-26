@@ -16,6 +16,7 @@ import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { CurrentTenantId } from '../../common/decorators/current-tenant-id.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
@@ -48,6 +49,7 @@ export class CategoriesController {
   }
 
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('menu.manage')
   @Post()
   @ApiBearerAuth('access-token')
   @ResponseMessage('Category created successfully')
@@ -57,6 +59,7 @@ export class CategoriesController {
   }
 
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('menu.manage')
   @Patch(':id')
   @ApiBearerAuth('access-token')
   @ResponseMessage('Category updated successfully')
@@ -70,6 +73,7 @@ export class CategoriesController {
   }
 
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('menu.manage')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('access-token')

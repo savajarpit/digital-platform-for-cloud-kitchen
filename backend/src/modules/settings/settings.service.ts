@@ -1,14 +1,40 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SettingsRepository } from './settings.repository';
-import { DeliverySlot } from '../../generated/prisma';
+import {
+  BusinessProfile,
+  DeliverySlot,
+  NotificationSettings,
+  OrderAcceptanceSettings,
+  PaymentSettings,
+  Prisma,
+  ServiceablePincode,
+} from '../../generated/prisma';
 import {
   PublicConfigResponseDto,
   ThemeConfigDto,
 } from './dto/public-config-response.dto';
+import { UpdateBusinessProfileDto } from './dto/update-business-profile.dto';
+import { UpdateOrderAcceptanceDto } from './dto/update-order-acceptance.dto';
+import { UpdateDeliveryZonesDto } from './dto/update-delivery-zones.dto';
+import { CreateServiceablePincodeDto } from './dto/create-serviceable-pincode.dto';
+import { UpdateServiceablePincodeDto } from './dto/update-serviceable-pincode.dto';
+import { CreateDeliverySlotDto } from './dto/create-delivery-slot.dto';
+import { UpdateDeliverySlotDto } from './dto/update-delivery-slot.dto';
+import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
+import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
+import { CryptoUtil } from '../../common/utils/crypto.util';
 
 @Injectable()
 export class SettingsService {
-  constructor(private readonly settingsRepo: SettingsRepository) {}
+  constructor(
+    private readonly settingsRepo: SettingsRepository,
+    private readonly config: ConfigService,
+  ) {}
 
   async getPublicConfig(
     tenantId: string | undefined,
@@ -47,6 +73,211 @@ export class SettingsService {
       this.settingsRepo.findActiveDeliverySlots(tenantId),
     ]);
     return { maxAdvanceOrderDays: profile?.maxAdvanceOrderDays ?? 2, slots };
+  }
+
+  // ── Business profile / branding ──────────────────────────
+
+  getBusinessProfile(tenantId: string): Promise<BusinessProfile | null> {
+    return this.settingsRepo.findBusinessProfile(tenantId);
+  }
+
+  async updateBusinessProfile(
+    tenantId: string,
+    dto: UpdateBusinessProfileDto,
+  ): Promise<BusinessProfile> {
+    const { themeConfig, ...rest } = dto;
+    let mergedTheme: Record<string, unknown> | undefined;
+    if (themeConfig) {
+      const current = await this.settingsRepo.findBusinessProfile(tenantId);
+      const existingTheme =
+        current?.themeConfig && typeof current.themeConfig === 'object'
+          ? (current.themeConfig as Record<string, unknown>)
+          : {};
+      // themeConfig is a class-transformer instance — omitted fields exist
+      // as own properties with value `undefined`, not absent keys. Spreading
+      // it directly would overwrite existingTheme's real values with
+      // `undefined` for every field this request didn't touch. Only merge
+      // in the fields actually provided.
+      const providedTheme = Object.fromEntries(
+        Object.entries(themeConfig).filter(([, value]) => value !== undefined),
+      );
+      mergedTheme = { ...existingTheme, ...providedTheme };
+    }
+
+    return this.settingsRepo.updateBusinessProfile(tenantId, {
+      ...rest,
+      ...(mergedTheme
+        ? { themeConfig: mergedTheme as unknown as Prisma.InputJsonValue }
+        : {}),
+    });
+  }
+
+  // ── Order acceptance ──────────────────────────────────────
+
+  getOrderAcceptanceSettings(
+    tenantId: string,
+  ): Promise<OrderAcceptanceSettings | null> {
+    return this.settingsRepo.findOrderAcceptanceSettings(tenantId);
+  }
+
+  updateOrderAcceptance(
+    tenantId: string,
+    dto: UpdateOrderAcceptanceDto,
+  ): Promise<OrderAcceptanceSettings> {
+    const { operatingHours, ...rest } = dto;
+    return this.settingsRepo.upsertOrderAcceptanceSettings(tenantId, {
+      ...rest,
+      ...(operatingHours
+        ? { operatingHours: operatingHours as unknown as Prisma.InputJsonValue }
+        : {}),
+    });
+  }
+
+  // ── Delivery zones (kitchen geo, fees, advance-order window) ─
+
+  updateDeliveryZones(
+    tenantId: string,
+    dto: UpdateDeliveryZonesDto,
+  ): Promise<BusinessProfile> {
+    return this.settingsRepo.updateBusinessProfile(tenantId, dto);
+  }
+
+  getServiceablePincodes(tenantId: string): Promise<ServiceablePincode[]> {
+    return this.settingsRepo.findAllServiceablePincodes(tenantId);
+  }
+
+  createServiceablePincode(
+    tenantId: string,
+    dto: CreateServiceablePincodeDto,
+  ): Promise<ServiceablePincode> {
+    return this.settingsRepo.createServiceablePincode(tenantId, dto);
+  }
+
+  async updateServiceablePincode(
+    tenantId: string,
+    id: string,
+    dto: UpdateServiceablePincodeDto,
+  ): Promise<ServiceablePincode> {
+    const existing = await this.settingsRepo.findServiceablePincodeById(
+      tenantId,
+      id,
+    );
+    if (!existing) throw new NotFoundException('Serviceable pincode not found');
+    return this.settingsRepo.updateServiceablePincode(id, dto);
+  }
+
+  async deleteServiceablePincode(tenantId: string, id: string): Promise<void> {
+    const existing = await this.settingsRepo.findServiceablePincodeById(
+      tenantId,
+      id,
+    );
+    if (!existing) throw new NotFoundException('Serviceable pincode not found');
+    await this.settingsRepo.deleteServiceablePincode(id);
+  }
+
+  getAllDeliverySlots(tenantId: string): Promise<DeliverySlot[]> {
+    return this.settingsRepo.findAllDeliverySlots(tenantId);
+  }
+
+  createDeliverySlot(
+    tenantId: string,
+    dto: CreateDeliverySlotDto,
+  ): Promise<DeliverySlot> {
+    return this.settingsRepo.createDeliverySlot(tenantId, dto);
+  }
+
+  async updateDeliverySlot(
+    tenantId: string,
+    id: string,
+    dto: UpdateDeliverySlotDto,
+  ): Promise<DeliverySlot> {
+    const existing = await this.settingsRepo.findDeliverySlotById(tenantId, id);
+    if (!existing) throw new NotFoundException('Delivery slot not found');
+    return this.settingsRepo.updateDeliverySlot(id, dto);
+  }
+
+  async deleteDeliverySlot(tenantId: string, id: string): Promise<void> {
+    const existing = await this.settingsRepo.findDeliverySlotById(tenantId, id);
+    if (!existing) throw new NotFoundException('Delivery slot not found');
+    await this.settingsRepo.deleteDeliverySlot(id);
+  }
+
+  // ── Notifications ──────────────────────────────────────────
+
+  getNotificationSettings(
+    tenantId: string,
+  ): Promise<NotificationSettings | null> {
+    return this.settingsRepo.findNotificationSettings(tenantId);
+  }
+
+  updateNotificationSettings(
+    tenantId: string,
+    dto: UpdateNotificationSettingsDto,
+  ): Promise<NotificationSettings> {
+    const { whatsappApiKey, emailConfig, ...rest } = dto;
+    const encryptionKey = this.requireEncryptionKey();
+
+    return this.settingsRepo.upsertNotificationSettings(tenantId, {
+      ...rest,
+      ...(whatsappApiKey
+        ? {
+            whatsappApiKeyEncrypted: CryptoUtil.encrypt(
+              whatsappApiKey,
+              encryptionKey,
+            ),
+          }
+        : {}),
+      ...(emailConfig
+        ? {
+            emailConfigEncrypted: CryptoUtil.encrypt(
+              JSON.stringify(emailConfig),
+              encryptionKey,
+            ),
+          }
+        : {}),
+    });
+  }
+
+  // ── Payments ───────────────────────────────────────────────
+
+  getPaymentSettings(tenantId: string): Promise<PaymentSettings | null> {
+    return this.settingsRepo.findPaymentSettings(tenantId);
+  }
+
+  updatePaymentSettings(
+    tenantId: string,
+    dto: UpdatePaymentSettingsDto,
+  ): Promise<PaymentSettings> {
+    const { razorpayKeySecret, razorpayWebhookSecret, ...rest } = dto;
+    const encryptionKey = this.requireEncryptionKey();
+
+    return this.settingsRepo.upsertPaymentSettings(tenantId, {
+      ...rest,
+      ...(razorpayKeySecret
+        ? {
+            razorpayKeySecretEncrypted: CryptoUtil.encrypt(
+              razorpayKeySecret,
+              encryptionKey,
+            ),
+          }
+        : {}),
+      ...(razorpayWebhookSecret
+        ? {
+            razorpayWebhookSecretEncrypted: CryptoUtil.encrypt(
+              razorpayWebhookSecret,
+              encryptionKey,
+            ),
+          }
+        : {}),
+    });
+  }
+
+  private requireEncryptionKey(): string {
+    const key = this.config.get<string>('app.encryptionKey');
+    if (!key) {
+      throw new InternalServerErrorException('Encryption key not configured');
+    }
+    return key;
   }
 
   private parseThemeConfig(raw: unknown): ThemeConfigDto {

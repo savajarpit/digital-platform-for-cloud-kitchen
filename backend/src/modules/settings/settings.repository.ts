@@ -6,6 +6,8 @@ import {
   NotificationSettings,
   OrderAcceptanceSettings,
   PaymentSettings,
+  Prisma,
+  ServiceablePincode,
 } from '../../generated/prisma';
 
 @Injectable()
@@ -16,11 +18,29 @@ export class SettingsRepository {
     return this.prisma.businessProfile.findUnique({ where: { tenantId } });
   }
 
+  updateBusinessProfile(
+    tenantId: string,
+    data: Prisma.BusinessProfileUpdateInput,
+  ): Promise<BusinessProfile> {
+    return this.prisma.businessProfile.update({ where: { tenantId }, data });
+  }
+
   findOrderAcceptanceSettings(
     tenantId: string,
   ): Promise<OrderAcceptanceSettings | null> {
     return this.prisma.orderAcceptanceSettings.findUnique({
       where: { tenantId },
+    });
+  }
+
+  upsertOrderAcceptanceSettings(
+    tenantId: string,
+    data: Omit<Prisma.OrderAcceptanceSettingsUncheckedCreateInput, 'tenantId'>,
+  ): Promise<OrderAcceptanceSettings> {
+    return this.prisma.orderAcceptanceSettings.upsert({
+      where: { tenantId },
+      update: data,
+      create: { ...data, tenantId },
     });
   }
 
@@ -32,8 +52,30 @@ export class SettingsRepository {
     });
   }
 
+  upsertNotificationSettings(
+    tenantId: string,
+    data: Omit<Prisma.NotificationSettingsUncheckedCreateInput, 'tenantId'>,
+  ): Promise<NotificationSettings> {
+    return this.prisma.notificationSettings.upsert({
+      where: { tenantId },
+      update: data,
+      create: { ...data, tenantId },
+    });
+  }
+
   findPaymentSettings(tenantId: string): Promise<PaymentSettings | null> {
     return this.prisma.paymentSettings.findUnique({ where: { tenantId } });
+  }
+
+  upsertPaymentSettings(
+    tenantId: string,
+    data: Omit<Prisma.PaymentSettingsUncheckedCreateInput, 'tenantId'>,
+  ): Promise<PaymentSettings> {
+    return this.prisma.paymentSettings.upsert({
+      where: { tenantId },
+      update: data,
+      create: { ...data, tenantId },
+    });
   }
 
   findActiveDeliverySlots(tenantId: string): Promise<DeliverySlot[]> {
@@ -43,10 +85,71 @@ export class SettingsRepository {
     });
   }
 
+  findAllDeliverySlots(tenantId: string): Promise<DeliverySlot[]> {
+    return this.prisma.deliverySlot.findMany({
+      where: { tenantId },
+      orderBy: { sortOrder: 'asc' },
+    });
+  }
+
   findDeliverySlotById(
     tenantId: string,
     id: string,
   ): Promise<DeliverySlot | null> {
     return this.prisma.deliverySlot.findFirst({ where: { id, tenantId } });
+  }
+
+  createDeliverySlot(
+    tenantId: string,
+    data: Omit<Prisma.DeliverySlotUncheckedCreateInput, 'tenantId'>,
+  ): Promise<DeliverySlot> {
+    return this.prisma.deliverySlot.create({ data: { ...data, tenantId } });
+  }
+
+  updateDeliverySlot(
+    id: string,
+    data: Prisma.DeliverySlotUncheckedUpdateInput,
+  ): Promise<DeliverySlot> {
+    return this.prisma.deliverySlot.update({ where: { id }, data });
+  }
+
+  deleteDeliverySlot(id: string): Promise<DeliverySlot> {
+    return this.prisma.deliverySlot.delete({ where: { id } });
+  }
+
+  findAllServiceablePincodes(tenantId: string): Promise<ServiceablePincode[]> {
+    return this.prisma.serviceablePincode.findMany({
+      where: { tenantId },
+      orderBy: { pincode: 'asc' },
+    });
+  }
+
+  findServiceablePincodeById(
+    tenantId: string,
+    id: string,
+  ): Promise<ServiceablePincode | null> {
+    return this.prisma.serviceablePincode.findFirst({
+      where: { id, tenantId },
+    });
+  }
+
+  createServiceablePincode(
+    tenantId: string,
+    data: Omit<Prisma.ServiceablePincodeUncheckedCreateInput, 'tenantId'>,
+  ): Promise<ServiceablePincode> {
+    return this.prisma.serviceablePincode.create({
+      data: { ...data, tenantId },
+    });
+  }
+
+  updateServiceablePincode(
+    id: string,
+    data: Prisma.ServiceablePincodeUncheckedUpdateInput,
+  ): Promise<ServiceablePincode> {
+    return this.prisma.serviceablePincode.update({ where: { id }, data });
+  }
+
+  deleteServiceablePincode(id: string): Promise<ServiceablePincode> {
+    return this.prisma.serviceablePincode.delete({ where: { id } });
   }
 }

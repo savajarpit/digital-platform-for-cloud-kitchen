@@ -46,6 +46,7 @@ async function main() {
 
   try {
     const existingTenant = await prisma.tenant.findFirst();
+    let newTenantId: string | null = null;
     if (existingTenant) {
       console.log(
         `A tenant already exists in this database (${existingTenant.name}). Skipping tenant bootstrap.`,
@@ -62,6 +63,7 @@ async function main() {
           slug: process.env.SEED_BUSINESS_SLUG || slugify(businessName),
         },
       });
+      newTenantId = tenant.id;
 
       await prisma.businessProfile.create({
         data: {
@@ -130,6 +132,36 @@ async function main() {
     console.log(
       `Permission catalog synced (${PERMISSION_CATALOG.length} entries).`,
     );
+
+    // A brand-new tenant's OWNER gets every permission granted by default —
+    // otherwise the fine-grained permission guard would lock the owner out
+    // of their own business immediately after signup. SUPER_ADMIN can later
+    // ratchet this down per-tenant; STAFF stays ungranted by default on
+    // purpose (opt-in, per Arpit's own requirement).
+    if (newTenantId) {
+      const allPermissions = await prisma.permission.findMany();
+      for (const permission of allPermissions) {
+        await prisma.rolePermission.upsert({
+          where: {
+            tenantId_role_permissionId: {
+              tenantId: newTenantId,
+              role: Role.OWNER,
+              permissionId: permission.id,
+            },
+          },
+          update: { granted: true },
+          create: {
+            tenantId: newTenantId,
+            role: Role.OWNER,
+            permissionId: permission.id,
+            granted: true,
+          },
+        });
+      }
+      console.log(
+        `OWNER granted all ${allPermissions.length} permissions for new tenant.`,
+      );
+    }
 
     await seedSampleMenu(prisma);
   } finally {

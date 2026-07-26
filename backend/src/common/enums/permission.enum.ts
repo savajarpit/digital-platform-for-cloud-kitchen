@@ -26,6 +26,12 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     category: 'settings',
   },
   {
+    key: 'settings.delivery-zones.edit',
+    description:
+      'Edit serviceable pincodes, kitchen location/radius, delivery slots, and advance-order window',
+    category: 'settings',
+  },
+  {
     key: 'menu.manage',
     description: 'Create, edit, and delete menu items',
     category: 'operations',

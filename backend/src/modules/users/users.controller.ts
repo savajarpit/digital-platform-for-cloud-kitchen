@@ -28,6 +28,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { OffsetPaginationDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import { ApiPaginatedResponse } from '../../common/decorators/api-paginated-response.decorator';
@@ -43,6 +44,7 @@ export class UsersController {
 
   @Post()
   @Roles(Role.SUPER_ADMIN, Role.OWNER)
+  @RequirePermission('staff.manage')
   @ResponseMessage('User created successfully')
   @ApiOperation({ summary: 'Create a new user' })
   @ApiResponse({ status: 201, type: UserResponseDto })
@@ -83,6 +85,7 @@ export class UsersController {
 
   @Delete(':id')
   @Roles(Role.SUPER_ADMIN, Role.OWNER)
+  @RequirePermission('staff.manage')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Soft delete user' })
   @ApiResponse({ status: 204 })

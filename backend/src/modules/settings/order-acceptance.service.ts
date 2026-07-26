@@ -60,6 +60,11 @@ export class OrderAcceptanceService {
     }
   }
 
+  /** Called after an admin edits operating hours/timezone — the cached status would otherwise be stale for up to 60s. */
+  async invalidateCache(tenantId: string): Promise<void> {
+    await this.redis.del(`order-window:${tenantId}`);
+  }
+
   private async computeStatus(tenantId: string): Promise<OrderWindowStatus> {
     const [settings, profile] = await Promise.all([
       this.settingsRepo.findOrderAcceptanceSettings(tenantId),

@@ -18,6 +18,7 @@ import { UpdateMealDto } from './dto/update-meal.dto';
 import { QueryMealsDto } from './dto/query-meals.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { CurrentTenantId } from '../../common/decorators/current-tenant-id.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
@@ -67,6 +68,7 @@ export class MealsController {
   }
 
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('menu.manage')
   @Post()
   @ApiBearerAuth('access-token')
   @ResponseMessage('Meal created successfully')
@@ -76,6 +78,7 @@ export class MealsController {
   }
 
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('menu.manage')
   @Patch(':id')
   @ApiBearerAuth('access-token')
   @ResponseMessage('Meal updated successfully')
@@ -89,6 +92,7 @@ export class MealsController {
   }
 
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('menu.manage')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth('access-token')

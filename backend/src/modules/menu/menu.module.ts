@@ -8,5 +8,6 @@ import { MenuRepository } from './menu.repository';
 @Module({
   controllers: [CategoriesController, MealsController],
   providers: [CategoriesService, MealsService, MenuRepository],
+  exports: [MealsService],
 })
 export class MenuModule {}

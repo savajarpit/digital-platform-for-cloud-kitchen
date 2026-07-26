@@ -41,6 +41,22 @@ enum EmailProvider {
   SMTP
 }
 
+enum OrderStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
 // ─── Tenant ──────────────────────────────────────────────
 
 model Tenant {
@@ -62,6 +78,8 @@ model Tenant {
   rolePermissions         RolePermission[]
   categories              Category[]
   meals                   Meal[]
+  addresses               Address[]
+  orders                  Order[]
 
   @@map("tenants")
 }
@@ -86,6 +104,8 @@ model User {
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id])
   refreshTokens RefreshToken[]
+  addresses     Address[]
+  orders        Order[]
 
   @@index([tenantId])
   @@index([email])
@@ -270,14 +290,99 @@ model Meal {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  category Category? @relation(fields: [categoryId], references: [id])
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  category   Category?   @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
 
   @@index([tenantId])
   @@index([tenantId, categoryId])
   @@index([tenantId, isAvailable])
   @@index([deletedAt])
   @@map("meals")
+}
+
+// ─── Addresses & Commerce ─────────────────────────────────
+
+model Address {
+  id        String   @id @default(uuid())
+  tenantId  String
+  userId    String
+  label     String?
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  pincode   String
+  landmark  String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  user   User    @relation(fields: [userId], references: [id])
+  orders Order[]
+
+  @@index([tenantId])
+  @@index([tenantId, userId])
+  @@map("addresses")
+}
+
+model Order {
+  id                 String        @id @default(uuid())
+  tenantId           String
+  userId             String
+  addressId          String
+  orderNumber        String
+  status             OrderStatus   @default(PENDING_PAYMENT)
+  paymentStatus      PaymentStatus @default(PENDING)
+  subtotalInPaise    Int
+  deliveryFeeInPaise Int           @default(0)
+  totalInPaise       Int
+  razorpayOrderId    String?       @unique
+  razorpayPaymentId  String?
+  notes              String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  tenant  Tenant      @relation(fields: [tenantId], references: [id])
+  user    User        @relation(fields: [userId], references: [id])
+  address Address     @relation(fields: [addressId], references: [id])
+  items   OrderItem[]
+
+  @@unique([tenantId, orderNumber])
+  @@index([tenantId])
+  @@index([tenantId, userId])
+  @@index([tenantId, status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id                   String   @id @default(uuid())
+  orderId              String
+  mealId               String?
+  nameSnapshot         String
+  priceInPaiseSnapshot Int
+  quantity             Int
+  createdAt            DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id])
+  meal  Meal? @relation(fields: [mealId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model RazorpayWebhookEvent {
+  id           String    @id @default(uuid())
+  eventId      String    @unique
+  eventType    String
+  status       String    @default("PENDING")
+  errorMessage String?
+  processedAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([status])
+  @@map("razorpay_webhook_events")
 }
 
 // ─── Refresh Token ───────────────────────────────────────

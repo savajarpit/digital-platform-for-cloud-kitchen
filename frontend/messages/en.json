@@ -30,15 +30,57 @@
   "cart": {
     "title": "Your Cart",
     "empty": "Your cart is empty",
+    "browseMenu": "Browse the menu",
     "subtotal": "Subtotal",
     "deliveryFee": "Delivery fee",
     "total": "Total",
-    "checkout": "Proceed to checkout"
+    "checkout": "Proceed to checkout",
+    "remove": "Remove"
   },
   "checkout": {
     "title": "Checkout",
     "deliveryDetails": "Delivery details",
-    "payNow": "Pay now"
+    "payNow": "Pay now",
+    "placingOrder": "Placing order…",
+    "selectAddress": "Select a delivery address",
+    "noAddresses": "You don't have any saved addresses yet.",
+    "addAddress": "Add a new address",
+    "manageAddresses": "Manage addresses",
+    "notServiceable": "We don't currently deliver to this pincode.",
+    "agreeToTerms": "I agree to the Terms of Service and Privacy Policy",
+    "orderNotes": "Delivery notes (optional)",
+    "orderSummary": "Order summary",
+    "paymentFailed": "Payment failed or was cancelled — your order hasn't been charged.",
+    "verifyingPayment": "Confirming your payment…"
+  },
+  "address": {
+    "title": "Delivery Addresses",
+    "label": "Label",
+    "labelHint": "e.g. Home, Work",
+    "line1": "Address line 1",
+    "line2": "Address line 2 (optional)",
+    "city": "City",
+    "state": "State",
+    "pincode": "Pincode",
+    "landmark": "Landmark (optional)",
+    "setDefault": "Set as default",
+    "default": "Default",
+    "save": "Save address",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "empty": "No saved addresses yet.",
+    "deleteConfirm": "Delete this address?",
+    "deleted": "Address deleted",
+    "saved": "Address saved"
+  },
+  "order": {
+    "confirmedTitle": "Order confirmed!",
+    "confirmedSubtitle": "Your order has been placed and payment received.",
+    "orderNumber": "Order number",
+    "viewOrders": "View my orders",
+    "backToMenu": "Back to menu",
+    "status": "Status",
+    "items": "Items"
   },
   "auth": {
     "login": "Log in",

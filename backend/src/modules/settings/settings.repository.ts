@@ -4,6 +4,7 @@ import {
   BusinessProfile,
   NotificationSettings,
   OrderAcceptanceSettings,
+  PaymentSettings,
 } from '../../generated/prisma';
 
 @Injectable()
@@ -28,5 +29,9 @@ export class SettingsRepository {
     return this.prisma.notificationSettings.findUnique({
       where: { tenantId },
     });
+  }
+
+  findPaymentSettings(tenantId: string): Promise<PaymentSettings | null> {
+    return this.prisma.paymentSettings.findUnique({ where: { tenantId } });
   }
 }

@@ -70,6 +70,12 @@ export class MenuRepository {
     });
   }
 
+  findMealsByIds(tenantId: string, ids: string[]): Promise<Meal[]> {
+    return this.prisma.meal.findMany({
+      where: { id: { in: ids }, tenantId, deletedAt: null },
+    });
+  }
+
   createMeal(
     tenantId: string,
     data: Omit<Prisma.MealUncheckedCreateInput, 'tenantId'>,

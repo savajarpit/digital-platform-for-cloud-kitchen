@@ -23,6 +23,10 @@ export class MealsService {
     return meal;
   }
 
+  findByIds(tenantId: string, ids: string[]): Promise<Meal[]> {
+    return this.menuRepo.findMealsByIds(tenantId, ids);
+  }
+
   async create(tenantId: string, dto: CreateMealDto): Promise<Meal> {
     if (dto.categoryId) {
       await this.assertCategoryBelongsToTenant(tenantId, dto.categoryId);

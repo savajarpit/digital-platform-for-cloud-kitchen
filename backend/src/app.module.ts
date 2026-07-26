@@ -44,6 +44,9 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { MenuModule } from './modules/menu/menu.module';
+import { AddressesModule } from './modules/addresses/addresses.module';
+import { OrdersModule } from './modules/orders/orders.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -116,6 +119,9 @@ import { MenuModule } from './modules/menu/menu.module';
     UsersModule,
     SettingsModule,
     MenuModule,
+    AddressesModule,
+    OrdersModule,
+    PaymentsModule,
   ],
 
   providers: [

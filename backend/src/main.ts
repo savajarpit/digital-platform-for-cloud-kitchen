@@ -53,7 +53,7 @@ async function bootstrap() {
       'Content-Type',
       'Authorization',
       'X-Request-ID',
-      'X-Tenant-ID',
+      'X-Tenant-Domain',
     ],
     exposedHeaders: ['X-Request-ID'],
   });

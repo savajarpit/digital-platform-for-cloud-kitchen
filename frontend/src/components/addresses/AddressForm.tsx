@@ -21,6 +21,7 @@ export function AddressForm({
     const form = new FormData(event.currentTarget);
     const input: AddressInput = {
       label: String(form.get("label") ?? "").trim() || undefined,
+      contactPhone: String(form.get("contactPhone") ?? "").trim(),
       line1: String(form.get("line1") ?? "").trim(),
       line2: String(form.get("line2") ?? "").trim() || undefined,
       city: String(form.get("city") ?? "").trim(),
@@ -46,8 +47,15 @@ export function AddressForm({
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-4">
         <Field id="label" name="label" label={t("label")} placeholder={t("labelHint")} />
-        <Field id="pincode" name="pincode" label={t("pincode")} required inputMode="numeric" />
+        <Field
+          id="contactPhone"
+          name="contactPhone"
+          label={t("contactPhone")}
+          required
+          placeholder="+919876543210"
+        />
       </div>
+      <Field id="pincode" name="pincode" label={t("pincode")} required inputMode="numeric" />
       <Field id="line1" name="line1" label={t("line1")} required />
       <Field id="line2" name="line2" label={t("line2")} />
       <div className="grid grid-cols-2 gap-4">

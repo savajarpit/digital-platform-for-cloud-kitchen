@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, MapPin, Plus } from "lucide-react";
+import { CheckCircle2, Clock, MapPin, Plus } from "lucide-react";
 import { useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { ApiError, listAddresses, checkServiceability, type Address, type ServiceabilityResult } from "@/lib/api/addresses";
@@ -31,6 +31,19 @@ export default function CheckoutPage() {
   const [windowClosed, setWindowClosed] = useState<string | null>(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [deliveryTime, setDeliveryTime] = useState("");
+
+  // Lazy useState initializer (not useMemo) — computing this reads the
+  // impure Date.now(), which must only ever run once per mount, not on
+  // every render pass.
+  const [minDeliveryTime] = useState(() => {
+    const min = new Date(Date.now() + 30 * 60 * 1000);
+    min.setSeconds(0, 0);
+    // datetime-local expects local time, no timezone suffix.
+    const offset = min.getTimezoneOffset();
+    const local = new Date(min.getTime() - offset * 60 * 1000);
+    return local.toISOString().slice(0, 16);
+  });
 
   useEffect(() => {
     if (items.length === 0) {
@@ -69,19 +82,24 @@ export default function CheckoutPage() {
     checkServiceability(address.pincode).then(setServiceability);
   }, [addresses, selectedAddressId]);
 
-  const deliveryFeeInPaise = serviceability?.deliveryFeeInPaise ?? 0;
+  const qualifiesForFreeDelivery = Boolean(
+    serviceability?.freeDeliveryAboveAmountInPaise !== undefined &&
+      subtotal >= serviceability.freeDeliveryAboveAmountInPaise,
+  );
+  const deliveryFeeInPaise = qualifiesForFreeDelivery ? 0 : (serviceability?.deliveryFeeInPaise ?? 0);
   const totalInPaise = subtotal + deliveryFeeInPaise;
   const belowMinOrder = Boolean(
     serviceability?.minOrderAmountInPaise && subtotal < serviceability.minOrderAmountInPaise,
   );
 
   async function handlePlaceOrder() {
-    if (!selectedAddressId) return;
+    if (!selectedAddressId || !deliveryTime) return;
     setIsPlacingOrder(true);
     try {
       const { order, razorpayOrderId, razorpayKeyId } = await createOrder({
         addressId: selectedAddressId,
         items: items.map((i) => ({ mealId: i.mealId, quantity: i.quantity })),
+        requestedDeliveryTime: new Date(deliveryTime).toISOString(),
       });
 
       await loadRazorpayScript();
@@ -203,6 +221,22 @@ export default function CheckoutPage() {
           </section>
 
           <section className="card p-6">
+            <h2 className="mb-3 flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100">
+              <Clock className="h-4 w-4 text-primary-600" />
+              {t("deliveryTime")}
+            </h2>
+            <p className="mb-3 text-sm text-zinc-500 dark:text-zinc-400">{t("deliveryTimeHint")}</p>
+            <input
+              type="datetime-local"
+              value={deliveryTime}
+              min={minDeliveryTime}
+              onChange={(e) => setDeliveryTime(e.target.value)}
+              className="input w-full sm:w-auto"
+              required
+            />
+          </section>
+
+          <section className="card p-6">
             <label className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
               <input
                 type="checkbox"
@@ -234,7 +268,11 @@ export default function CheckoutPage() {
             </div>
             <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
               <span>Delivery fee</span>
-              <span>{formatPriceFromPaise(deliveryFeeInPaise)}</span>
+              {qualifiesForFreeDelivery ? (
+                <span className="font-medium text-primary-600">{t("freeDelivery")}</span>
+              ) : (
+                <span>{formatPriceFromPaise(deliveryFeeInPaise)}</span>
+              )}
             </div>
             <div className="mt-1 flex justify-between text-base font-bold text-zinc-900 dark:text-zinc-100">
               <span>Total</span>
@@ -255,6 +293,7 @@ export default function CheckoutPage() {
             disabled={
               isPlacingOrder ||
               !selectedAddressId ||
+              !deliveryTime ||
               !agreedToTerms ||
               Boolean(windowClosed) ||
               belowMinOrder ||

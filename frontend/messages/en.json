@@ -51,12 +51,16 @@
     "orderNotes": "Delivery notes (optional)",
     "orderSummary": "Order summary",
     "paymentFailed": "Payment failed or was cancelled — your order hasn't been charged.",
-    "verifyingPayment": "Confirming your payment…"
+    "verifyingPayment": "Confirming your payment…",
+    "deliveryTime": "Delivery time",
+    "deliveryTimeHint": "When should we deliver this?",
+    "freeDelivery": "Free delivery"
   },
   "address": {
     "title": "Delivery Addresses",
     "label": "Label",
     "labelHint": "e.g. Home, Work",
+    "contactPhone": "Contact phone",
     "line1": "Address line 1",
     "line2": "Address line 2 (optional)",
     "city": "City",
@@ -80,7 +84,10 @@
     "viewOrders": "View my orders",
     "backToMenu": "Back to menu",
     "status": "Status",
-    "items": "Items"
+    "items": "Items",
+    "deliverTo": "Deliver to",
+    "deliveryTime": "Delivery time",
+    "contact": "Contact"
   },
   "auth": {
     "login": "Log in",

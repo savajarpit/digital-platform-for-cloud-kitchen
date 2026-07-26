@@ -1,6 +1,7 @@
 import {
   ArrayMinSize,
   IsArray,
+  IsDateString,
   IsInt,
   IsOptional,
   IsString,
@@ -40,4 +41,11 @@ export class CreateOrderDto {
   @IsString()
   @MaxLength(500)
   notes?: string;
+
+  @ApiProperty({
+    example: '2026-07-26T18:30:00.000Z',
+    description: 'Customer-requested delivery time (ISO 8601)',
+  })
+  @IsDateString()
+  requestedDeliveryTime: string;
 }

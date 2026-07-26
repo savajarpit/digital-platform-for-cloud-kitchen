@@ -14,6 +14,16 @@ export class CreateAddressDto {
   @MaxLength(40)
   label?: string;
 
+  @ApiProperty({
+    example: '+919876543210',
+    description: 'Reachable delivery contact number, in E.164 format',
+  })
+  @IsString()
+  @Matches(/^\+[1-9]\d{7,14}$/, {
+    message: 'Phone must be in E.164 format, e.g. +919876543210',
+  })
+  contactPhone: string;
+
   @ApiProperty({ example: '221B Baker Street' })
   @IsString()
   @MaxLength(200)

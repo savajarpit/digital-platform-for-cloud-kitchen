@@ -10,6 +10,15 @@ export interface OrderItem {
   quantity: number;
 }
 
+export interface OrderAddress {
+  contactPhone: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  pincode: string;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -18,16 +27,19 @@ export interface Order {
   subtotalInPaise: number;
   deliveryFeeInPaise: number;
   totalInPaise: number;
+  requestedDeliveryTime: string;
   razorpayOrderId: string | null;
   notes: string | null;
   createdAt: string;
   items: OrderItem[];
+  address: OrderAddress;
 }
 
 export interface CreateOrderInput {
   addressId: string;
   items: { mealId: string; quantity: number }[];
   notes?: string;
+  requestedDeliveryTime: string;
 }
 
 export interface CreatedOrder {

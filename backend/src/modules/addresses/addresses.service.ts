@@ -12,6 +12,7 @@ export interface ServiceabilityResult {
   serviceable: boolean;
   deliveryFeeInPaise?: number;
   minOrderAmountInPaise?: number;
+  freeDeliveryAboveAmountInPaise?: number;
 }
 
 @Injectable()
@@ -81,6 +82,8 @@ export class AddressesService {
       serviceable: true,
       deliveryFeeInPaise: record.deliveryFee,
       minOrderAmountInPaise: record.minOrderAmount,
+      freeDeliveryAboveAmountInPaise:
+        record.freeDeliveryAboveAmount ?? undefined,
     };
   }
 

@@ -166,14 +166,15 @@ model OrderAcceptanceSettings {
 }
 
 model ServiceablePincode {
-  id             String   @id @default(uuid())
-  tenantId       String
-  pincode        String
-  deliveryFee    Int      @default(0)
-  minOrderAmount Int      @default(0)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                       String   @id @default(uuid())
+  tenantId                 String
+  pincode                  String
+  deliveryFee              Int      @default(0)
+  minOrderAmount           Int      @default(0)
+  freeDeliveryAboveAmount  Int?
+  isActive                 Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -304,19 +305,20 @@ model Meal {
 // ─── Addresses & Commerce ─────────────────────────────────
 
 model Address {
-  id        String   @id @default(uuid())
-  tenantId  String
-  userId    String
-  label     String?
-  line1     String
-  line2     String?
-  city      String
-  state     String
-  pincode   String
-  landmark  String?
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  tenantId     String
+  userId       String
+  label        String?
+  contactPhone String
+  line1        String
+  line2        String?
+  city         String
+  state        String
+  pincode      String
+  landmark     String?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   tenant Tenant  @relation(fields: [tenantId], references: [id])
   user   User    @relation(fields: [userId], references: [id])
@@ -335,14 +337,15 @@ model Order {
   orderNumber        String
   status             OrderStatus   @default(PENDING_PAYMENT)
   paymentStatus      PaymentStatus @default(PENDING)
-  subtotalInPaise    Int
-  deliveryFeeInPaise Int           @default(0)
-  totalInPaise       Int
-  razorpayOrderId    String?       @unique
-  razorpayPaymentId  String?
-  notes              String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  subtotalInPaise      Int
+  deliveryFeeInPaise   Int           @default(0)
+  totalInPaise         Int
+  requestedDeliveryTime DateTime
+  razorpayOrderId      String?       @unique
+  razorpayPaymentId    String?
+  notes                String?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   tenant  Tenant      @relation(fields: [tenantId], references: [id])
   user    User        @relation(fields: [userId], references: [id])

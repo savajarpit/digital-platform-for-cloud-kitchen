@@ -77,11 +77,26 @@ export class OrdersService {
       subtotalInPaise += meal.priceInPaise * cartItem.quantity;
     }
 
-    const deliveryFeeInPaise = serviceability.deliveryFeeInPaise ?? 0;
     const minOrderAmountInPaise = serviceability.minOrderAmountInPaise ?? 0;
     if (subtotalInPaise < minOrderAmountInPaise) {
       throw new BadRequestException(
         `Minimum order amount is ₹${(minOrderAmountInPaise / 100).toFixed(0)}.`,
+      );
+    }
+
+    const freeDeliveryAboveAmountInPaise =
+      serviceability.freeDeliveryAboveAmountInPaise;
+    const qualifiesForFreeDelivery =
+      freeDeliveryAboveAmountInPaise !== undefined &&
+      subtotalInPaise >= freeDeliveryAboveAmountInPaise;
+    const deliveryFeeInPaise = qualifiesForFreeDelivery
+      ? 0
+      : (serviceability.deliveryFeeInPaise ?? 0);
+
+    const requestedDeliveryTime = new Date(dto.requestedDeliveryTime);
+    if (requestedDeliveryTime.getTime() <= Date.now()) {
+      throw new BadRequestException(
+        'Requested delivery time must be in the future.',
       );
     }
 
@@ -112,6 +127,7 @@ export class OrdersService {
       notes: dto.notes,
       items,
       razorpayOrderId,
+      requestedDeliveryTime,
     });
 
     return { order, razorpayOrderId, razorpayKeyId: keyId };

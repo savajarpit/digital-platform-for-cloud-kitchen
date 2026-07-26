@@ -25,6 +25,7 @@ export interface CreateOrderInput {
   notes?: string;
   items: OrderItemInput[];
   razorpayOrderId: string;
+  requestedDeliveryTime: Date;
 }
 
 const ORDER_INCLUDE = {
@@ -52,6 +53,7 @@ export class OrdersRepository {
         totalInPaise: input.totalInPaise,
         notes: input.notes,
         razorpayOrderId: input.razorpayOrderId,
+        requestedDeliveryTime: input.requestedDeliveryTime,
         items: {
           create: input.items.map((item) => ({
             mealId: item.mealId,

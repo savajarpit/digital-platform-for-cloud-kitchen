@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, Package } from "lucide-react";
+import { CheckCircle2, Clock, MapPin, Package, Phone } from "lucide-react";
 import { ApiError, getOrder, type Order } from "@/lib/api/orders";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -78,6 +78,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </p>
 
         <div className="mt-6 flex flex-col gap-2 rounded-xl bg-zinc-50 p-4 text-left text-sm dark:bg-zinc-800">
+          <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+            <span>
+              {order.address.line1}
+              {order.address.line2 ? `, ${order.address.line2}` : ""}, {order.address.city},{" "}
+              {order.address.state} — {order.address.pincode}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
+            <Phone className="h-4 w-4 shrink-0 text-primary-600" />
+            <span>{order.address.contactPhone}</span>
+          </div>
+          <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
+            <Clock className="h-4 w-4 shrink-0 text-primary-600" />
+            <span>{new Date(order.requestedDeliveryTime).toLocaleString()}</span>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2 rounded-xl bg-zinc-50 p-4 text-left text-sm dark:bg-zinc-800">
           <h2 className="mb-1 font-semibold text-zinc-900 dark:text-zinc-100">{t("items")}</h2>
           {order.items.map((item) => (
             <div key={item.id} className="flex justify-between text-zinc-600 dark:text-zinc-400">

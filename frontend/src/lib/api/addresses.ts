@@ -6,6 +6,7 @@ export { ApiError };
 export interface Address {
   id: string;
   label: string | null;
+  contactPhone: string;
   line1: string;
   line2: string | null;
   city: string;
@@ -17,6 +18,7 @@ export interface Address {
 
 export interface AddressInput {
   label?: string;
+  contactPhone: string;
   line1: string;
   line2?: string;
   city: string;
@@ -30,6 +32,7 @@ export interface ServiceabilityResult {
   serviceable: boolean;
   deliveryFeeInPaise?: number;
   minOrderAmountInPaise?: number;
+  freeDeliveryAboveAmountInPaise?: number;
 }
 
 export function listAddresses(): Promise<Address[]> {

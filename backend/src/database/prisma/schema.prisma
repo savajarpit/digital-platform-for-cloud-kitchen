@@ -139,6 +139,15 @@ model BusinessProfile {
   gstNumber              String?
   themeConfig            Json     @default("{}")
   defaultLocale          String   @default("en")
+  // Geo-radius serviceability (Blinkit-style): when kitchenLat/kitchenLng and
+  // deliveryRadiusMeters are all set, AddressesService prefers a real
+  // distance-from-kitchen check over the ServiceablePincode table.
+  kitchenLat              Float?
+  kitchenLng              Float?
+  deliveryRadiusMeters    Int?
+  deliveryFee             Int?
+  minOrderAmount          Int?
+  freeDeliveryAboveAmount Int?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
@@ -316,6 +325,12 @@ model Address {
   state        String
   pincode      String
   landmark     String?
+  // Captured from the map picker at address-creation time; null for
+  // addresses saved before that existed, or for tenants without the geo
+  // serviceability mode configured. AddressesService falls back to pincode
+  // matching whenever either is missing.
+  lat          Float?
+  lng          Float?
   isDefault    Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

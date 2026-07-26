@@ -79,7 +79,11 @@ export default function CheckoutPage() {
     // just the pre-load state, not a case that needs an explicit reset.
     const address = addresses?.find((a) => a.id === selectedAddressId);
     if (!address) return;
-    checkServiceability(address.pincode).then(setServiceability);
+    checkServiceability({
+      pincode: address.pincode,
+      lat: address.lat ?? undefined,
+      lng: address.lng ?? undefined,
+    }).then(setServiceability);
   }, [addresses, selectedAddressId]);
 
   const qualifiesForFreeDelivery = Boolean(

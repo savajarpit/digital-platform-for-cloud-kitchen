@@ -2,6 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { Address, Prisma, ServiceablePincode } from '../../generated/prisma';
 
+export interface KitchenGeoSettings {
+  kitchenLat: number | null;
+  kitchenLng: number | null;
+  deliveryRadiusMeters: number | null;
+  deliveryFee: number | null;
+  minOrderAmount: number | null;
+  freeDeliveryAboveAmount: number | null;
+}
+
 @Injectable()
 export class AddressesRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -62,6 +71,20 @@ export class AddressesRepository {
   ): Promise<ServiceablePincode | null> {
     return this.prisma.serviceablePincode.findUnique({
       where: { tenantId_pincode: { tenantId, pincode } },
+    });
+  }
+
+  findKitchenGeoSettings(tenantId: string): Promise<KitchenGeoSettings | null> {
+    return this.prisma.businessProfile.findUnique({
+      where: { tenantId },
+      select: {
+        kitchenLat: true,
+        kitchenLng: true,
+        deliveryRadiusMeters: true,
+        deliveryFee: true,
+        minOrderAmount: true,
+        freeDeliveryAboveAmount: true,
+      },
     });
   }
 }

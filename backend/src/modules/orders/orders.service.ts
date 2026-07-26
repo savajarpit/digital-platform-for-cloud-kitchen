@@ -45,7 +45,11 @@ export class OrdersService {
     );
     const serviceability = await this.addressesService.checkServiceability(
       tenantId,
-      address.pincode,
+      {
+        pincode: address.pincode,
+        lat: address.lat ?? undefined,
+        lng: address.lng ?? undefined,
+      },
     );
     if (!serviceability.serviceable) {
       throw new BadRequestException(

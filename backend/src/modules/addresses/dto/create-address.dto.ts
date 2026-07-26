@@ -1,5 +1,7 @@
 import {
   IsBoolean,
+  IsLatitude,
+  IsLongitude,
   IsOptional,
   IsString,
   Matches,
@@ -55,6 +57,22 @@ export class CreateAddressDto {
   @IsString()
   @MaxLength(200)
   landmark?: string;
+
+  @ApiPropertyOptional({
+    example: 23.0225,
+    description: 'Captured from the map picker, if used',
+  })
+  @IsOptional()
+  @IsLatitude()
+  lat?: number;
+
+  @ApiPropertyOptional({
+    example: 72.5714,
+    description: 'Captured from the map picker, if used',
+  })
+  @IsOptional()
+  @IsLongitude()
+  lng?: number;
 
   @ApiPropertyOptional({ example: false })
   @IsOptional()

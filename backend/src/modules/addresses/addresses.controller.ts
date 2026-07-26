@@ -29,14 +29,23 @@ export class AddressesController {
   @Public()
   @Get('check-serviceability')
   @ResponseMessage('Serviceability checked')
-  @ApiOperation({ summary: 'Check whether a pincode is currently serviceable' })
+  @ApiOperation({
+    summary:
+      'Check whether a location is currently serviceable, by pincode and/or lat/lng',
+  })
   checkServiceability(
     @CurrentTenant('id') tenantId: string | undefined,
-    @Query('pincode') pincode: string,
+    @Query('pincode') pincode?: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string,
   ) {
     if (!tenantId)
       throw new NotFoundException('No tenant context for this request');
-    return this.addressesService.checkServiceability(tenantId, pincode);
+    return this.addressesService.checkServiceability(tenantId, {
+      pincode,
+      lat: parseCoordinate(lat),
+      lng: parseCoordinate(lng),
+    });
   }
 
   @Get()
@@ -86,4 +95,10 @@ export class AddressesController {
   ) {
     await this.addressesService.remove(tenantId, userId, id);
   }
+}
+
+function parseCoordinate(value?: string): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }

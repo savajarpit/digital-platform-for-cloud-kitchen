@@ -13,6 +13,8 @@ export interface Address {
   state: string;
   pincode: string;
   landmark: string | null;
+  lat: number | null;
+  lng: number | null;
   isDefault: boolean;
 }
 
@@ -25,6 +27,8 @@ export interface AddressInput {
   state: string;
   pincode: string;
   landmark?: string;
+  lat?: number;
+  lng?: number;
   isDefault?: boolean;
 }
 
@@ -51,10 +55,18 @@ export function deleteAddress(id: string): Promise<void> {
   return proxyFetch<void>(`/addresses/${id}`, { method: "DELETE" });
 }
 
-export async function checkServiceability(pincode: string): Promise<ServiceabilityResult> {
-  const res = await fetch(
-    `${PUBLIC_API_URL}/addresses/check-serviceability?pincode=${encodeURIComponent(pincode)}`,
-    { headers: { "X-Tenant-Domain": window.location.host } },
-  );
+export async function checkServiceability(query: {
+  pincode?: string;
+  lat?: number;
+  lng?: number;
+}): Promise<ServiceabilityResult> {
+  const params = new URLSearchParams();
+  if (query.pincode) params.set("pincode", query.pincode);
+  if (query.lat !== undefined) params.set("lat", String(query.lat));
+  if (query.lng !== undefined) params.set("lng", String(query.lng));
+
+  const res = await fetch(`${PUBLIC_API_URL}/addresses/check-serviceability?${params.toString()}`, {
+    headers: { "X-Tenant-Domain": window.location.host },
+  });
   return parseOrThrow<ServiceabilityResult>(res);
 }

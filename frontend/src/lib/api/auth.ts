@@ -1,27 +1,7 @@
 import { PUBLIC_API_URL } from "@/lib/config/env";
-import type { ApiErrorResponse, ApiResponse } from "@/lib/api/response";
+import { ApiError, parseOrThrow } from "@/lib/api/client";
 
-export class ApiError extends Error {
-  status: number;
-  code?: string;
-  extra?: ApiErrorResponse;
-
-  constructor(message: string, status: number, extra?: ApiErrorResponse) {
-    super(message);
-    this.status = status;
-    this.code = extra?.code;
-    this.extra = extra;
-  }
-}
-
-async function parseOrThrow<T>(res: Response): Promise<T> {
-  const body = (await res.json()) as ApiResponse<T> | ApiErrorResponse;
-  if (!res.ok || !body.success) {
-    const err = body as ApiErrorResponse;
-    throw new ApiError(err.message, res.status, err);
-  }
-  return (body as ApiResponse<T>).data;
-}
+export { ApiError };
 
 /** Same-origin browser requests to the backend must carry the storefront's
  * own domain explicitly — see `lib/api/server-fetch.ts` for why. */

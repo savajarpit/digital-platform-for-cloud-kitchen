@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { ImageOff } from "lucide-react";
 import type { Meal } from "@/lib/api/menu";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { AddToCartButton } from "./AddToCartButton";
 
 const MACRO_KEYS = ["calories", "protein", "carbs", "fat"] as const;
 const MACRO_LABELS: Record<(typeof MACRO_KEYS)[number], string> = {
@@ -95,10 +96,17 @@ export async function MealCard({
           </div>
         )}
 
-        <div className="mt-auto flex items-center justify-between pt-1">
+        <div className="mt-auto flex items-center justify-between gap-2 pt-1">
           <span className="text-lg font-bold text-primary-700 dark:text-primary-400">
             {formatPriceFromPaise(meal.priceInPaise, currency)}
           </span>
+          <AddToCartButton
+            mealId={meal.id}
+            name={meal.name}
+            priceInPaise={meal.priceInPaise}
+            imageUrl={meal.imageUrl ?? undefined}
+            disabled={!meal.isAvailable}
+          />
         </div>
       </div>
     </article>

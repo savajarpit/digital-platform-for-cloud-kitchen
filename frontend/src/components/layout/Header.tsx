@@ -4,9 +4,10 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Leaf, LogOut, Menu, X } from "lucide-react";
+import { Leaf, LogOut, Menu, ShoppingCart, X } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useToast } from "@/context/ToastContext";
+import { useCartCount } from "@/lib/store/cart-store";
 import { ThemeToggle } from "./ThemeToggle";
 
 export function Header({
@@ -24,6 +25,7 @@ export function Header({
   const { showToast } = useToast();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const cartCount = useCartCount();
 
   const navLinks = [
     { href: "/", label: t("home") },
@@ -76,6 +78,18 @@ export function Header({
 
         <div className="hidden items-center gap-2 md:flex">
           <ThemeToggle />
+          <Link
+            href="/cart"
+            className="relative rounded-lg p-2.5 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            aria-label={t("cart")}
+          >
+            <ShoppingCart className="h-5 w-5" />
+            {cartCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-[10px] font-bold text-white">
+                {cartCount}
+              </span>
+            )}
+          </Link>
           {isAuthenticated ? (
             <button type="button" onClick={handleLogout} disabled={isPending} className="btn-outline btn-sm">
               <LogOut className="h-4 w-4" />
@@ -98,6 +112,18 @@ export function Header({
 
         <div className="flex items-center gap-1 md:hidden">
           <ThemeToggle />
+          <Link
+            href="/cart"
+            className="relative rounded-lg p-2.5 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            aria-label={t("cart")}
+          >
+            <ShoppingCart className="h-5 w-5" />
+            {cartCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-[10px] font-bold text-white">
+                {cartCount}
+              </span>
+            )}
+          </Link>
           <button
             type="button"
             onClick={() => setIsMenuOpen((open) => !open)}

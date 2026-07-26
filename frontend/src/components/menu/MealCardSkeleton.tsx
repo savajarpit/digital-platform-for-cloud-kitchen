@@ -27,8 +27,9 @@ export function MealCardSkeleton() {
           ))}
         </div>
 
-        <div className="mt-auto flex items-center justify-between pt-1">
+        <div className="mt-auto flex items-center justify-between gap-2 pt-1">
           <Skeleton className="h-6 w-16" />
+          <Skeleton className="h-8 w-24 rounded-xl" />
         </div>
       </div>
     </div>

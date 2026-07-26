@@ -1,4 +1,5 @@
-import { ApiError, proxyFetch } from "@/lib/api/client";
+import { ApiError, proxyFetch, proxyFetchPaginated } from "@/lib/api/client";
+import type { PaginationMeta } from "@/lib/api/response";
 
 export { ApiError };
 
@@ -36,14 +37,7 @@ export interface AdminOrder {
   user: { firstName: string; lastName: string | null; email: string };
 }
 
-export interface AdminOrdersMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-  hasNext: boolean;
-  hasPrev: boolean;
-}
+export type AdminOrdersMeta = PaginationMeta;
 
 export const ADMIN_SETTABLE_STATUSES = [
   "PREPARING",
@@ -56,13 +50,13 @@ export function listAdminOrders(params: {
   page?: number;
   limit?: number;
   status?: string;
-}): Promise<{ data: AdminOrder[]; meta: AdminOrdersMeta }> {
+}): Promise<{ data: AdminOrder[]; meta?: AdminOrdersMeta }> {
   const search = new URLSearchParams();
   if (params.page) search.set("page", String(params.page));
   if (params.limit) search.set("limit", String(params.limit));
   if (params.status) search.set("status", params.status);
   const qs = search.toString();
-  return proxyFetch(`/orders/admin${qs ? `?${qs}` : ""}`);
+  return proxyFetchPaginated<AdminOrder[]>(`/orders/admin${qs ? `?${qs}` : ""}`);
 }
 
 export function updateOrderStatus(id: string, status: string): Promise<AdminOrder> {

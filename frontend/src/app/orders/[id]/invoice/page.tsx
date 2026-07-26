@@ -152,7 +152,14 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
                 key={item.id}
                 className="border-b border-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 print:border-zinc-200 print:text-black"
               >
-                <td className="py-2.5">{item.nameSnapshot}</td>
+                <td className="py-2.5">
+                  {item.nameSnapshot}
+                  {item.isFreeItem && (
+                    <span className="ml-2 text-xs font-semibold text-primary-600 dark:text-primary-400">
+                      FREE
+                    </span>
+                  )}
+                </td>
                 <td className="py-2.5 text-center">{item.quantity}</td>
                 <td className="py-2.5 text-right">{formatPriceFromPaise(item.priceInPaiseSnapshot)}</td>
                 <td className="py-2.5 text-right">
@@ -168,6 +175,12 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
             <span>{t("subtotal")}</span>
             <span>{formatPriceFromPaise(order.subtotalInPaise)}</span>
           </div>
+          {order.discountInPaise > 0 && (
+            <div className="flex justify-between text-zinc-600 dark:text-zinc-400 print:text-zinc-700">
+              <span>{t("discount")}{order.couponCode ? ` (${order.couponCode})` : ""}</span>
+              <span>-{formatPriceFromPaise(order.discountInPaise)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-zinc-600 dark:text-zinc-400 print:text-zinc-700">
             <span>{t("deliveryFee")}</span>
             <span>{formatPriceFromPaise(order.deliveryFeeInPaise)}</span>

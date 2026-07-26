@@ -1,4 +1,5 @@
-import { ApiError, proxyFetch } from "@/lib/api/client";
+import { ApiError, proxyFetch, proxyFetchPaginated } from "@/lib/api/client";
+import type { PaginationMeta } from "@/lib/api/response";
 
 export { ApiError };
 
@@ -8,6 +9,7 @@ export interface OrderItem {
   nameSnapshot: string;
   priceInPaiseSnapshot: number;
   quantity: number;
+  isFreeItem: boolean;
 }
 
 export interface OrderAddress {
@@ -25,6 +27,8 @@ export interface Order {
   status: string;
   paymentStatus: string;
   subtotalInPaise: number;
+  discountInPaise: number;
+  couponCode: string | null;
   deliveryFeeInPaise: number;
   totalInPaise: number;
   deliveryDate: string;
@@ -44,6 +48,7 @@ export interface CreateOrderInput {
   notes?: string;
   deliveryDate: string;
   deliverySlotId: string;
+  couponCode?: string;
 }
 
 export interface CreatedOrder {
@@ -52,12 +57,37 @@ export interface CreatedOrder {
   razorpayKeyId: string;
 }
 
+export interface OrderPreview {
+  subtotalInPaise: number;
+  discountInPaise: number;
+  couponApplied: boolean;
+}
+
+export type OrdersMeta = PaginationMeta;
+
 export function createOrder(input: CreateOrderInput): Promise<CreatedOrder> {
   return proxyFetch<CreatedOrder>("/orders", { method: "POST", body: JSON.stringify(input) });
 }
 
-export function listOrders(): Promise<Order[]> {
-  return proxyFetch<Order[]>("/orders");
+export function previewOrder(input: {
+  items: { mealId: string; quantity: number }[];
+  couponCode?: string;
+}): Promise<OrderPreview> {
+  return proxyFetch<OrderPreview>("/orders/preview", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function listOrders(params?: {
+  page?: number;
+  limit?: number;
+}): Promise<{ data: Order[]; meta?: OrdersMeta }> {
+  const search = new URLSearchParams();
+  if (params?.page) search.set("page", String(params.page));
+  if (params?.limit) search.set("limit", String(params.limit));
+  const qs = search.toString();
+  return proxyFetchPaginated<Order[]>(`/orders${qs ? `?${qs}` : ""}`);
 }
 
 export function getOrder(id: string): Promise<Order> {

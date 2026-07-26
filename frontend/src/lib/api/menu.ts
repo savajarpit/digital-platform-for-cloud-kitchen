@@ -9,6 +9,11 @@ export interface MenuCategory {
   isActive: boolean;
 }
 
+export interface ActivePromotion {
+  promotionName: string;
+  discountPercentage: number;
+}
+
 export interface Meal {
   id: string;
   categoryId: string | null;
@@ -22,6 +27,7 @@ export interface Meal {
   dailyQuantityLimit: number | null;
   sortOrder: number;
   category: MenuCategory | null;
+  activePromotion?: ActivePromotion | null;
 }
 
 /** Server-side only — fetched fresh per request, never cached (per-tenant data). */

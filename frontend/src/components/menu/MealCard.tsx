@@ -34,6 +34,12 @@ export async function MealCard({
     value: macroValue(meal.nutrition, key),
   })).filter((m) => m.value !== null);
 
+  const discountPercentage = meal.activePromotion?.discountPercentage ?? 0;
+  const discountedPriceInPaise =
+    discountPercentage > 0
+      ? meal.priceInPaise - Math.floor((meal.priceInPaise * discountPercentage) / 100)
+      : meal.priceInPaise;
+
   return (
     <article
       className="card card-hover flex flex-col overflow-hidden opacity-0 animate-fade-up"
@@ -64,6 +70,11 @@ export async function MealCard({
         {meal.category && (
           <span className="badge absolute top-3 right-3 bg-white/90 text-primary-700 backdrop-blur-sm dark:bg-zinc-900/90 dark:text-primary-400">
             {meal.category.name}
+          </span>
+        )}
+        {discountPercentage > 0 && (
+          <span className="badge absolute bottom-3 left-3 bg-red-600 text-white">
+            {t("discountOff", { percent: discountPercentage })}
           </span>
         )}
         {!meal.isAvailable && (
@@ -97,13 +108,20 @@ export async function MealCard({
         )}
 
         <div className="mt-auto flex items-center justify-between gap-2 pt-1">
-          <span className="text-lg font-bold text-primary-700 dark:text-primary-400">
-            {formatPriceFromPaise(meal.priceInPaise, currency)}
-          </span>
+          <div className="flex items-baseline gap-2">
+            {discountPercentage > 0 && (
+              <span className="text-sm text-zinc-400 line-through dark:text-zinc-500">
+                {formatPriceFromPaise(meal.priceInPaise, currency)}
+              </span>
+            )}
+            <span className="text-lg font-bold text-primary-700 dark:text-primary-400">
+              {formatPriceFromPaise(discountedPriceInPaise, currency)}
+            </span>
+          </div>
           <AddToCartButton
             mealId={meal.id}
             name={meal.name}
-            priceInPaise={meal.priceInPaise}
+            priceInPaise={discountedPriceInPaise}
             imageUrl={meal.imageUrl ?? undefined}
             disabled={!meal.isAvailable}
           />

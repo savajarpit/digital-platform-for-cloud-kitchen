@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { MapPin, Plus, Star, Trash2 } from "lucide-react";
+import { MapPin, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import {
   ApiError,
   deleteAddress,
@@ -12,6 +12,7 @@ import {
   type Address,
 } from "@/lib/api/addresses";
 import { AddressForm } from "@/components/addresses/AddressForm";
+import { AddressCardSkeleton } from "@/components/addresses/AddressCardSkeleton";
 import { useToast } from "@/context/ToastContext";
 
 export default function AddressesPage() {
@@ -21,6 +22,7 @@ export default function AddressesPage() {
 
   const [addresses, setAddresses] = useState<Address[] | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
     listAddresses()
@@ -81,49 +83,77 @@ export default function AddressesPage() {
       )}
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {addresses === null ? null : addresses.length === 0 && !showForm ? (
+        {addresses === null ? (
+          Array.from({ length: 4 }).map((_, i) => <AddressCardSkeleton key={i} />)
+        ) : addresses.length === 0 && !showForm ? (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">{t("empty")}</p>
         ) : (
-          addresses.map((address) => (
-            <div key={address.id} className="card flex flex-col gap-2 p-5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 shrink-0 text-primary-600" />
-                  <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                    {address.label || t("line1")}
-                  </span>
-                  {address.isDefault && (
-                    <span className="badge bg-primary-100 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
-                      {t("default")}
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(address.id)}
-                  className="text-zinc-400 hover:text-red-600"
-                  aria-label={t("deleteConfirm")}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+          addresses.map((address) =>
+            editingId === address.id ? (
+              <div key={address.id} className="card p-6">
+                <AddressForm
+                  address={address}
+                  onSaved={(updated) => {
+                    setAddresses(
+                      (prev) => prev?.map((a) => (a.id === updated.id ? updated : a)) ?? null,
+                    );
+                    setEditingId(null);
+                  }}
+                  onCancel={() => setEditingId(null)}
+                />
               </div>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                {address.line1}
-                {address.line2 ? `, ${address.line2}` : ""}, {address.city}, {address.state} —{" "}
-                {address.pincode}
-              </p>
-              {!address.isDefault && (
-                <button
-                  type="button"
-                  onClick={() => handleSetDefault(address.id)}
-                  className="mt-1 inline-flex w-fit items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
-                >
-                  <Star className="h-3 w-3" />
-                  {t("setDefault")}
-                </button>
-              )}
-            </div>
-          ))
+            ) : (
+              <div key={address.id} className="card flex flex-col gap-2 p-5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-4 w-4 shrink-0 text-primary-600" />
+                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                      {address.label || t("line1")}
+                    </span>
+                    {address.isDefault && (
+                      <span className="badge bg-primary-100 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
+                        {t("default")}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(address.id)}
+                      className="rounded p-1 text-zinc-400 hover:text-primary-600"
+                      aria-label={t("edit")}
+                      title={t("edit")}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(address.id)}
+                      className="rounded p-1 text-zinc-400 hover:text-red-600"
+                      aria-label={t("deleteConfirm")}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                  {address.line1}
+                  {address.line2 ? `, ${address.line2}` : ""}, {address.city}, {address.state} —{" "}
+                  {address.pincode}
+                </p>
+                {!address.isDefault && (
+                  <button
+                    type="button"
+                    onClick={() => handleSetDefault(address.id)}
+                    className="mt-1 inline-flex w-fit items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
+                  >
+                    <Star className="h-3 w-3" />
+                    {t("setDefault")}
+                  </button>
+                )}
+              </div>
+            ),
+          )
         )}
       </div>
     </main>

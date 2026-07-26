@@ -101,7 +101,7 @@ function OrdersTable({
     listAdminOrders({ page, status: status || undefined })
       .then(({ data, meta }) => {
         setOrders(data);
-        setMeta(meta);
+        setMeta(meta ?? null);
       })
       .catch(() => setError("Couldn't load orders."));
   }, [page, status]);

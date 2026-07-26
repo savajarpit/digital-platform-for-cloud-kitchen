@@ -8,13 +8,14 @@ import { CheckCircle2, Clock, MapPin, Plus } from "lucide-react";
 import { useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { ApiError, listAddresses, checkServiceability, type Address, type ServiceabilityResult } from "@/lib/api/addresses";
-import { createOrder } from "@/lib/api/orders";
+import { createOrder, previewOrder } from "@/lib/api/orders";
 import { verifyPayment } from "@/lib/api/payments";
 import { getOrderWindowStatus } from "@/lib/api/order-window";
 import { getDeliverySlots, type DeliverySlot } from "@/lib/api/delivery-slots";
 import { formatTime12h, hhmmToMinutes } from "@/lib/format/time";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { AddressForm } from "@/components/addresses/AddressForm";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/context/ToastContext";
 
 export default function CheckoutPage() {
@@ -33,12 +34,16 @@ export default function CheckoutPage() {
   const [windowClosed, setWindowClosed] = useState<string | null>(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [slots, setSlots] = useState<DeliverySlot[]>([]);
+  const [slots, setSlots] = useState<DeliverySlot[] | null>(null);
   const [dayOptions, setDayOptions] = useState<{ value: string; label: string }[]>([]);
   const [selectedDay, setSelectedDay] = useState("");
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const [todayStr, setTodayStr] = useState("");
   const [nowMinutes, setNowMinutes] = useState(0);
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountInPaise: number } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
   useEffect(() => {
     if (items.length === 0) {
@@ -105,6 +110,7 @@ export default function CheckoutPage() {
   // Hide slots that have already started when "today" is selected — the
   // slot dropdown should never offer something the backend will reject.
   const visibleSlots = useMemo(() => {
+    if (!slots) return [];
     if (selectedDay !== todayStr) return slots;
     return slots.filter((slot) => hhmmToMinutes(slot.startTime) > nowMinutes);
   }, [slots, selectedDay, todayStr, nowMinutes]);
@@ -117,15 +123,48 @@ export default function CheckoutPage() {
     ? selectedSlotId
     : (visibleSlots[0]?.id ?? "");
 
+  const couponDiscountInPaise = appliedCoupon?.discountInPaise ?? 0;
+  const effectiveSubtotal = Math.max(0, subtotal - couponDiscountInPaise);
   const qualifiesForFreeDelivery = Boolean(
     serviceability?.freeDeliveryAboveAmountInPaise !== undefined &&
-      subtotal >= serviceability.freeDeliveryAboveAmountInPaise,
+      effectiveSubtotal >= serviceability.freeDeliveryAboveAmountInPaise,
   );
   const deliveryFeeInPaise = qualifiesForFreeDelivery ? 0 : (serviceability?.deliveryFeeInPaise ?? 0);
-  const totalInPaise = subtotal + deliveryFeeInPaise;
+  const totalInPaise = effectiveSubtotal + deliveryFeeInPaise;
   const belowMinOrder = Boolean(
     serviceability?.minOrderAmountInPaise && subtotal < serviceability.minOrderAmountInPaise,
   );
+
+  async function handleApplyCoupon() {
+    const code = couponInput.trim();
+    if (!code) return;
+    setIsApplyingCoupon(true);
+    setCouponError(null);
+    try {
+      const preview = await previewOrder({
+        items: items.map((i) => ({ mealId: i.mealId, quantity: i.quantity })),
+        couponCode: code,
+      });
+      if (!preview.couponApplied) {
+        setCouponError("Invalid coupon code");
+        return;
+      }
+      setAppliedCoupon({ code: code.toUpperCase(), discountInPaise: preview.discountInPaise });
+      setCouponInput("");
+      showToast(t("couponApplied", { code: code.toUpperCase() }), "success");
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Could not apply this coupon.";
+      setCouponError(message);
+      showToast(message, "error");
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  }
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null);
+    setCouponError(null);
+  }
 
   async function handlePlaceOrder() {
     if (!selectedAddressId || !selectedDay || !effectiveSlotId) return;
@@ -136,6 +175,7 @@ export default function CheckoutPage() {
         items: items.map((i) => ({ mealId: i.mealId, quantity: i.quantity })),
         deliveryDate: selectedDay,
         deliverySlotId: effectiveSlotId,
+        couponCode: appliedCoupon?.code,
       });
 
       await loadRazorpayScript();
@@ -193,7 +233,19 @@ export default function CheckoutPage() {
               {t("selectAddress")}
             </h2>
 
-            {addresses === null ? null : addresses.length === 0 && !showAddressForm ? (
+            {addresses === null ? (
+              <div className="flex flex-col gap-3">
+                {Array.from({ length: 2 }).map((_, i) => (
+                  <div key={i} className="flex items-start gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                    <Skeleton className="mt-1 h-4 w-4 rounded-full" />
+                    <div className="flex-1">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="mt-2 h-3.5 w-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : addresses.length === 0 && !showAddressForm ? (
               <p className="text-sm text-zinc-500 dark:text-zinc-400">{t("noAddresses")}</p>
             ) : (
               <div className="flex flex-col gap-3">
@@ -261,7 +313,12 @@ export default function CheckoutPage() {
               <Clock className="h-4 w-4 text-primary-600" />
               {t("deliverySlot")}
             </h2>
-            {slots.length === 0 ? (
+            {slots === null ? (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : slots.length === 0 ? (
               <p className="text-sm text-amber-700 dark:text-amber-400">{t("noSlots")}</p>
             ) : (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -333,11 +390,62 @@ export default function CheckoutPage() {
               </li>
             ))}
           </ul>
+
+          <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+            {appliedCoupon ? (
+              <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2 text-sm dark:bg-primary-950">
+                <span className="font-medium text-primary-700 dark:text-primary-400">
+                  {t("couponApplied", { code: appliedCoupon.code })}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleRemoveCoupon}
+                  className="cursor-pointer text-xs text-zinc-500 hover:text-red-600 dark:text-zinc-400"
+                >
+                  {t("remove")}
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="couponCode" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  {t("haveCoupon")}
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="couponCode"
+                    type="text"
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value)}
+                    placeholder={t("couponPlaceholder")}
+                    className="input flex-1 uppercase"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleApplyCoupon}
+                    disabled={isApplyingCoupon || !couponInput.trim()}
+                    className="btn-outline shrink-0 cursor-pointer text-sm"
+                  >
+                    {isApplyingCoupon ? t("applying") : t("apply")}
+                  </button>
+                </div>
+                {couponError && <p className="text-xs text-red-600 dark:text-red-400">{couponError}</p>}
+              </div>
+            )}
+          </div>
+
           <div className="mt-4 flex flex-col gap-1 border-t border-zinc-200 pt-4 text-sm dark:border-zinc-800">
             <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
               <span>Subtotal</span>
               <span>{formatPriceFromPaise(subtotal)}</span>
             </div>
+            {appliedCoupon && (
+              <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+                <span>
+                  {t("discount")} ({appliedCoupon.code})
+                </span>
+                <span>-{formatPriceFromPaise(couponDiscountInPaise)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
               <span>Delivery fee</span>
               {qualifiesForFreeDelivery ? (

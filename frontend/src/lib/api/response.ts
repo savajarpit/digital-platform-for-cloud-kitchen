@@ -1,9 +1,18 @@
+export interface PaginationMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
 /** Mirrors the backend's ResponseTransformInterceptor envelope. */
 export interface ApiResponse<T> {
   success: boolean;
   message: string;
   data: T;
-  meta?: unknown;
+  meta?: PaginationMeta;
   timestamp: string;
 }
 

@@ -28,7 +28,8 @@
     "title": "Menu",
     "search": "Search meals",
     "addToCart": "Add to cart",
-    "outOfStock": "Out of stock"
+    "outOfStock": "Out of stock",
+    "discountOff": "{percent}% OFF"
   },
   "cart": {
     "title": "Your Cart",
@@ -63,7 +64,15 @@
     "tomorrow": "Tomorrow",
     "noSlots": "No delivery slots are configured yet — please check back later.",
     "noSlotsToday": "No more delivery slots today — try tomorrow.",
-    "freeDelivery": "Free delivery"
+    "freeDelivery": "Free delivery",
+    "couponCode": "Coupon code",
+    "haveCoupon": "Have a coupon?",
+    "couponPlaceholder": "Enter code",
+    "apply": "Apply",
+    "applying": "Applying…",
+    "remove": "Remove",
+    "couponApplied": "Coupon \"{code}\" applied",
+    "discount": "Discount"
   },
   "address": {
     "title": "Delivery Addresses",
@@ -80,11 +89,18 @@
     "default": "Default",
     "save": "Save address",
     "saving": "Saving…",
+    "update": "Save changes",
+    "updating": "Saving…",
+    "updated": "Address updated",
+    "edit": "Edit",
     "cancel": "Cancel",
     "empty": "No saved addresses yet.",
     "deleteConfirm": "Delete this address?",
     "deleted": "Address deleted",
-    "saved": "Address saved"
+    "saved": "Address saved",
+    "labelHome": "Home",
+    "labelOffice": "Office",
+    "labelOther": "Other"
   },
   "order": {
     "confirmedTitle": "Order confirmed!",
@@ -127,6 +143,7 @@
     "price": "Price",
     "amount": "Amount",
     "subtotal": "Subtotal",
+    "discount": "Discount",
     "deliveryFee": "Delivery fee",
     "total": "Total",
     "print": "Print / Save as PDF",

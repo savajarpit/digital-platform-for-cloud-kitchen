@@ -58,11 +58,22 @@ export default function ProfilePage() {
   if (!profile) {
     return (
       <main className="container-app flex-1 py-10">
-        <div className="card mx-auto max-w-lg p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-10 w-full" />
-          <Skeleton className="mt-3 h-10 w-full" />
-          <Skeleton className="mt-3 h-10 w-full" />
+        <Skeleton className="h-7 w-40" />
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="card flex flex-col gap-4 p-6 lg:col-span-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-10 w-full" />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-32 rounded-xl" />
+          </div>
+          <div className="flex flex-col gap-4">
+            <Skeleton className="h-[70px] w-full" />
+            <Skeleton className="h-[70px] w-full" />
+          </div>
         </div>
       </main>
     );

@@ -67,6 +67,17 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum CouponDiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+enum PromotionType {
+  BOGO
+  FREE_ITEM_ON_MINIMUM
+  SCHEDULED_DISCOUNT
+}
+
 // ─── Tenant ──────────────────────────────────────────────
 
 model Tenant {
@@ -93,6 +104,9 @@ model Tenant {
   orders                  Order[]
   deliverySlots           DeliverySlot[]
   notificationLogs        NotificationLog[]
+  coupons                 Coupon[]
+  couponRedemptions       CouponRedemption[]
+  promotions              Promotion[]
 
   @@map("tenants")
 }
@@ -393,9 +407,12 @@ model Meal {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  tenant     Tenant      @relation(fields: [tenantId], references: [id])
-  category   Category?   @relation(fields: [categoryId], references: [id])
-  orderItems OrderItem[]
+  tenant               Tenant      @relation(fields: [tenantId], references: [id])
+  category             Category?   @relation(fields: [categoryId], references: [id])
+  orderItems           OrderItem[]
+  promotionsAsBuyMeal  Promotion[] @relation("PromotionBuyMeal")
+  promotionsAsGetMeal  Promotion[] @relation("PromotionGetMeal")
+  promotionsAsFreeMeal Promotion[] @relation("PromotionFreeMeal")
 
   @@index([tenantId])
   @@index([tenantId, categoryId])
@@ -446,6 +463,15 @@ model Order {
   status              OrderStatus   @default(PENDING_PAYMENT)
   paymentStatus       PaymentStatus @default(PENDING)
   subtotalInPaise     Int
+  // Sum of all applied discounts (scheduled promos + BOGO/free-item retail
+  // value + coupon), always computed server-side, never trusted from the
+  // client. subtotalInPaise already includes any free items at their real
+  // retail price, so totalInPaise = subtotalInPaise - discountInPaise +
+  // deliveryFeeInPaise.
+  discountInPaise     Int           @default(0)
+  // Snapshotted like item price/name — a later coupon edit never rewrites
+  // past order history.
+  couponCode          String?
   deliveryFeeInPaise  Int           @default(0)
   totalInPaise        Int
   // The chosen calendar day, and a snapshot of the slot's name/window at
@@ -468,6 +494,7 @@ model Order {
   deliverySlot     DeliverySlot?     @relation(fields: [deliverySlotId], references: [id])
   items            OrderItem[]
   notificationLogs NotificationLog[]
+  couponRedemption CouponRedemption?
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId])
@@ -483,6 +510,10 @@ model OrderItem {
   nameSnapshot         String
   priceInPaiseSnapshot Int
   quantity             Int
+  // Added by a BOGO/free-item-on-minimum promotion — priceInPaiseSnapshot
+  // still holds the meal's real price (for an honest "you saved ₹X" line),
+  // but its value is excluded from the charged total via Order.discountInPaise.
+  isFreeItem           Boolean  @default(false)
   createdAt            DateTime @default(now())
 
   order Order @relation(fields: [orderId], references: [id])
@@ -503,6 +534,94 @@ model RazorpayWebhookEvent {
 
   @@index([status])
   @@map("razorpay_webhook_events")
+}
+
+// ─── Promotions & coupons ────────────────────────────────
+// Validated and applied server-side only, at order-creation time — a
+// client-shown discount is always a preview, never trusted as the charge.
+
+model Coupon {
+  id                    String             @id @default(uuid())
+  tenantId              String
+  code                  String
+  discountType          CouponDiscountType
+  discountValue         Int
+  minOrderAmountInPaise Int                @default(0)
+  maxUsesTotal          Int?
+  maxUsesPerUser        Int?
+  validFrom             DateTime?
+  validUntil            DateTime?
+  isActive              Boolean            @default(true)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  redemptions CouponRedemption[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@map("coupons")
+}
+
+model CouponRedemption {
+  id        String   @id @default(uuid())
+  tenantId  String
+  couponId  String
+  userId    String
+  orderId   String   @unique
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  coupon Coupon @relation(fields: [couponId], references: [id])
+  order  Order  @relation(fields: [orderId], references: [id])
+
+  @@index([tenantId])
+  @@index([couponId, userId])
+  @@map("coupon_redemptions")
+}
+
+model Promotion {
+  id       String        @id @default(uuid())
+  tenantId String
+  type     PromotionType
+  name     String
+  isActive Boolean       @default(true)
+
+  // BOGO — buy `buyQuantity` of buyMealId, get `getQuantity` of getMealId
+  // free (getMealId falls back to buyMealId, i.e. "buy 2 get 1 of the same").
+  buyMealId   String?
+  buyQuantity Int?
+  getMealId   String?
+  getQuantity Int?
+
+  // FREE_ITEM_ON_MINIMUM — unlock one freeMealId once cart subtotal (before
+  // any discount) crosses minOrderAmountInPaise.
+  minOrderAmountInPaise Int?
+  freeMealId            String?
+
+  // SCHEDULED_DISCOUNT — discountPercentage off, only during a recurring
+  // day-of-week + time window (daysOfWeek: 0=Sun..6=Sat, matching
+  // Date#getDay(); empty = every day). Scoped by mealIds/categoryIds unless
+  // storewide.
+  discountPercentage Int?
+  daysOfWeek         Int[]    @default([])
+  startTime          String?
+  endTime            String?
+  mealIds            String[] @default([])
+  categoryIds        String[] @default([])
+  storewide          Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  buyMeal  Meal?  @relation("PromotionBuyMeal", fields: [buyMealId], references: [id])
+  getMeal  Meal?  @relation("PromotionGetMeal", fields: [getMealId], references: [id])
+  freeMeal Meal?  @relation("PromotionFreeMeal", fields: [freeMealId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, type, isActive])
+  @@map("promotions")
 }
 
 // ─── Refresh Token ───────────────────────────────────────

@@ -4,17 +4,40 @@ import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
 import { QueryMealsDto } from './dto/query-meals.dto';
 import { Meal, Prisma } from '../../generated/prisma';
+import { PromotionsService } from '../promotions/promotions.service';
+
+export type MealWithPromotion = Meal & {
+  activePromotion: { promotionName: string; discountPercentage: number } | null;
+};
 
 @Injectable()
 export class MealsService {
-  constructor(private readonly menuRepo: MenuRepository) {}
+  constructor(
+    private readonly menuRepo: MenuRepository,
+    private readonly promotionsService: PromotionsService,
+  ) {}
 
-  findAll(
+  async findAll(
     tenantId: string,
     query: QueryMealsDto,
     onlyAvailable: boolean,
-  ): Promise<Meal[]> {
-    return this.menuRepo.findMeals(tenantId, { ...query, onlyAvailable });
+  ): Promise<Meal[] | MealWithPromotion[]> {
+    const meals = await this.menuRepo.findMeals(tenantId, {
+      ...query,
+      onlyAvailable,
+    });
+    // Promo badges are a storefront-only concern — the admin listing
+    // (onlyAvailable: false) doesn't need them.
+    if (!onlyAvailable) return meals;
+
+    const promoMap = await this.promotionsService.getActiveScheduledDiscountsForMeals(
+      tenantId,
+      meals,
+    );
+    return meals.map((meal) => ({
+      ...meal,
+      activePromotion: promoMap.get(meal.id) ?? null,
+    }));
   }
 
   async findOne(tenantId: string, id: string): Promise<Meal> {

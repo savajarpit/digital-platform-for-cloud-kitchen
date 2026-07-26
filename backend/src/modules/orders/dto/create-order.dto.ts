@@ -56,4 +56,10 @@ export class CreateOrderDto {
   @ApiProperty({ example: 'b3f1c2a0-...' })
   @IsUUID()
   deliverySlotId: string;
+
+  @ApiPropertyOptional({ example: 'WELCOME10' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  couponCode?: string;
 }

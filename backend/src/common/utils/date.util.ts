@@ -57,4 +57,14 @@ export class DateUtil {
     const [h, m] = hhmm.split(':').map(Number);
     return h * 60 + (m || 0);
   }
+
+  /** Day of week in the tenant's timezone, 0=Sun..6=Sat (matches Date#getDay()). */
+  static getTenantDayOfWeek(timezone: string): number {
+    const weekday = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      weekday: 'short',
+    }).format(new Date());
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days.indexOf(weekday);
+  }
 }

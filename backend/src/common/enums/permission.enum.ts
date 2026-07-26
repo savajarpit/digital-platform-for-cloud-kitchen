@@ -56,4 +56,9 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     description: 'Create and manage staff/delivery accounts',
     category: 'operations',
   },
+  {
+    key: 'promotions.manage',
+    description: 'Create and manage coupons and promotions',
+    category: 'operations',
+  },
 ];

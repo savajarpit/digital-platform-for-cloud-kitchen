@@ -12,6 +12,7 @@ export interface OrderItemInput {
   nameSnapshot: string;
   priceInPaiseSnapshot: number;
   quantity: number;
+  isFreeItem?: boolean;
 }
 
 export interface CreateOrderInput {
@@ -20,6 +21,9 @@ export interface CreateOrderInput {
   addressId: string;
   orderNumber: string;
   subtotalInPaise: number;
+  discountInPaise: number;
+  couponCode?: string;
+  couponId?: string;
   deliveryFeeInPaise: number;
   totalInPaise: number;
   notes?: string;
@@ -74,32 +78,50 @@ export class OrdersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(input: CreateOrderInput): Promise<OrderWithDetails> {
-    return this.prisma.order.create({
-      data: {
-        tenantId: input.tenantId,
-        userId: input.userId,
-        addressId: input.addressId,
-        orderNumber: input.orderNumber,
-        subtotalInPaise: input.subtotalInPaise,
-        deliveryFeeInPaise: input.deliveryFeeInPaise,
-        totalInPaise: input.totalInPaise,
-        notes: input.notes,
-        razorpayOrderId: input.razorpayOrderId,
-        deliveryDate: input.deliveryDate,
-        deliverySlotId: input.deliverySlotId,
-        deliverySlotName: input.deliverySlotName,
-        deliveryWindowStart: input.deliveryWindowStart,
-        deliveryWindowEnd: input.deliveryWindowEnd,
-        items: {
-          create: input.items.map((item) => ({
-            mealId: item.mealId,
-            nameSnapshot: item.nameSnapshot,
-            priceInPaiseSnapshot: item.priceInPaiseSnapshot,
-            quantity: item.quantity,
-          })),
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.create({
+        data: {
+          tenantId: input.tenantId,
+          userId: input.userId,
+          addressId: input.addressId,
+          orderNumber: input.orderNumber,
+          subtotalInPaise: input.subtotalInPaise,
+          discountInPaise: input.discountInPaise,
+          couponCode: input.couponCode,
+          deliveryFeeInPaise: input.deliveryFeeInPaise,
+          totalInPaise: input.totalInPaise,
+          notes: input.notes,
+          razorpayOrderId: input.razorpayOrderId,
+          deliveryDate: input.deliveryDate,
+          deliverySlotId: input.deliverySlotId,
+          deliverySlotName: input.deliverySlotName,
+          deliveryWindowStart: input.deliveryWindowStart,
+          deliveryWindowEnd: input.deliveryWindowEnd,
+          items: {
+            create: input.items.map((item) => ({
+              mealId: item.mealId,
+              nameSnapshot: item.nameSnapshot,
+              priceInPaiseSnapshot: item.priceInPaiseSnapshot,
+              quantity: item.quantity,
+              isFreeItem: item.isFreeItem ?? false,
+            })),
+          },
         },
-      },
-      include: ORDER_INCLUDE,
+        include: ORDER_INCLUDE,
+      });
+
+      if (input.couponId) {
+        await tx.couponRedemption.create({
+          data: {
+            tenantId: input.tenantId,
+            couponId: input.couponId,
+            userId: input.userId,
+            orderId: order.id,
+          },
+        });
+      }
+
+      return order;
     });
   }
 
@@ -128,15 +150,34 @@ export class OrdersRepository {
     });
   }
 
-  findAllForUser(
+  /**
+   * Excludes orders still stuck at PENDING_PAYMENT — a legitimate order
+   * always flips to CONFIRMED (or FAILED) before the customer is ever
+   * redirected back to look at their order list, so anything still
+   * PENDING_PAYMENT by the time this query runs is an abandoned checkout
+   * (closed the payment modal, never paid), not a real order to show.
+   */
+  async findAllForUser(
     tenantId: string,
     userId: string,
-  ): Promise<OrderWithDetails[]> {
-    return this.prisma.order.findMany({
-      where: { tenantId, userId },
-      include: ORDER_INCLUDE,
-      orderBy: { createdAt: 'desc' },
-    });
+    skip: number,
+    take: number,
+  ): Promise<[OrderWithDetails[], number]> {
+    const where = {
+      tenantId,
+      userId,
+      status: { not: OrderStatus.PENDING_PAYMENT },
+    };
+    return this.prisma.$transaction([
+      this.prisma.order.findMany({
+        where,
+        skip,
+        take,
+        include: ORDER_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.order.count({ where }),
+    ]);
   }
 
   /** Idempotent — a second call for an already-confirmed order is a no-op. */

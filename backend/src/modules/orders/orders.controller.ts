@@ -2,6 +2,8 @@ import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { PreviewOrderDto } from './dto/preview-order.dto';
+import { QueryOrdersDto } from './dto/query-orders.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -19,12 +21,13 @@ export class OrdersController {
   @Get()
   @ApiBearerAuth('access-token')
   @ResponseMessage('Orders retrieved successfully')
-  @ApiOperation({ summary: "List the current user's orders" })
+  @ApiOperation({ summary: "List the current user's orders (paginated)" })
   findAll(
     @CurrentTenantId() tenantId: string,
     @CurrentUser('userId') userId: string,
+    @Query() query: QueryOrdersDto,
   ) {
-    return this.ordersService.findAll(tenantId, userId);
+    return this.ordersService.findAll(tenantId, userId, query);
   }
 
   // Must come before @Get(':id') — otherwise "admin" would be parsed as an order id.
@@ -51,6 +54,21 @@ export class OrdersController {
     @Param('id') id: string,
   ) {
     return this.ordersService.findOne(tenantId, userId, id);
+  }
+
+  @Post('preview')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Order preview computed')
+  @ApiOperation({
+    summary:
+      'Preview subtotal/discount for a cart + optional coupon, without creating an order',
+  })
+  preview(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') userId: string,
+    @Body() dto: PreviewOrderDto,
+  ) {
+    return this.ordersService.preview(tenantId, userId, dto);
   }
 
   @Post()

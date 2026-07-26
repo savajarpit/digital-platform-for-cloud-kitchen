@@ -35,6 +35,10 @@ import { CreateDeliverySlotDto } from './dto/create-delivery-slot.dto';
 import { UpdateDeliverySlotDto } from './dto/update-delivery-slot.dto';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
 import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
+import {
+  redactNotificationSettings,
+  redactPaymentSettings,
+} from '../../common/utils/settings-redaction.util';
 
 const ADMIN_ROLES = [Role.SUPER_ADMIN, Role.OWNER, Role.STAFF] as const;
 
@@ -261,7 +265,7 @@ export class SettingsController {
   async getNotificationSettings(@CurrentTenantId() tenantId: string) {
     const settings =
       await this.settingsService.getNotificationSettings(tenantId);
-    return settings ? this.redactNotificationSettings(settings) : null;
+    return settings ? redactNotificationSettings(settings) : null;
   }
 
   @Patch('notifications')
@@ -278,20 +282,7 @@ export class SettingsController {
       tenantId,
       dto,
     );
-    return this.redactNotificationSettings(settings);
-  }
-
-  private redactNotificationSettings(settings: {
-    whatsappApiKeyEncrypted: string | null;
-    emailConfigEncrypted: unknown;
-    [key: string]: unknown;
-  }) {
-    const { whatsappApiKeyEncrypted, emailConfigEncrypted, ...safe } = settings;
-    return {
-      ...safe,
-      whatsappApiKeyConfigured: Boolean(whatsappApiKeyEncrypted),
-      emailConfigConfigured: Boolean(emailConfigEncrypted),
-    };
+    return redactNotificationSettings(settings);
   }
 
   // ── Payments ───────────────────────────────────────────────
@@ -303,7 +294,7 @@ export class SettingsController {
   @ApiOperation({ summary: 'Admin: get Razorpay config (secrets redacted)' })
   async getPaymentSettings(@CurrentTenantId() tenantId: string) {
     const settings = await this.settingsService.getPaymentSettings(tenantId);
-    return settings ? this.redactPaymentSettings(settings) : null;
+    return settings ? redactPaymentSettings(settings) : null;
   }
 
   @Patch('payment')
@@ -320,23 +311,6 @@ export class SettingsController {
       tenantId,
       dto,
     );
-    return this.redactPaymentSettings(settings);
-  }
-
-  private redactPaymentSettings(settings: {
-    razorpayKeySecretEncrypted: string | null;
-    razorpayWebhookSecretEncrypted: string | null;
-    [key: string]: unknown;
-  }) {
-    const {
-      razorpayKeySecretEncrypted,
-      razorpayWebhookSecretEncrypted,
-      ...safe
-    } = settings;
-    return {
-      ...safe,
-      razorpayKeySecretConfigured: Boolean(razorpayKeySecretEncrypted),
-      razorpayWebhookSecretConfigured: Boolean(razorpayWebhookSecretEncrypted),
-    };
+    return redactPaymentSettings(settings);
   }
 }

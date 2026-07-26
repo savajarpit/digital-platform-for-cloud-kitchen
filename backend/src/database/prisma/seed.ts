@@ -14,6 +14,8 @@ import * as bcrypt from 'bcryptjs';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, Role } from '../../generated/prisma';
 import { PERMISSION_CATALOG } from '../../common/enums/permission.enum';
+import { FEATURE_CATALOG } from '../../common/enums/feature.enum';
+import { slugify } from '../../common/utils/slug.util';
 
 dotenv.config({
   path: path.resolve(
@@ -29,13 +31,6 @@ function requireEnv(name: string): string {
     throw new Error(`Missing required env var: ${name}`);
   }
   return value;
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/(^-|-$)/g, '');
 }
 
 async function main() {
@@ -132,6 +127,19 @@ async function main() {
     console.log(
       `Permission catalog synced (${PERMISSION_CATALOG.length} entries).`,
     );
+
+    for (const feature of FEATURE_CATALOG) {
+      await prisma.feature.upsert({
+        where: { key: feature.key },
+        update: { name: feature.name, description: feature.description },
+        create: feature,
+      });
+    }
+    console.log(`Feature catalog synced (${FEATURE_CATALOG.length} entries).`);
+    // No default TenantFeature rows are created here — a new tenant simply
+    // has no rows, which the features service already treats as "disabled"
+    // for every key. Premium features are opt-in per sale (SUPER_ADMIN
+    // enables them from the platform module), never accidentally free.
 
     // A brand-new tenant's OWNER gets every permission granted by default —
     // otherwise the fine-grained permission guard would lock the owner out

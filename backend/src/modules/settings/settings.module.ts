@@ -7,6 +7,6 @@ import { OrderAcceptanceService } from './order-acceptance.service';
 @Module({
   controllers: [SettingsController],
   providers: [SettingsService, SettingsRepository, OrderAcceptanceService],
-  exports: [SettingsRepository, OrderAcceptanceService],
+  exports: [SettingsService, SettingsRepository, OrderAcceptanceService],
 })
 export class SettingsModule {}

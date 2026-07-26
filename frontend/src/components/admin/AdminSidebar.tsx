@@ -11,6 +11,8 @@ import {
   MapPin,
   Package,
   Store,
+  Tag,
+  Users,
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
@@ -27,6 +29,8 @@ interface NavItem {
 const OPERATIONS_NAV: NavItem[] = [
   { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed, permission: PERMISSIONS.MENU_MANAGE },
   { href: "/admin/orders", label: "Orders", icon: Package, permission: PERMISSIONS.ORDERS_MANAGE },
+  { href: "/admin/promotions", label: "Promotions", icon: Tag, permission: PERMISSIONS.PROMOTIONS_MANAGE },
+  { href: "/admin/customers", label: "Customers", icon: Users, permission: PERMISSIONS.CUSTOMERS_VIEW },
 ];
 
 const SETTINGS_NAV: NavItem[] = [

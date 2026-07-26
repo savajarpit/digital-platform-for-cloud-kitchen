@@ -1,9 +1,13 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PromotionsRepository } from './promotions.repository';
 import { SettingsRepository } from '../settings/settings.repository';
 import { DateUtil } from '../../common/utils/date.util';
-import { Promotion, PromotionType } from '../../generated/prisma';
+import { Coupon, Promotion, PromotionType } from '../../generated/prisma';
 import { OrderItemInput } from '../orders/orders.repository';
+import { CreateCouponDto } from './dto/create-coupon.dto';
+import { UpdateCouponDto } from './dto/update-coupon.dto';
+import { CreatePromotionDto } from './dto/create-promotion.dto';
+import { UpdatePromotionDto } from './dto/update-promotion.dto';
 
 export interface CartMeal {
   id: string;
@@ -255,5 +259,116 @@ export class PromotionsService {
     const startMinutes = DateUtil.hhmmToMinutes(promo.startTime);
     const endMinutes = DateUtil.hhmmToMinutes(promo.endTime);
     return minutesSinceMidnight >= startMinutes && minutesSinceMidnight < endMinutes;
+  }
+
+  // ─── Coupon admin CRUD ──────────────────────────────────
+
+  findCoupons(tenantId: string): Promise<Coupon[]> {
+    return this.promotionsRepo.findCoupons(tenantId);
+  }
+
+  createCoupon(tenantId: string, dto: CreateCouponDto): Promise<Coupon> {
+    return this.promotionsRepo.createCoupon(tenantId, {
+      ...dto,
+      code: dto.code.trim().toUpperCase(),
+      validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
+      validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
+    });
+  }
+
+  async updateCoupon(
+    tenantId: string,
+    id: string,
+    dto: UpdateCouponDto,
+  ): Promise<Coupon> {
+    const existing = await this.promotionsRepo.findCouponById(tenantId, id);
+    if (!existing) throw new NotFoundException('Coupon not found');
+    return this.promotionsRepo.updateCoupon(id, {
+      ...dto,
+      code: dto.code ? dto.code.trim().toUpperCase() : undefined,
+      validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
+      validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
+    });
+  }
+
+  async deleteCoupon(tenantId: string, id: string): Promise<void> {
+    const existing = await this.promotionsRepo.findCouponById(tenantId, id);
+    if (!existing) throw new NotFoundException('Coupon not found');
+    await this.promotionsRepo.deleteCoupon(id);
+  }
+
+  // ─── Promotion admin CRUD ───────────────────────────────
+
+  findPromotions(tenantId: string): Promise<Promotion[]> {
+    return this.promotionsRepo.findPromotions(tenantId);
+  }
+
+  createPromotion(tenantId: string, dto: CreatePromotionDto): Promise<Promotion> {
+    this.assertValidPromotionShape(dto);
+    return this.promotionsRepo.createPromotion(tenantId, dto);
+  }
+
+  async updatePromotion(
+    tenantId: string,
+    id: string,
+    dto: UpdatePromotionDto,
+  ): Promise<Promotion> {
+    const existing = await this.promotionsRepo.findPromotionById(tenantId, id);
+    if (!existing) throw new NotFoundException('Promotion not found');
+    this.assertValidPromotionShape({ ...existing, ...dto });
+    return this.promotionsRepo.updatePromotion(id, dto);
+  }
+
+  async deletePromotion(tenantId: string, id: string): Promise<void> {
+    const existing = await this.promotionsRepo.findPromotionById(tenantId, id);
+    if (!existing) throw new NotFoundException('Promotion not found');
+    await this.promotionsRepo.deletePromotion(id);
+  }
+
+  /** Each PromotionType needs a different subset of fields — enforced here
+   * since a shared DTO can't express "required if type === X" cleanly.
+   * Fields are typed to accept both a DTO (optional/undefined) and a merged
+   * Prisma row (nullable), since updatePromotion() checks the two combined. */
+  private assertValidPromotionShape(dto: {
+    type: PromotionType;
+    buyMealId?: string | null;
+    buyQuantity?: number | null;
+    freeMealId?: string | null;
+    minOrderAmountInPaise?: number | null;
+    discountPercentage?: number | null;
+    startTime?: string | null;
+    endTime?: string | null;
+    storewide?: boolean | null;
+    mealIds?: string[] | null;
+    categoryIds?: string[] | null;
+  }): void {
+    if (dto.type === 'BOGO') {
+      if (!dto.buyMealId || !dto.buyQuantity) {
+        throw new BadRequestException(
+          'BOGO promotions require buyMealId and buyQuantity',
+        );
+      }
+    } else if (dto.type === 'FREE_ITEM_ON_MINIMUM') {
+      if (!dto.freeMealId || dto.minOrderAmountInPaise === undefined) {
+        throw new BadRequestException(
+          'FREE_ITEM_ON_MINIMUM promotions require freeMealId and minOrderAmountInPaise',
+        );
+      }
+    } else if (dto.type === 'SCHEDULED_DISCOUNT') {
+      if (!dto.discountPercentage || !dto.startTime || !dto.endTime) {
+        throw new BadRequestException(
+          'SCHEDULED_DISCOUNT promotions require discountPercentage, startTime, and endTime',
+        );
+      }
+      const hasScope =
+        dto.storewide ||
+        (dto.mealIds && dto.mealIds.length > 0) ||
+        (dto.categoryIds && dto.categoryIds.length > 0);
+      if (!hasScope) {
+        throw new BadRequestException(
+          'SCHEDULED_DISCOUNT promotions must be storewide or scoped to at least one meal/category',
+        );
+      }
+    }
   }
 }

@@ -1,10 +1,65 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
-import { Coupon, Meal, Promotion, PromotionType } from '../../generated/prisma';
+import { Coupon, Meal, Prisma, Promotion, PromotionType } from '../../generated/prisma';
 
 @Injectable()
 export class PromotionsRepository {
   constructor(private readonly prisma: PrismaService) {}
+
+  findCoupons(tenantId: string): Promise<Coupon[]> {
+    return this.prisma.coupon.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  findCouponById(tenantId: string, id: string): Promise<Coupon | null> {
+    return this.prisma.coupon.findFirst({ where: { id, tenantId } });
+  }
+
+  createCoupon(
+    tenantId: string,
+    data: Omit<Prisma.CouponUncheckedCreateInput, 'tenantId'>,
+  ): Promise<Coupon> {
+    return this.prisma.coupon.create({ data: { ...data, tenantId } });
+  }
+
+  updateCoupon(id: string, data: Prisma.CouponUncheckedUpdateInput): Promise<Coupon> {
+    return this.prisma.coupon.update({ where: { id }, data });
+  }
+
+  deleteCoupon(id: string): Promise<Coupon> {
+    return this.prisma.coupon.delete({ where: { id } });
+  }
+
+  findPromotions(tenantId: string): Promise<Promotion[]> {
+    return this.prisma.promotion.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  findPromotionById(tenantId: string, id: string): Promise<Promotion | null> {
+    return this.prisma.promotion.findFirst({ where: { id, tenantId } });
+  }
+
+  createPromotion(
+    tenantId: string,
+    data: Omit<Prisma.PromotionUncheckedCreateInput, 'tenantId'>,
+  ): Promise<Promotion> {
+    return this.prisma.promotion.create({ data: { ...data, tenantId } });
+  }
+
+  updatePromotion(
+    id: string,
+    data: Prisma.PromotionUncheckedUpdateInput,
+  ): Promise<Promotion> {
+    return this.prisma.promotion.update({ where: { id }, data });
+  }
+
+  deletePromotion(id: string): Promise<Promotion> {
+    return this.prisma.promotion.delete({ where: { id } });
+  }
 
   findActivePromotionsByTypes(
     tenantId: string,

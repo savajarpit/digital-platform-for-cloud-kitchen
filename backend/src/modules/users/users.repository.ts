@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
-import { User, Prisma } from '../../generated/prisma';
+import { User, Prisma, Role } from '../../generated/prisma';
+
+export type CustomerWithOrderCount = User & { _count: { orders: number } };
+
 @Injectable()
 export class UsersRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -40,6 +43,43 @@ export class UsersRepository {
       this.prisma.user.count({
         where: { tenantId, deletedAt: null },
       }),
+    ]);
+  }
+
+  /** Order counts exclude PENDING_PAYMENT — abandoned checkouts shouldn't
+   * inflate a customer's "orders placed" count, same principle as filtering
+   * them from the customer's own order list. */
+  async findCustomers(
+    tenantId: string,
+    skip: number,
+    take: number,
+    search?: string,
+  ): Promise<[CustomerWithOrderCount[], number]> {
+    const where: Prisma.UserWhereInput = {
+      tenantId,
+      role: Role.CUSTOMER,
+      deletedAt: null,
+      ...(search
+        ? {
+            OR: [
+              { firstName: { contains: search, mode: 'insensitive' } },
+              { lastName: { contains: search, mode: 'insensitive' } },
+              { email: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    return this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          _count: { select: { orders: { where: { status: { not: 'PENDING_PAYMENT' } } } } },
+        },
+      }),
+      this.prisma.user.count({ where }),
     ]);
   }
 

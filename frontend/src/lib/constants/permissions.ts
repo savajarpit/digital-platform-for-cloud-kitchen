@@ -10,4 +10,6 @@ export const PERMISSIONS = {
   DELIVERY_MANAGE: "delivery.manage",
   SUBSCRIPTIONS_MANAGE: "subscriptions.manage",
   STAFF_MANAGE: "staff.manage",
+  PROMOTIONS_MANAGE: "promotions.manage",
+  CUSTOMERS_VIEW: "customers.view",
 } as const;

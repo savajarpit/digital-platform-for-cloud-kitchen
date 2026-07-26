@@ -27,6 +27,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserResponseDto } from './dto/user-response.dto';
+import { CustomerResponseDto } from './dto/customer-response.dto';
+import { QueryCustomersDto } from './dto/query-customers.dto';
 import { OffsetPaginationDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
@@ -101,6 +103,22 @@ export class UsersController {
     return new UserResponseDto(
       await this.usersService.updateOwnProfile(userId, tenantId, dto),
     );
+  }
+
+  // Must come before @Get(':id') — otherwise "customers" would be parsed as a user id.
+  @Get('customers')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('customers.view')
+  @ApiOperation({ summary: 'List this tenant\'s customers (paginated, searchable)' })
+  async findCustomers(
+    @Query() query: QueryCustomersDto,
+    @CurrentUser('tenantId') tenantId: string,
+  ) {
+    const { data, meta } = await this.usersService.findCustomers(
+      query,
+      tenantId,
+    );
+    return { data: data.map((c) => new CustomerResponseDto(c)), meta };
   }
 
   @Get(':id')

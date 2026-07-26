@@ -61,4 +61,9 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     description: 'Create and manage coupons and promotions',
     category: 'operations',
   },
+  {
+    key: 'customers.view',
+    description: 'View customer accounts and their order history',
+    category: 'operations',
+  },
 ];

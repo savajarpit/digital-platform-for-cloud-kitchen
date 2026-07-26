@@ -9,6 +9,7 @@ import { HashUtil } from '../../common/utils/hash.util';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { QueryCustomersDto } from './dto/query-customers.dto';
 import { OffsetPaginationDto } from '../../common/dto/pagination.dto';
 import { User } from '../../generated/prisma';
 
@@ -40,6 +41,20 @@ export class UsersService {
       tenantId,
       skip,
       dto.limit,
+    );
+    return {
+      data,
+      meta: this.pagination.buildOffsetMeta(total, dto.page, dto.limit),
+    };
+  }
+
+  async findCustomers(dto: QueryCustomersDto, tenantId: string) {
+    const skip = this.pagination.getOffsetSkip(dto.page, dto.limit);
+    const [data, total] = await this.usersRepo.findCustomers(
+      tenantId,
+      skip,
+      dto.limit,
+      dto.search,
     );
     return {
       data,

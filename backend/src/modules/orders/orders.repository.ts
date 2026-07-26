@@ -41,6 +41,21 @@ export type OrderWithDetails = Prisma.OrderGetPayload<{
   include: typeof ORDER_INCLUDE;
 }>;
 
+// Deliberately does NOT include the full User relation — that would leak
+// passwordHash into any accidental JSON response. Internal-only (the
+// notifications processor), never routed through a controller.
+const ORDER_NOTIFICATION_INCLUDE = {
+  items: true,
+  address: true,
+  user: {
+    select: { email: true, firstName: true, lastName: true },
+  },
+} satisfies Prisma.OrderInclude;
+
+export type OrderWithNotificationDetails = Prisma.OrderGetPayload<{
+  include: typeof ORDER_NOTIFICATION_INCLUDE;
+}>;
+
 @Injectable()
 export class OrdersRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -88,6 +103,16 @@ export class OrdersRepository {
 
   findByRazorpayOrderId(razorpayOrderId: string): Promise<Order | null> {
     return this.prisma.order.findUnique({ where: { razorpayOrderId } });
+  }
+
+  findForNotification(
+    tenantId: string,
+    id: string,
+  ): Promise<OrderWithNotificationDetails | null> {
+    return this.prisma.order.findFirst({
+      where: { id, tenantId },
+      include: ORDER_NOTIFICATION_INCLUDE,
+    });
   }
 
   findAllForUser(

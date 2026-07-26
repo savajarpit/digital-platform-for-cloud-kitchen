@@ -16,7 +16,7 @@ import { MailProcessor } from './processors/mail.processor';
       }),
       inject: [ConfigService],
     }),
-    BullModule.registerQueue({ name: 'mail' }),
+    BullModule.registerQueue({ name: 'mail' }, { name: 'notifications' }),
     MailModule,
   ],
   providers: [MailProcessor],

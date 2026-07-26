@@ -41,6 +41,16 @@ enum EmailProvider {
   SMTP
 }
 
+enum NotificationChannel {
+  WHATSAPP
+  EMAIL
+}
+
+enum NotificationRecipientType {
+  CUSTOMER
+  OWNER
+}
+
 enum OrderStatus {
   PENDING_PAYMENT
   CONFIRMED
@@ -81,6 +91,7 @@ model Tenant {
   addresses               Address[]
   orders                  Order[]
   deliverySlots           DeliverySlot[]
+  notificationLogs        NotificationLog[]
 
   @@map("tenants")
 }
@@ -237,6 +248,29 @@ model NotificationSettings {
 
   @@index([tenantId])
   @@map("notification_settings")
+}
+
+// Audit trail for every order-confirmation send attempt (one row per
+// channel × recipient, whether it succeeded or failed) — debuggability and
+// the natural place to check "did the customer actually get notified?".
+model NotificationLog {
+  id                String                    @id @default(uuid())
+  tenantId          String
+  orderId           String?
+  channel           NotificationChannel
+  recipientType     NotificationRecipientType
+  recipient         String
+  status            String
+  providerMessageId String?
+  errorMessage      String?
+  createdAt         DateTime                  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  order  Order? @relation(fields: [orderId], references: [id])
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@map("notification_logs")
 }
 
 model PaymentSettings {
@@ -397,6 +431,7 @@ model Order {
   address      Address       @relation(fields: [addressId], references: [id])
   deliverySlot DeliverySlot? @relation(fields: [deliverySlotId], references: [id])
   items        OrderItem[]
+  notificationLogs NotificationLog[]
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId])

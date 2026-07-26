@@ -4,12 +4,36 @@ import { MailService } from '../../shared-modules/mail/mail.service';
 import { WhatsAppProviderFactory } from './providers/whatsapp/whatsapp-provider.factory';
 import { EmailProviderFactory } from './providers/email/email-provider.factory';
 import { otpEmailTemplate } from './templates/email/otp.template';
+import {
+  orderConfirmationCustomerEmailTemplate,
+  OrderConfirmationTemplateData,
+} from './templates/email/order-confirmation-customer.template';
+import { orderConfirmationOwnerEmailTemplate } from './templates/email/order-confirmation-owner.template';
+import { orderConfirmationCustomerWhatsAppTemplate } from './templates/whatsapp/order-confirmation-customer.template';
+import { orderConfirmationOwnerWhatsAppTemplate } from './templates/whatsapp/order-confirmation-owner.template';
 
 export interface SendOtpParams {
   recipientEmail: string;
   recipientName: string;
   recipientWhatsAppNumber?: string;
   otp: string;
+}
+
+export interface OrderConfirmationParams extends OrderConfirmationTemplateData {
+  customerEmail: string;
+  customerWhatsAppNumber?: string;
+}
+
+export type NotificationChannel = 'WHATSAPP' | 'EMAIL';
+export type NotificationRecipientType = 'CUSTOMER' | 'OWNER';
+
+export interface NotificationAttempt {
+  channel: NotificationChannel;
+  recipientType: NotificationRecipientType;
+  recipient: string;
+  status: 'SENT' | 'FAILED';
+  providerMessageId?: string;
+  errorMessage?: string;
 }
 
 @Injectable()
@@ -83,5 +107,152 @@ export class NotificationsService {
       return;
     }
     await this.mailService.send(params.recipientEmail, subject, html);
+  }
+
+  /**
+   * Fired once per confirmed order. Unlike sendOtp, this is fully gated by
+   * each tenant toggle (whatsappEnabled/emailEnabled) — a tenant with
+   * neither configured yet gets no order notifications at all, which is a
+   * business-config gap, not a system failure worth forcing a fallback for.
+   * Every attempt (success or failure) is collected and returned so the
+   * caller can persist it to NotificationLog — this service has no DB
+   * access of its own.
+   */
+  async sendOrderConfirmation(
+    settings: NotificationSettings | null,
+    params: OrderConfirmationParams,
+  ): Promise<NotificationAttempt[]> {
+    const attempts: NotificationAttempt[] = [];
+    if (!settings) return attempts;
+
+    const tasks: Promise<void>[] = [];
+
+    if (settings.whatsappEnabled && params.customerWhatsAppNumber) {
+      tasks.push(
+        this.trySendWhatsApp(
+          settings,
+          'CUSTOMER',
+          params.customerWhatsAppNumber,
+          orderConfirmationCustomerWhatsAppTemplate(params),
+          attempts,
+        ),
+      );
+    }
+    if (settings.whatsappEnabled && settings.ownerWhatsappNumber) {
+      tasks.push(
+        this.trySendWhatsApp(
+          settings,
+          'OWNER',
+          settings.ownerWhatsappNumber,
+          orderConfirmationOwnerWhatsAppTemplate(params),
+          attempts,
+        ),
+      );
+    }
+    if (settings.emailEnabled) {
+      tasks.push(
+        this.trySendEmail(
+          settings,
+          'CUSTOMER',
+          params.customerEmail,
+          orderConfirmationCustomerEmailTemplate(params),
+          attempts,
+        ),
+      );
+      if (settings.ownerNotificationEmail) {
+        tasks.push(
+          this.trySendEmail(
+            settings,
+            'OWNER',
+            settings.ownerNotificationEmail,
+            orderConfirmationOwnerEmailTemplate(params),
+            attempts,
+          ),
+        );
+      }
+    }
+
+    await Promise.all(tasks);
+    return attempts;
+  }
+
+  private async trySendWhatsApp(
+    settings: NotificationSettings,
+    recipientType: NotificationRecipientType,
+    to: string,
+    template: { templateKey: string; params: Record<string, string> },
+    attempts: NotificationAttempt[],
+  ): Promise<void> {
+    try {
+      const provider = this.whatsAppFactory.create(settings);
+      if (!provider) return;
+      const result = await provider.sendTemplateMessage({
+        to,
+        templateKey: template.templateKey,
+        params: template.params,
+      });
+      attempts.push({
+        channel: 'WHATSAPP',
+        recipientType,
+        recipient: to,
+        status: 'SENT',
+        providerMessageId: result.providerMessageId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `WhatsApp order-confirmation send failed for ${to}`,
+        (error as Error).stack,
+      );
+      attempts.push({
+        channel: 'WHATSAPP',
+        recipientType,
+        recipient: to,
+        status: 'FAILED',
+        errorMessage: (error as Error).message,
+      });
+    }
+  }
+
+  private async trySendEmail(
+    settings: NotificationSettings,
+    recipientType: NotificationRecipientType,
+    to: string,
+    template: { subject: string; html: string },
+    attempts: NotificationAttempt[],
+  ): Promise<void> {
+    try {
+      const provider = this.emailFactory.create(settings);
+      let providerMessageId: string | undefined;
+      if (provider) {
+        const result = await provider.sendMail({
+          to,
+          subject: template.subject,
+          html: template.html,
+        });
+        providerMessageId = result.providerMessageId;
+      } else {
+        await this.mailService.send(to, template.subject, template.html);
+      }
+
+      attempts.push({
+        channel: 'EMAIL',
+        recipientType,
+        recipient: to,
+        status: 'SENT',
+        providerMessageId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Email order-confirmation send failed for ${to}`,
+        (error as Error).stack,
+      );
+      attempts.push({
+        channel: 'EMAIL',
+        recipientType,
+        recipient: to,
+        status: 'FAILED',
+        errorMessage: (error as Error).message,
+      });
+    }
   }
 }

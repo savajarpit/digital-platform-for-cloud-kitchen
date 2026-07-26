@@ -4,11 +4,14 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { OrdersRepository } from '../orders/orders.repository';
 import { WebhookEventsRepository } from './webhook-events.repository';
 import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-client.service';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
 import { PaymentStatus } from '../../generated/prisma';
+import { OrderConfirmedJob } from '../notifications/notifications.processor';
 
 interface RazorpayWebhookPayload {
   event?: string;
@@ -30,7 +33,27 @@ export class PaymentsService {
     private readonly ordersRepo: OrdersRepository,
     private readonly razorpayClient: RazorpayClientService,
     private readonly webhookEventsRepo: WebhookEventsRepository,
+    @InjectQueue('notifications')
+    private readonly notificationsQueue: Queue<OrderConfirmedJob>,
   ) {}
+
+  /**
+   * jobId is deterministic (order-confirmed:{orderId}) on purpose — both the
+   * client-side verify call and the webhook can independently reach the
+   * "just got marked PAID" moment for the same order, and Bull treats a
+   * duplicate jobId as a no-op rather than a second job, so this is safe to
+   * call from both paths without double-notifying the customer.
+   */
+  private async enqueueOrderConfirmation(
+    tenantId: string,
+    orderId: string,
+  ): Promise<void> {
+    await this.notificationsQueue.add(
+      'order-confirmed',
+      { tenantId, orderId },
+      { jobId: `order-confirmed:${orderId}` },
+    );
+  }
 
   async verifyPayment(
     tenantId: string,
@@ -59,6 +82,7 @@ export class PaymentsService {
     }
 
     await this.ordersRepo.markPaid(order.id, dto.razorpayPaymentId);
+    await this.enqueueOrderConfirmation(tenantId, order.id);
     return { confirmed: true };
   }
 
@@ -118,6 +142,7 @@ export class PaymentsService {
       ) {
         if (order.paymentStatus !== PaymentStatus.PAID && paymentEntity?.id) {
           await this.ordersRepo.markPaid(order.id, paymentEntity.id);
+          await this.enqueueOrderConfirmation(order.tenantId, order.id);
         }
       } else if (payload.event === 'payment.failed') {
         await this.ordersRepo.markFailed(order.id);

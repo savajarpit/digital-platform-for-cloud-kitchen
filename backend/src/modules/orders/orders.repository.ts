@@ -56,6 +56,19 @@ export type OrderWithNotificationDetails = Prisma.OrderGetPayload<{
   include: typeof ORDER_NOTIFICATION_INCLUDE;
 }>;
 
+// Admin listing needs to show who placed the order, but must never expose
+// passwordHash — select only the display fields, same principle as
+// ORDER_NOTIFICATION_INCLUDE above.
+const ORDER_ADMIN_INCLUDE = {
+  items: true,
+  address: true,
+  user: { select: { firstName: true, lastName: true, email: true } },
+} satisfies Prisma.OrderInclude;
+
+export type OrderWithAdminDetails = Prisma.OrderGetPayload<{
+  include: typeof ORDER_ADMIN_INCLUDE;
+}>;
+
 @Injectable()
 export class OrdersRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -143,5 +156,38 @@ export class OrdersRepository {
       where: { id },
       data: { paymentStatus: PaymentStatus.FAILED },
     });
+  }
+
+  async findAllForTenant(
+    tenantId: string,
+    skip: number,
+    take: number,
+    status?: OrderStatus,
+  ): Promise<[OrderWithAdminDetails[], number]> {
+    const where = { tenantId, ...(status ? { status } : {}) };
+    return this.prisma.$transaction([
+      this.prisma.order.findMany({
+        where,
+        skip,
+        take,
+        include: ORDER_ADMIN_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.order.count({ where }),
+    ]);
+  }
+
+  findByIdForTenant(
+    tenantId: string,
+    id: string,
+  ): Promise<OrderWithAdminDetails | null> {
+    return this.prisma.order.findFirst({
+      where: { id, tenantId },
+      include: ORDER_ADMIN_INCLUDE,
+    });
+  }
+
+  updateStatus(id: string, status: OrderStatus): Promise<Order> {
+    return this.prisma.order.update({ where: { id }, data: { status } });
   }
 }

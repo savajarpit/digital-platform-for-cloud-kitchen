@@ -7,14 +7,18 @@ import { randomBytes } from 'crypto';
 import {
   OrdersRepository,
   OrderItemInput,
+  OrderWithAdminDetails,
   OrderWithDetails,
 } from './orders.repository';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
+import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { AddressesService } from '../addresses/addresses.service';
 import { MealsService } from '../menu/meals.service';
 import { OrderAcceptanceService } from '../settings/order-acceptance.service';
 import { SettingsRepository } from '../settings/settings.repository';
 import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-client.service';
+import { PaginationService } from '../../common/services/pagination.service';
 import { DateUtil } from '../../common/utils/date.util';
 
 export interface CreatedOrder {
@@ -32,6 +36,7 @@ export class OrdersService {
     private readonly orderAcceptanceService: OrderAcceptanceService,
     private readonly settingsRepo: SettingsRepository,
     private readonly razorpayClient: RazorpayClientService,
+    private readonly pagination: PaginationService,
   ) {}
 
   async create(
@@ -177,6 +182,37 @@ export class OrdersService {
     const order = await this.ordersRepo.findById(tenantId, userId, id);
     if (!order) throw new NotFoundException('Order not found');
     return order;
+  }
+
+  async findAllForAdmin(tenantId: string, query: QueryAdminOrdersDto) {
+    const skip = this.pagination.getOffsetSkip(query.page, query.limit);
+    const [data, total] = await this.ordersRepo.findAllForTenant(
+      tenantId,
+      skip,
+      query.limit,
+      query.status,
+    );
+    return {
+      data,
+      meta: this.pagination.buildOffsetMeta(total, query.page, query.limit),
+    };
+  }
+
+  async updateStatus(
+    tenantId: string,
+    id: string,
+    dto: UpdateOrderStatusDto,
+  ): Promise<OrderWithAdminDetails> {
+    const order = await this.ordersRepo.findByIdForTenant(tenantId, id);
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.paymentStatus !== 'PAID') {
+      throw new BadRequestException(
+        'Cannot update the status of an order that has not been paid yet.',
+      );
+    }
+
+    await this.ordersRepo.updateStatus(id, dto.status);
+    return { ...order, status: dto.status };
   }
 }
 

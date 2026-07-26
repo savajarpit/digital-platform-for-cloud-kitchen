@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Package } from "lucide-react";
+import { FileText, Package } from "lucide-react";
 import { ApiError, listOrders, type Order } from "@/lib/api/orders";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
 export default function OrdersPage() {
   const t = useTranslations("order");
+  const tInvoice = useTranslations("invoice");
   const router = useRouter();
   const [orders, setOrders] = useState<Order[] | null>(null);
 
@@ -40,28 +41,37 @@ export default function OrdersPage() {
       ) : (
         <div className="mt-6 flex flex-col gap-3">
           {orders.map((order) => (
-            <Link
+            <div
               key={order.id}
-              href={`/orders/${order.id}`}
-              className="card flex items-center justify-between p-5 transition-colors hover:border-primary-300"
+              className="card flex items-center justify-between gap-4 p-5 transition-colors hover:border-primary-300"
             >
-              <div>
-                <p className="font-mono text-sm text-zinc-500 dark:text-zinc-400">
-                  {order.orderNumber}
-                </p>
-                <p className="mt-1 text-xs text-zinc-400">
-                  {new Date(order.createdAt).toLocaleDateString()}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold text-zinc-900 dark:text-zinc-100">
-                  {formatPriceFromPaise(order.totalInPaise)}
-                </p>
-                <span className="badge mt-1 bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
-                  {order.status.replace(/_/g, " ")}
-                </span>
-              </div>
-            </Link>
+              <Link href={`/orders/${order.id}`} className="flex flex-1 items-center justify-between">
+                <div>
+                  <p className="font-mono text-sm text-zinc-500 dark:text-zinc-400">
+                    {order.orderNumber}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    {new Date(order.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                    {formatPriceFromPaise(order.totalInPaise)}
+                  </p>
+                  <span className="badge mt-1 bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
+                    {order.status.replace(/_/g, " ")}
+                  </span>
+                </div>
+              </Link>
+              <Link
+                href={`/orders/${order.id}/invoice`}
+                className="shrink-0 rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-primary-600 dark:hover:bg-zinc-800"
+                aria-label={tInvoice("downloadInvoice")}
+                title={tInvoice("downloadInvoice")}
+              >
+                <FileText className="h-4 w-4" />
+              </Link>
+            </div>
           ))}
         </div>
       )}

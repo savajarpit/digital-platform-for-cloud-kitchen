@@ -8,6 +8,7 @@ import { PaginationService } from '../../common/services/pagination.service';
 import { HashUtil } from '../../common/utils/hash.util';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { OffsetPaginationDto } from '../../common/dto/pagination.dto';
 import { User } from '../../generated/prisma';
 
@@ -46,22 +47,35 @@ export class UsersService {
     };
   }
 
-  async findOne(id: string): Promise<User> {
-    const user = await this.usersRepo.findById(id);
+  async findOne(id: string, tenantId: string): Promise<User> {
+    const user = await this.usersRepo.findById(id, tenantId);
     if (!user) throw new NotFoundException('User not found');
     return user;
   }
 
-  async update(id: string, dto: UpdateUserDto): Promise<User> {
-    await this.findOne(id);
+  async update(
+    id: string,
+    tenantId: string,
+    dto: UpdateUserDto,
+  ): Promise<User> {
+    await this.findOne(id, tenantId);
     if (dto.password) {
       dto.password = await HashUtil.hash(dto.password);
     }
     return this.usersRepo.update(id, dto);
   }
 
-  async remove(id: string): Promise<void> {
-    await this.findOne(id);
+  async remove(id: string, tenantId: string): Promise<void> {
+    await this.findOne(id, tenantId);
     await this.usersRepo.softDelete(id);
+  }
+
+  async updateOwnProfile(
+    userId: string,
+    tenantId: string,
+    dto: UpdateProfileDto,
+  ): Promise<User> {
+    await this.findOne(userId, tenantId);
+    return this.usersRepo.updateProfile(userId, dto);
   }
 }

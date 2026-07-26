@@ -4,20 +4,23 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Leaf, LogOut, Menu, ShoppingCart, X } from "lucide-react";
+import { Leaf, LayoutDashboard, LogOut, MapPin, Menu, Package, ShoppingCart, User as UserIcon, X } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useToast } from "@/context/ToastContext";
 import { useCartCount } from "@/lib/store/cart-store";
 import { ThemeToggle } from "./ThemeToggle";
+import { UserMenu } from "./UserMenu";
 
 export function Header({
   displayName,
   logoUrl,
   isAuthenticated,
+  isAdmin,
 }: {
   displayName: string;
   logoUrl?: string;
   isAuthenticated: boolean;
+  isAdmin?: boolean;
 }) {
   const t = useTranslations("nav");
   const router = useRouter();
@@ -44,7 +47,7 @@ export function Header({
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/90 backdrop-blur-lg dark:border-zinc-800 dark:bg-zinc-950/90">
+    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/90 backdrop-blur-lg print:hidden dark:border-zinc-800 dark:bg-zinc-950/90">
       <div className="container-app flex h-16 items-center justify-between sm:h-18">
         <Link href="/" className="group flex items-center gap-2">
           {logoUrl ? (
@@ -91,10 +94,7 @@ export function Header({
             )}
           </Link>
           {isAuthenticated ? (
-            <button type="button" onClick={handleLogout} disabled={isPending} className="btn-outline btn-sm">
-              <LogOut className="h-4 w-4" />
-              {t("logout")}
-            </button>
+            <UserMenu isAdmin={isAdmin} />
           ) : (
             <>
               <Link
@@ -154,15 +154,52 @@ export function Header({
               </Link>
             ))}
             {isAuthenticated ? (
-              <button
-                type="button"
-                onClick={handleLogout}
-                disabled={isPending}
-                className="mt-2 flex items-center gap-2 rounded-lg px-4 py-3 text-left text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
-                <LogOut className="h-4 w-4" />
-                {t("logout")}
-              </button>
+              <>
+                <div className="mt-2 border-t border-zinc-200 pt-2 dark:border-zinc-800" />
+                <Link
+                  href="/account/profile"
+                  className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <UserIcon className="h-4 w-4" />
+                  {t("profile")}
+                </Link>
+                <Link
+                  href="/orders"
+                  className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <Package className="h-4 w-4" />
+                  {t("myOrders")}
+                </Link>
+                <Link
+                  href="/account/addresses"
+                  className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <MapPin className="h-4 w-4" />
+                  {t("myAddresses")}
+                </Link>
+                {isAdmin && (
+                  <Link
+                    href="/admin"
+                    className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    {t("admin")}
+                  </Link>
+                )}
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  disabled={isPending}
+                  className="flex items-center gap-2 rounded-lg px-4 py-3 text-left text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {t("logout")}
+                </button>
+              </>
             ) : (
               <>
                 <Link

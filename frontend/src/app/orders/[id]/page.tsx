@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, Clock, MapPin, Package, Phone } from "lucide-react";
+import { CheckCircle2, Clock, FileText, MapPin, Package, Phone } from "lucide-react";
 import { ApiError, getOrder, type Order } from "@/lib/api/orders";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const t = useTranslations("order");
+  const tInvoice = useTranslations("invoice");
   const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -121,9 +122,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        <div className="mt-6 flex justify-center gap-3">
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link href="/orders" className="btn-outline">
             {t("viewOrders")}
+          </Link>
+          <Link href={`/orders/${order.id}/invoice`} className="btn-outline">
+            <FileText className="h-4 w-4" />
+            {tInvoice("downloadInvoice")}
           </Link>
           <Link href="/menu" className="btn-primary">
             {t("backToMenu")}

@@ -8,6 +8,7 @@ import { buildThemeStyle } from "@/lib/theme/build-theme-style";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/session-cookies";
+import { decodeJwtRole } from "@/lib/auth/decode-role";
 import { ToastProvider } from "@/context/ToastContext";
 import { THEME_INIT_SCRIPT } from "@/lib/theme/theme-mode";
 import "./globals.css";
@@ -42,7 +43,10 @@ export default async function RootLayout({
     cookies(),
   ]);
   const themeStyle = buildThemeStyle(config.themeConfig);
-  const isAuthenticated = cookieStore.has(ACCESS_TOKEN_COOKIE);
+  const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+  const isAuthenticated = Boolean(accessToken);
+  const role = accessToken ? decodeJwtRole(accessToken) : null;
+  const isAdmin = role === "SUPER_ADMIN" || role === "OWNER" || role === "STAFF";
 
   return (
     <html
@@ -63,6 +67,7 @@ export default async function RootLayout({
               displayName={config.displayName}
               logoUrl={config.logoUrl}
               isAuthenticated={isAuthenticated}
+              isAdmin={isAdmin}
             />
             <div className="flex flex-1 flex-col">{children}</div>
             <Footer config={config} />

@@ -86,6 +86,7 @@ model Tenant {
   paymentSettings         PaymentSettings?
   serviceablePincodes     ServiceablePincode[]
   rolePermissions         RolePermission[]
+  tenantFeatures          TenantFeature[]
   categories              Category[]
   meals                   Meal[]
   addresses               Address[]
@@ -130,27 +131,27 @@ model User {
 // ─── Business configuration (white-label, per tenant) ────
 
 model BusinessProfile {
-  id                     String   @id @default(uuid())
-  tenantId               String   @unique
-  displayName            String
-  description            String?
-  logoUrl                String?
-  faviconUrl             String?
-  heroImageUrl           String?
-  supportEmail           String?
-  supportPhone           String?
-  whatsappBusinessNumber String?
-  addressLine1           String?
-  addressLine2           String?
-  city                   String?
-  state                  String?
-  country                String?
-  pincode                String?
-  timezone               String   @default("Asia/Kolkata")
-  currency               String   @default("INR")
-  gstNumber              String?
-  themeConfig            Json     @default("{}")
-  defaultLocale          String   @default("en")
+  id                      String   @id @default(uuid())
+  tenantId                String   @unique
+  displayName             String
+  description             String?
+  logoUrl                 String?
+  faviconUrl              String?
+  heroImageUrl            String?
+  supportEmail            String?
+  supportPhone            String?
+  whatsappBusinessNumber  String?
+  addressLine1            String?
+  addressLine2            String?
+  city                    String?
+  state                   String?
+  country                 String?
+  pincode                 String?
+  timezone                String   @default("Asia/Kolkata")
+  currency                String   @default("INR")
+  gstNumber               String?
+  themeConfig             Json     @default("{}")
+  defaultLocale           String   @default("en")
   // Geo-radius serviceability (Blinkit-style): when kitchenLat/kitchenLng and
   // deliveryRadiusMeters are all set, AddressesService prefers a real
   // distance-from-kitchen check over the ServiceablePincode table.
@@ -164,8 +165,8 @@ model BusinessProfile {
   // 2 = today/tomorrow/day-after). Checkout's day dropdown is bounded by
   // this, enforced again server-side in OrdersService.
   maxAdvanceOrderDays     Int      @default(2)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -191,15 +192,15 @@ model OrderAcceptanceSettings {
 }
 
 model ServiceablePincode {
-  id                       String   @id @default(uuid())
-  tenantId                 String
-  pincode                  String
-  deliveryFee              Int      @default(0)
-  minOrderAmount           Int      @default(0)
-  freeDeliveryAboveAmount  Int?
-  isActive                 Boolean  @default(true)
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  id                      String   @id @default(uuid())
+  tenantId                String
+  pincode                 String
+  deliveryFee             Int      @default(0)
+  minOrderAmount          Int      @default(0)
+  freeDeliveryAboveAmount Int?
+  isActive                Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -320,6 +321,41 @@ model RolePermission {
   @@map("role_permissions")
 }
 
+// ─── Feature entitlement (tenant-level, separate from Permission) ─
+// Permission (above) answers "can this role do X within a tenant that
+// already has the feature?" Feature answers "does this tenant have access
+// to X at all?" — SUPER_ADMIN-only, like a SaaS plan tier.
+
+model Feature {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  name        String
+  description String
+  createdAt   DateTime @default(now())
+
+  tenantFeatures TenantFeature[]
+
+  @@map("features")
+}
+
+model TenantFeature {
+  id              String    @id @default(uuid())
+  tenantId        String
+  featureId       String
+  enabled         Boolean   @default(false)
+  enabledAt       DateTime?
+  enabledByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  feature Feature @relation(fields: [featureId], references: [id])
+
+  @@unique([tenantId, featureId])
+  @@index([tenantId])
+  @@map("tenant_features")
+}
+
 // ─── Menu (Category + Meal) ──────────────────────────────
 
 model Category {
@@ -402,35 +438,35 @@ model Address {
 }
 
 model Order {
-  id                 String        @id @default(uuid())
-  tenantId           String
-  userId             String
-  addressId          String
-  orderNumber        String
-  status             OrderStatus   @default(PENDING_PAYMENT)
-  paymentStatus      PaymentStatus @default(PENDING)
-  subtotalInPaise      Int
-  deliveryFeeInPaise   Int           @default(0)
-  totalInPaise         Int
+  id                  String        @id @default(uuid())
+  tenantId            String
+  userId              String
+  addressId           String
+  orderNumber         String
+  status              OrderStatus   @default(PENDING_PAYMENT)
+  paymentStatus       PaymentStatus @default(PENDING)
+  subtotalInPaise     Int
+  deliveryFeeInPaise  Int           @default(0)
+  totalInPaise        Int
   // The chosen calendar day, and a snapshot of the slot's name/window at
   // order time — snapshotted like OrderItem's price/name, so a tenant
   // editing DeliverySlot later never rewrites past order history.
-  deliveryDate         DateTime
-  deliverySlotId       String?
-  deliverySlotName     String
-  deliveryWindowStart  String
-  deliveryWindowEnd    String
-  razorpayOrderId      String?       @unique
-  razorpayPaymentId    String?
-  notes                String?
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  deliveryDate        DateTime
+  deliverySlotId      String?
+  deliverySlotName    String
+  deliveryWindowStart String
+  deliveryWindowEnd   String
+  razorpayOrderId     String?       @unique
+  razorpayPaymentId   String?
+  notes               String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
-  tenant       Tenant        @relation(fields: [tenantId], references: [id])
-  user         User          @relation(fields: [userId], references: [id])
-  address      Address       @relation(fields: [addressId], references: [id])
-  deliverySlot DeliverySlot? @relation(fields: [deliverySlotId], references: [id])
-  items        OrderItem[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id])
+  user             User              @relation(fields: [userId], references: [id])
+  address          Address           @relation(fields: [addressId], references: [id])
+  deliverySlot     DeliverySlot?     @relation(fields: [deliverySlotId], references: [id])
+  items            OrderItem[]
   notificationLogs NotificationLog[]
 
   @@unique([tenantId, orderNumber])

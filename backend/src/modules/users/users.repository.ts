@@ -5,9 +5,17 @@ import { User, Prisma } from '../../generated/prisma';
 export class UsersRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findById(id: string): Promise<User | null> {
-    return this.prisma.user.findUnique({
-      where: { id, deletedAt: null },
+  /**
+   * `tenantId` is optional because a few internal auth flows (OTP verify,
+   * token refresh) look a user up by id *before* any tenant context is
+   * established — that id itself already comes from a trusted source there
+   * (a signed JWT or a freshly-issued OTP session), not arbitrary client
+   * input. Every cross-tenant-risk caller (the admin `:id` routes, the
+   * self-service `me` routes) must always pass it.
+   */
+  async findById(id: string, tenantId?: string): Promise<User | null> {
+    return this.prisma.user.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}), deletedAt: null },
     });
   }
 
@@ -40,6 +48,13 @@ export class UsersRepository {
   }
 
   async update(id: string, data: Prisma.UserUpdateInput): Promise<User> {
+    return this.prisma.user.update({ where: { id }, data });
+  }
+
+  async updateProfile(
+    id: string,
+    data: Pick<Prisma.UserUpdateInput, 'firstName' | 'lastName' | 'phone'>,
+  ): Promise<User> {
     return this.prisma.user.update({ where: { id }, data });
   }
 

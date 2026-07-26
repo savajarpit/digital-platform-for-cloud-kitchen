@@ -25,6 +25,7 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { OffsetPaginationDto } from '../../common/dto/pagination.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -50,37 +51,85 @@ export class UsersController {
   @ApiResponse({ status: 201, type: UserResponseDto })
   @ApiConflictResponse({ description: 'Email already in use' })
   @ApiBadRequestResponse({ description: 'Validation failed' })
-  create(
+  async create(
     @Body() dto: CreateUserDto,
     @CurrentUser('tenantId') tenantId: string,
   ) {
-    return this.usersService.create(dto, tenantId);
+    return new UserResponseDto(await this.usersService.create(dto, tenantId));
   }
 
   @Get()
+  @Roles(Role.SUPER_ADMIN, Role.OWNER)
+  @RequirePermission('staff.manage')
   @ApiOperation({ summary: 'List all users (paginated)' })
   @ApiPaginatedResponse(UserResponseDto)
-  findAll(
+  async findAll(
     @Query() pagination: OffsetPaginationDto,
     @CurrentUser('tenantId') tenantId: string,
   ) {
-    return this.usersService.findAll(pagination, tenantId);
+    const { data, meta } = await this.usersService.findAll(
+      pagination,
+      tenantId,
+    );
+    return { data: data.map((user) => new UserResponseDto(user)), meta };
+  }
+
+  @Get('me')
+  @ResponseMessage('Profile retrieved')
+  @ApiOperation({ summary: 'Get the current user’s own profile' })
+  @ApiResponse({ status: 200, type: UserResponseDto })
+  async getOwnProfile(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('tenantId') tenantId: string,
+  ) {
+    return new UserResponseDto(
+      await this.usersService.findOne(userId, tenantId),
+    );
+  }
+
+  @Patch('me')
+  @ResponseMessage('Profile updated')
+  @ApiOperation({
+    summary: 'Update the current user’s own profile (name/phone only)',
+  })
+  @ApiResponse({ status: 200, type: UserResponseDto })
+  async updateOwnProfile(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return new UserResponseDto(
+      await this.usersService.updateOwnProfile(userId, tenantId, dto),
+    );
   }
 
   @Get(':id')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER)
+  @RequirePermission('staff.manage')
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: UserResponseDto })
   @ApiNotFoundResponse({ description: 'User not found' })
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(id);
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser('tenantId') tenantId: string,
+  ) {
+    return new UserResponseDto(await this.usersService.findOne(id, tenantId));
   }
 
   @Patch(':id')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER)
+  @RequirePermission('staff.manage')
   @ApiOperation({ summary: 'Update user' })
   @ApiResponse({ status: 200, type: UserResponseDto })
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
-    return this.usersService.update(id, dto);
+  async update(
+    @Param('id') id: string,
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: UpdateUserDto,
+  ) {
+    return new UserResponseDto(
+      await this.usersService.update(id, tenantId, dto),
+    );
   }
 
   @Delete(':id')
@@ -89,7 +138,7 @@ export class UsersController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Soft delete user' })
   @ApiResponse({ status: 204 })
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser('tenantId') tenantId: string) {
+    return this.usersService.remove(id, tenantId);
   }
 }

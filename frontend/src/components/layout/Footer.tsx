@@ -9,7 +9,7 @@ export async function Footer({ config }: { config: PublicConfig }) {
   const hasContact = config.supportEmail || config.supportPhone || config.addressLine1;
 
   return (
-    <footer className="mt-20 bg-zinc-900 text-zinc-300 dark:bg-black">
+    <footer className="mt-20 bg-zinc-900 text-zinc-300 print:hidden dark:bg-black">
       <div className="container-app py-12 sm:py-16">
         <div className={`grid grid-cols-1 gap-8 sm:gap-10 ${hasContact ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
           <div className="space-y-4">

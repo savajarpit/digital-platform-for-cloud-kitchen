@@ -59,6 +59,7 @@
     "today": "Today",
     "tomorrow": "Tomorrow",
     "noSlots": "No delivery slots are configured yet — please check back later.",
+    "noSlotsToday": "No more delivery slots today — try tomorrow.",
     "freeDelivery": "Free delivery"
   },
   "address": {

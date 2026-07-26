@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { CheckCircle2, Clock, MapPin, Package, Phone } from "lucide-react";
 import { ApiError, getOrder, type Order } from "@/lib/api/orders";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { formatTime12h } from "@/lib/format/time";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -93,7 +94,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
             <Clock className="h-4 w-4 shrink-0 text-primary-600" />
             <span>
-              {order.deliverySlotName} ({order.deliveryWindowStart}–{order.deliveryWindowEnd}) ·{" "}
+              {order.deliverySlotName} ({formatTime12h(order.deliveryWindowStart)}–
+              {formatTime12h(order.deliveryWindowEnd)}) ·{" "}
               {new Date(order.deliveryDate).toLocaleDateString(undefined, {
                 weekday: "short",
                 month: "short",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -12,6 +12,7 @@ import { createOrder } from "@/lib/api/orders";
 import { verifyPayment } from "@/lib/api/payments";
 import { getOrderWindowStatus } from "@/lib/api/order-window";
 import { getDeliverySlots, type DeliverySlot } from "@/lib/api/delivery-slots";
+import { formatTime12h, hhmmToMinutes } from "@/lib/format/time";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { AddressForm } from "@/components/addresses/AddressForm";
 import { useToast } from "@/context/ToastContext";
@@ -36,6 +37,8 @@ export default function CheckoutPage() {
   const [dayOptions, setDayOptions] = useState<{ value: string; label: string }[]>([]);
   const [selectedDay, setSelectedDay] = useState("");
   const [selectedSlotId, setSelectedSlotId] = useState("");
+  const [todayStr, setTodayStr] = useState("");
+  const [nowMinutes, setNowMinutes] = useState(0);
 
   useEffect(() => {
     if (items.length === 0) {
@@ -48,9 +51,13 @@ export default function CheckoutPage() {
     });
 
     getDeliverySlots().then((config) => {
+      const now = new Date();
+      setTodayStr(now.toISOString().slice(0, 10));
+      setNowMinutes(now.getHours() * 60 + now.getMinutes());
       setSlots(config.slots);
+
       const days = Array.from({ length: config.maxAdvanceOrderDays + 1 }, (_, i) => {
-        const date = new Date(Date.now() + i * 24 * 60 * 60 * 1000);
+        const date = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
         const value = date.toISOString().slice(0, 10);
         const label =
           i === 0
@@ -62,7 +69,6 @@ export default function CheckoutPage() {
       });
       setDayOptions(days);
       setSelectedDay(days[0]?.value ?? "");
-      setSelectedSlotId(config.slots[0]?.id ?? "");
     });
 
     listAddresses()
@@ -96,6 +102,21 @@ export default function CheckoutPage() {
     }).then(setServiceability);
   }, [addresses, selectedAddressId]);
 
+  // Hide slots that have already started when "today" is selected — the
+  // slot dropdown should never offer something the backend will reject.
+  const visibleSlots = useMemo(() => {
+    if (selectedDay !== todayStr) return slots;
+    return slots.filter((slot) => hhmmToMinutes(slot.startTime) > nowMinutes);
+  }, [slots, selectedDay, todayStr, nowMinutes]);
+
+  // Derived, not stored: falls back to the first visible slot whenever the
+  // user's last explicit pick isn't valid for the current day (e.g. they
+  // picked Dinner, then switched back to a day where Dinner already
+  // passed). Deriving during render avoids a setState-in-effect sync loop.
+  const effectiveSlotId = visibleSlots.some((slot) => slot.id === selectedSlotId)
+    ? selectedSlotId
+    : (visibleSlots[0]?.id ?? "");
+
   const qualifiesForFreeDelivery = Boolean(
     serviceability?.freeDeliveryAboveAmountInPaise !== undefined &&
       subtotal >= serviceability.freeDeliveryAboveAmountInPaise,
@@ -107,14 +128,14 @@ export default function CheckoutPage() {
   );
 
   async function handlePlaceOrder() {
-    if (!selectedAddressId || !selectedDay || !selectedSlotId) return;
+    if (!selectedAddressId || !selectedDay || !effectiveSlotId) return;
     setIsPlacingOrder(true);
     try {
       const { order, razorpayOrderId, razorpayKeyId } = await createOrder({
         addressId: selectedAddressId,
         items: items.map((i) => ({ mealId: i.mealId, quantity: i.quantity })),
         deliveryDate: selectedDay,
-        deliverySlotId: selectedSlotId,
+        deliverySlotId: effectiveSlotId,
       });
 
       await loadRazorpayScript();
@@ -268,17 +289,20 @@ export default function CheckoutPage() {
                   </label>
                   <select
                     id="deliverySlot"
-                    value={selectedSlotId}
+                    value={effectiveSlotId}
                     onChange={(e) => setSelectedSlotId(e.target.value)}
                     className="input"
                   >
-                    {!selectedSlotId && <option value="">{t("selectSlot")}</option>}
-                    {slots.map((slot) => (
+                    {!effectiveSlotId && <option value="">{t("selectSlot")}</option>}
+                    {visibleSlots.map((slot) => (
                       <option key={slot.id} value={slot.id}>
-                        {slot.name} ({slot.startTime}–{slot.endTime})
+                        {slot.name} ({formatTime12h(slot.startTime)}–{formatTime12h(slot.endTime)})
                       </option>
                     ))}
                   </select>
+                  {visibleSlots.length === 0 && (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{t("noSlotsToday")}</p>
+                  )}
                 </div>
               </div>
             )}
@@ -342,7 +366,7 @@ export default function CheckoutPage() {
               isPlacingOrder ||
               !selectedAddressId ||
               !selectedDay ||
-              !selectedSlotId ||
+              !effectiveSlotId ||
               !agreedToTerms ||
               Boolean(windowClosed) ||
               belowMinOrder ||

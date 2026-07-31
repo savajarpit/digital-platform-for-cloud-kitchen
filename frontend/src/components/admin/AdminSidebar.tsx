@@ -7,6 +7,7 @@ import {
   Building2,
   Clock,
   CreditCard,
+  FileText,
   Lock,
   MapPin,
   Package,
@@ -39,6 +40,7 @@ const SETTINGS_NAV: NavItem[] = [
   { href: "/admin/settings/delivery", label: "Delivery Zones", icon: MapPin, permission: PERMISSIONS.DELIVERY_ZONES_EDIT },
   { href: "/admin/settings/notifications", label: "Notifications", icon: Bell, permission: PERMISSIONS.NOTIFICATIONS_EDIT },
   { href: "/admin/settings/payment", label: "Payment", icon: CreditCard, permission: PERMISSIONS.PAYMENT_EDIT },
+  { href: "/admin/settings/content", label: "Legal Pages", icon: FileText, permission: PERMISSIONS.CONTENT_EDIT },
 ];
 
 export function AdminSidebar() {
@@ -79,6 +81,17 @@ export function AdminSidebar() {
           >
             <Building2 className="h-4 w-4 shrink-0" />
             <span className="flex-1">Platform (Tenants)</span>
+          </Link>
+          <Link
+            href="/admin/platform/terms"
+            className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
+              pathname.startsWith("/admin/platform/terms")
+                ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <FileText className="h-4 w-4 shrink-0" />
+            <span className="flex-1">Platform Terms</span>
           </Link>
           <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
         </>

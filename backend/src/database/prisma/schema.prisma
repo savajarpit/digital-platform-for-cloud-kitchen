@@ -90,23 +90,25 @@ model Tenant {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  users                   User[]
-  businessProfile         BusinessProfile?
-  orderAcceptanceSettings OrderAcceptanceSettings?
-  notificationSettings    NotificationSettings?
-  paymentSettings         PaymentSettings?
-  serviceablePincodes     ServiceablePincode[]
-  rolePermissions         RolePermission[]
-  tenantFeatures          TenantFeature[]
-  categories              Category[]
-  meals                   Meal[]
-  addresses               Address[]
-  orders                  Order[]
-  deliverySlots           DeliverySlot[]
-  notificationLogs        NotificationLog[]
-  coupons                 Coupon[]
-  couponRedemptions       CouponRedemption[]
-  promotions              Promotion[]
+  users                    User[]
+  businessProfile          BusinessProfile?
+  orderAcceptanceSettings  OrderAcceptanceSettings?
+  notificationSettings     NotificationSettings?
+  paymentSettings          PaymentSettings?
+  serviceablePincodes      ServiceablePincode[]
+  rolePermissions          RolePermission[]
+  tenantFeatures           TenantFeature[]
+  categories               Category[]
+  meals                    Meal[]
+  addresses                Address[]
+  orders                   Order[]
+  deliverySlots            DeliverySlot[]
+  notificationLogs         NotificationLog[]
+  coupons                  Coupon[]
+  couponRedemptions        CouponRedemption[]
+  promotions               Promotion[]
+  staticPages              StaticPage[]
+  platformTermsAcceptances PlatformTermsAcceptance[]
 
   @@map("tenants")
 }
@@ -114,25 +116,27 @@ model Tenant {
 // ─── User ────────────────────────────────────────────────
 
 model User {
-  id           String    @id @default(uuid())
-  email        String    @unique
-  phone        String?
-  passwordHash String
-  firstName    String
-  lastName     String?
-  role         Role      @default(CUSTOMER)
-  status       Status    @default(ACTIVE)
-  tenantId     String
-  isActive     Boolean   @default(true)
-  verifiedAt   DateTime?
-  deletedAt    DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  email           String    @unique
+  phone           String?
+  passwordHash    String
+  firstName       String
+  lastName        String?
+  role            Role      @default(CUSTOMER)
+  status          Status    @default(ACTIVE)
+  tenantId        String
+  isActive        Boolean   @default(true)
+  verifiedAt      DateTime?
+  termsAcceptedAt DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id])
-  refreshTokens RefreshToken[]
-  addresses     Address[]
-  orders        Order[]
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
+  refreshTokens            RefreshToken[]
+  addresses                Address[]
+  orders                   Order[]
+  platformTermsAcceptances PlatformTermsAcceptance[]
 
   @@index([tenantId])
   @@index([email])
@@ -639,4 +643,59 @@ model RefreshToken {
   @@index([token])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+// ─── Per-tenant content & platform consent (§9) ──────────
+// StaticPage: each tenant's own legal/footer content (Privacy Policy, Terms,
+// Refund Policy, ...), written by that tenant's OWNER/STAFF, shown to that
+// tenant's own customers. Distinct from PlatformTerms below, which is
+// Arpit's own platform-level terms shown to tenant OWNERs.
+
+model StaticPage {
+  id          String   @id @default(uuid())
+  tenantId    String
+  slug        String
+  title       String
+  content     String
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("static_pages")
+}
+
+// PlatformTerms: SUPER_ADMIN-authored, versioned. A tenant's OWNER must have
+// a PlatformTermsAcceptance matching the latest version before their admin
+// dashboard is usable (PlatformTermsGuard) — separate from TenantStatusGuard,
+// this is a consent gate, not a payment gate.
+
+model PlatformTerms {
+  id          String   @id @default(uuid())
+  version     Int      @unique
+  content     String
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@map("platform_terms")
+}
+
+model PlatformTermsAcceptance {
+  id         String   @id @default(uuid())
+  tenantId   String
+  userId     String
+  version    Int
+  acceptedAt DateTime @default(now())
+  ipAddress  String?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, userId, version])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("platform_terms_acceptances")
 }

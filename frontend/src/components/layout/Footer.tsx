@@ -2,16 +2,31 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { Leaf, Mail, MapPin, Phone } from "lucide-react";
 import type { PublicConfig } from "@/lib/api/settings";
+import type { StaticPageSummary } from "@/lib/api/content";
 
-export async function Footer({ config }: { config: PublicConfig }) {
+export async function Footer({
+  config,
+  pages,
+}: {
+  config: PublicConfig;
+  pages: StaticPageSummary[];
+}) {
   const t = await getTranslations("nav");
   const year = new Date().getFullYear();
   const hasContact = config.supportEmail || config.supportPhone || config.addressLine1;
+  const columnCount = 2 + (hasContact ? 1 : 0) + (pages.length > 0 ? 1 : 0);
+  // Tailwind can't see dynamically-built class names, so the grid width is
+  // picked from a static lookup rather than string-interpolating the class.
+  const gridColsClass: Record<number, string> = {
+    2: "sm:grid-cols-2",
+    3: "sm:grid-cols-3",
+    4: "sm:grid-cols-4",
+  };
 
   return (
     <footer className="mt-20 bg-zinc-900 text-zinc-300 print:hidden dark:bg-black">
       <div className="container-app py-12 sm:py-16">
-        <div className={`grid grid-cols-1 gap-8 sm:gap-10 ${hasContact ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+        <div className={`grid grid-cols-1 gap-8 sm:gap-10 ${gridColsClass[columnCount]}`}>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600">
@@ -39,6 +54,21 @@ export async function Footer({ config }: { config: PublicConfig }) {
               </li>
             </ul>
           </div>
+
+          {pages.length > 0 && (
+            <div>
+              <h4 className="mb-4 font-semibold text-white">Legal</h4>
+              <ul className="space-y-2.5 text-sm">
+                {pages.map((page) => (
+                  <li key={page.id}>
+                    <Link href={`/legal/${page.slug}`} className="transition-colors hover:text-primary-400">
+                      {page.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {hasContact && (
             <div>

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -12,6 +13,7 @@ import type { Queue } from 'bull';
 import { UsersRepository } from '../users/users.repository';
 import { SettingsRepository } from '../settings/settings.repository';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ContentService } from '../content/content.service';
 import { RedisService } from '../../shared-modules/cache/redis.service';
 import { HashUtil } from '../../common/utils/hash.util';
 import { CryptoUtil } from '../../common/utils/crypto.util';
@@ -43,6 +45,7 @@ export class AuthService {
     private readonly usersRepo: UsersRepository,
     private readonly settingsRepo: SettingsRepository,
     private readonly notificationsService: NotificationsService,
+    private readonly contentService: ContentService,
     private readonly redis: RedisService,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
@@ -60,6 +63,21 @@ export class AuthService {
     const existing = await this.usersRepo.findByEmail(dto.email);
     if (existing) throw new ConflictException('Email already in use');
 
+    const [hasTerms, hasPrivacy] = await Promise.all([
+      this.contentService.hasPublished(tenantId, 'terms-of-service'),
+      this.contentService.hasPublished(tenantId, 'privacy-policy'),
+    ]);
+    if (!hasTerms || !hasPrivacy) {
+      throw new ConflictException(
+        "Signup is temporarily unavailable — this business hasn't published its Terms of Service and Privacy Policy yet.",
+      );
+    }
+    if (!dto.termsAccepted) {
+      throw new BadRequestException(
+        'You must accept the Terms of Service and Privacy Policy to sign up',
+      );
+    }
+
     const passwordHash = await HashUtil.hash(dto.password);
     const user = await this.usersRepo.create({
       email: dto.email,
@@ -68,6 +86,7 @@ export class AuthService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       role: Role.CUSTOMER,
+      termsAcceptedAt: new Date(),
       tenant: { connect: { id: tenantId } },
     });
 

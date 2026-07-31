@@ -18,6 +18,7 @@ export default function SignupPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [phone, setPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,6 +40,7 @@ export default function SignupPage() {
         firstName: String(form.get("firstName") ?? "").trim(),
         lastName: String(form.get("lastName") ?? "").trim() || undefined,
         phone: phoneValue || undefined,
+        termsAccepted,
       });
       showToast("Verification code sent", "success");
       setPhone(phoneValue);
@@ -99,7 +101,31 @@ export default function SignupPage() {
                 minLength={8}
               />
 
-              <button type="submit" disabled={isSubmitting} className="btn-primary mt-2">
+              <label className="flex items-start gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-primary-600"
+                  required
+                />
+                <span>
+                  I agree to the{" "}
+                  <Link href="/legal/terms-of-service" target="_blank" className="font-medium text-primary-600 hover:text-primary-700">
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link href="/legal/privacy-policy" target="_blank" className="font-medium text-primary-600 hover:text-primary-700">
+                    Privacy Policy
+                  </Link>
+                </span>
+              </label>
+
+              <button
+                type="submit"
+                disabled={isSubmitting || !termsAccepted}
+                className="btn-primary mt-2"
+              >
                 {isSubmitting ? t("creatingAccount") : t("signup")}
               </button>
             </form>

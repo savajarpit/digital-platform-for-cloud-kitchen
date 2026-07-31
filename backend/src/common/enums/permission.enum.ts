@@ -32,6 +32,12 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     category: 'settings',
   },
   {
+    key: 'settings.content.edit',
+    description:
+      'Edit legal/footer pages (Privacy Policy, Terms of Service, Refund Policy, etc.)',
+    category: 'settings',
+  },
+  {
     key: 'menu.manage',
     description: 'Create, edit, and delete menu items',
     category: 'operations',

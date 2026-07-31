@@ -172,8 +172,54 @@ async function main() {
     }
 
     await seedSampleMenu(prisma);
+    await seedDefaultLegalPages(prisma);
   } finally {
     await prisma.$disconnect();
+  }
+}
+
+/**
+ * Signup now requires a tenant to have published terms-of-service and
+ * privacy-policy StaticPages (customer consent, §9) — without this, every
+ * existing/test tenant's signup would break the moment that check shipped.
+ * Placeholder content only; a real tenant should rewrite these from
+ * `/admin/settings/content` before going live. Safe to re-run — only fills
+ * in a tenant that's missing one of the two slugs.
+ */
+async function seedDefaultLegalPages(prisma: PrismaClient): Promise<void> {
+  const tenants = await prisma.tenant.findMany({
+    select: { id: true, name: true },
+  });
+
+  const defaults: { slug: string; title: string; content: string }[] = [
+    {
+      slug: 'terms-of-service',
+      title: 'Terms of Service',
+      content:
+        '# Terms of Service\n\nPlaceholder terms of service. Replace this from Settings → Content before going live.',
+    },
+    {
+      slug: 'privacy-policy',
+      title: 'Privacy Policy',
+      content:
+        '# Privacy Policy\n\nPlaceholder privacy policy. Replace this from Settings → Content before going live.',
+    },
+  ];
+
+  for (const tenant of tenants) {
+    for (const page of defaults) {
+      const existing = await prisma.staticPage.findUnique({
+        where: { tenantId_slug: { tenantId: tenant.id, slug: page.slug } },
+      });
+      if (existing) continue;
+
+      await prisma.staticPage.create({
+        data: { tenantId: tenant.id, ...page, isPublished: true },
+      });
+      console.log(
+        `Seeded default "${page.slug}" page for tenant "${tenant.name}".`,
+      );
+    }
   }
 }
 

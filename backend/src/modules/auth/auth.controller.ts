@@ -23,6 +23,7 @@ import { ResendOtpDto } from './dto/resend-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public } from '../../common/decorators/public.decorator';
+import { SkipPlatformTerms } from '../../common/decorators/skip-platform-terms.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
@@ -113,6 +114,7 @@ export class AuthController {
   }
 
   @Get('me')
+  @SkipPlatformTerms()
   @ApiBearerAuth('access-token')
   @ResponseMessage('Profile retrieved')
   @ApiOperation({ summary: 'Get current user profile' })

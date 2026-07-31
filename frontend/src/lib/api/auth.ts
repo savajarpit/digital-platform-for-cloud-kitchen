@@ -16,6 +16,7 @@ export interface RegisterInput {
   firstName: string;
   lastName?: string;
   phone?: string;
+  termsAccepted: boolean;
 }
 
 export interface RegisterResult {

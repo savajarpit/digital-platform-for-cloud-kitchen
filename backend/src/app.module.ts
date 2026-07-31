@@ -31,6 +31,7 @@ import { TenantGuard } from './common/guards/tenant.guard';
 import { TenantStatusGuard } from './common/guards/tenant-status.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { FeatureGuard } from './common/guards/feature.guard';
+import { PlatformTermsGuard } from './common/guards/platform-terms.guard';
 
 // Middleware
 import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
@@ -52,6 +53,8 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { FeaturesModule } from './modules/features/features.module';
 import { PlatformModule } from './modules/platform/platform.module';
+import { ContentModule } from './modules/content/content.module';
+import { PlatformTermsModule } from './modules/platform-terms/platform-terms.module';
 
 @Module({
   imports: [
@@ -130,6 +133,8 @@ import { PlatformModule } from './modules/platform/platform.module';
     PermissionsModule,
     FeaturesModule,
     PlatformModule,
+    ContentModule,
+    PlatformTermsModule,
   ],
 
   providers: [
@@ -141,7 +146,8 @@ import { PlatformModule } from './modules/platform/platform.module';
     { provide: APP_GUARD, useClass: TenantStatusGuard }, // 4th — tenant must be ACTIVE
     { provide: APP_GUARD, useClass: PermissionsGuard }, // 5th — fine-grained per-role permission check
     { provide: APP_GUARD, useClass: FeatureGuard }, // 6th — tenant-level feature entitlement check
-    { provide: APP_GUARD, useClass: ThrottlerGuard }, // 7th — rate limiting
+    { provide: APP_GUARD, useClass: PlatformTermsGuard }, // 7th — OWNER must have accepted the latest platform terms
+    { provide: APP_GUARD, useClass: ThrottlerGuard }, // 8th — rate limiting
   ],
 })
 export class AppModule implements NestModule {

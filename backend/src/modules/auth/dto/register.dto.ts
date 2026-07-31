@@ -1,4 +1,6 @@
 import {
+  Equals,
+  IsBoolean,
   IsEmail,
   IsString,
   MinLength,
@@ -47,4 +49,16 @@ export class RegisterDto {
     message: 'Phone must be in E.164 format, e.g. +919876543210',
   })
   phone?: string;
+
+  @ApiProperty({
+    example: true,
+    description:
+      "Must be true — confirms the customer accepted this business's own Terms of Service and Privacy Policy.",
+  })
+  @IsBoolean()
+  @Equals(true, {
+    message:
+      'You must accept the Terms of Service and Privacy Policy to sign up',
+  })
+  termsAccepted: boolean;
 }

@@ -33,6 +33,29 @@ export class PlatformRepository {
         tx.orderAcceptanceSettings.create({ data: { tenantId: tenant.id } }),
         tx.notificationSettings.create({ data: { tenantId: tenant.id } }),
         tx.paymentSettings.create({ data: { tenantId: tenant.id } }),
+        // Placeholder legal pages — customer signup requires these to exist
+        // and be published (§9 consent gate). Arpit/the tenant should
+        // rewrite these from Settings → Content before going live.
+        tx.staticPage.create({
+          data: {
+            tenantId: tenant.id,
+            slug: 'terms-of-service',
+            title: 'Terms of Service',
+            content:
+              '# Terms of Service\n\nPlaceholder terms of service. Replace this from Settings → Content before going live.',
+            isPublished: true,
+          },
+        }),
+        tx.staticPage.create({
+          data: {
+            tenantId: tenant.id,
+            slug: 'privacy-policy',
+            title: 'Privacy Policy',
+            content:
+              '# Privacy Policy\n\nPlaceholder privacy policy. Replace this from Settings → Content before going live.',
+            isPublished: true,
+          },
+        }),
       ]);
 
       // SUPER_ADMIN-provisioned — no signup OTP flow needed, so the owner is

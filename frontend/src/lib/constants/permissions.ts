@@ -5,6 +5,7 @@ export const PERMISSIONS = {
   NOTIFICATIONS_EDIT: "settings.notifications.edit",
   PAYMENT_EDIT: "settings.payment.edit",
   DELIVERY_ZONES_EDIT: "settings.delivery-zones.edit",
+  CONTENT_EDIT: "settings.content.edit",
   MENU_MANAGE: "menu.manage",
   ORDERS_MANAGE: "orders.manage",
   DELIVERY_MANAGE: "delivery.manage",

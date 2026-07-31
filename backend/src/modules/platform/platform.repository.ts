@@ -56,6 +56,26 @@ export class PlatformRepository {
             isPublished: true,
           },
         }),
+        tx.staticPage.create({
+          data: {
+            tenantId: tenant.id,
+            slug: 'about-us',
+            title: 'About Us',
+            content:
+              '# About Us\n\nPlaceholder about page. Replace this from Settings → Content before going live.',
+            isPublished: true,
+          },
+        }),
+        tx.staticPage.create({
+          data: {
+            tenantId: tenant.id,
+            slug: 'refund-policy',
+            title: 'Refund & Return Policy',
+            content:
+              '# Refund & Return Policy\n\nPlaceholder refund/cancellation policy. Replace this from Settings → Content before going live.',
+            isPublished: true,
+          },
+        }),
       ]);
 
       // SUPER_ADMIN-provisioned — no signup OTP flow needed, so the owner is

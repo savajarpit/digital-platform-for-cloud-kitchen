@@ -173,8 +173,43 @@ async function main() {
 
     await seedSampleMenu(prisma);
     await seedDefaultLegalPages(prisma);
+    await seedDefaultPlatformPages(prisma);
   } finally {
     await prisma.$disconnect();
+  }
+}
+
+/**
+ * Arpit's own platform-level pages (About Us, Refund & Cancellation Policy)
+ * — global, not tenant-scoped, distinct from each tenant's own StaticPage
+ * rows above. Placeholder content; Arpit should rewrite these from
+ * `/admin/platform/pages` before going live. Safe to re-run — only fills in
+ * a slug that's missing.
+ */
+async function seedDefaultPlatformPages(prisma: PrismaClient): Promise<void> {
+  const defaults: { slug: string; title: string; content: string }[] = [
+    {
+      slug: 'about-us',
+      title: 'About Us',
+      content:
+        '# About Us\n\nPlaceholder about page for the platform itself. Replace this from Platform → Pages before going live.',
+    },
+    {
+      slug: 'refund-policy',
+      title: 'Refund & Cancellation Policy',
+      content:
+        '# Refund & Cancellation Policy\n\nPlaceholder refund/cancellation policy for the platform subscription itself. Replace this from Platform → Pages before going live.',
+    },
+  ];
+
+  for (const page of defaults) {
+    const existing = await prisma.platformPage.findUnique({
+      where: { slug: page.slug },
+    });
+    if (existing) continue;
+
+    await prisma.platformPage.create({ data: { ...page, isPublished: true } });
+    console.log(`Seeded default platform page "${page.slug}".`);
   }
 }
 
@@ -203,6 +238,18 @@ async function seedDefaultLegalPages(prisma: PrismaClient): Promise<void> {
       title: 'Privacy Policy',
       content:
         '# Privacy Policy\n\nPlaceholder privacy policy. Replace this from Settings → Content before going live.',
+    },
+    {
+      slug: 'about-us',
+      title: 'About Us',
+      content:
+        '# About Us\n\nPlaceholder about page. Replace this from Settings → Content before going live.',
+    },
+    {
+      slug: 'refund-policy',
+      title: 'Refund & Return Policy',
+      content:
+        '# Refund & Return Policy\n\nPlaceholder refund/cancellation policy. Replace this from Settings → Content before going live.',
     },
   ];
 

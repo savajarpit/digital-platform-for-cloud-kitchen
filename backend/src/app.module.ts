@@ -55,6 +55,7 @@ import { FeaturesModule } from './modules/features/features.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { ContentModule } from './modules/content/content.module';
 import { PlatformTermsModule } from './modules/platform-terms/platform-terms.module';
+import { PlatformPagesModule } from './modules/platform-pages/platform-pages.module';
 
 @Module({
   imports: [
@@ -135,6 +136,7 @@ import { PlatformTermsModule } from './modules/platform-terms/platform-terms.mod
     PlatformModule,
     ContentModule,
     PlatformTermsModule,
+    PlatformPagesModule,
   ],
 
   providers: [

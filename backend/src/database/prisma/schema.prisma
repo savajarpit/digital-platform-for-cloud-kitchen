@@ -699,3 +699,23 @@ model PlatformTermsAcceptance {
   @@index([userId])
   @@map("platform_terms_acceptances")
 }
+
+// PlatformPage: Arpit's own platform's static content (About Us, Refund &
+// Cancellation Policy, Contact, ...) — global, not tenant-scoped, since it
+// describes the platform business itself rather than any one tenant's
+// storefront. SUPER_ADMIN-authored, publicly readable. Distinct from
+// StaticPage (per-tenant, that business's own content) and PlatformTerms
+// (versioned, consent-tracked — this model is simple content, no acceptance
+// tracking needed for an About/Refund page).
+
+model PlatformPage {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  title       String
+  content     String
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("platform_pages")
+}

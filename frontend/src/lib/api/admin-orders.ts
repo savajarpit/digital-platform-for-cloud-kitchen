@@ -76,6 +76,20 @@ export interface OrdersOverview {
   topMeals: { mealId: string | null; name: string; quantitySold: number }[];
 }
 
-export function getOrdersOverview(): Promise<OrdersOverview> {
-  return proxyFetch<OrdersOverview>("/orders/admin/overview");
+export interface OverviewRangeParams {
+  days?: number;
+  from?: string;
+  to?: string;
+}
+
+export function getOrdersOverview(params: OverviewRangeParams = {}): Promise<OrdersOverview> {
+  const search = new URLSearchParams();
+  if (params.from && params.to) {
+    search.set("from", params.from);
+    search.set("to", params.to);
+  } else if (params.days) {
+    search.set("days", String(params.days));
+  }
+  const qs = search.toString();
+  return proxyFetch<OrdersOverview>(`/orders/admin/overview${qs ? `?${qs}` : ""}`);
 }

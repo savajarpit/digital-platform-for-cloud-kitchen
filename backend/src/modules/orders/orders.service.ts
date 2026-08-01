@@ -14,6 +14,7 @@ import { CreateOrderDto, OrderItemInputDto } from './dto/create-order.dto';
 import { PreviewOrderDto } from './dto/preview-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
+import { QueryOverviewDto } from './dto/query-overview.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { AddressesService } from '../addresses/addresses.service';
 import { MealsService } from '../menu/meals.service';
@@ -346,44 +347,109 @@ export class OrdersService {
 
   /**
    * Admin dashboard summary — today/last-7-days revenue, an active-orders
-   * count (needs kitchen/delivery attention right now), total customers, a
-   * 14-day revenue trend, order-status breakdown, and top-selling meals.
-   * "Today"/"last 7 days" are rolling windows from now, not tenant-midnight-
-   * exact calendar boundaries — precise enough for a dashboard, not a ledger.
+   * count (needs kitchen/delivery attention right now), total customers,
+   * order-status breakdown, and a revenue trend + top-selling meals scoped
+   * to `query` (a `days` preset, default 14, or an explicit `from`/`to`
+   * custom range — `from`/`to` win if both are given). "Today"/"last 7
+   * days" are always the fixed rolling windows regardless of that range —
+   * they're headline KPIs, not part of what's being filtered. Rolling
+   * windows off `now`, not tenant-midnight-exact boundaries — precise
+   * enough for a dashboard, not a ledger.
    */
-  async getOverview(tenantId: string) {
-    const TREND_DAYS = 14;
-    const TOP_MEALS_COUNT = 5;
+  async getOverview(tenantId: string, query: QueryOverviewDto) {
+    const TOP_MEALS_COUNT = 15;
     const now = DateUtil.now();
-    const trendSince = DateUtil.addDays(now, -TREND_DAYS);
 
     const profile = await this.settingsRepo.findBusinessProfile(tenantId);
     const timezone = profile?.timezone ?? 'Asia/Kolkata';
+    const { queryStart, queryEnd, bucketStartStr, bucketEndStr } = resolveRange(
+      query,
+      now,
+      timezone,
+    );
 
     const [
-      recentPaidOrders,
+      fixedWindowOrders,
+      rangeOrders,
       activeOrders,
       totalCustomers,
       statusBreakdown,
       topMeals,
     ] = await Promise.all([
-      this.ordersRepo.findRecentPaidOrders(tenantId, trendSince),
+      this.ordersRepo.findPaidOrdersInRange(
+        tenantId,
+        DateUtil.addDays(now, -7),
+        now,
+      ),
+      this.ordersRepo.findPaidOrdersInRange(tenantId, queryStart, queryEnd),
       this.ordersRepo.countActiveOrders(tenantId),
       this.usersRepo.countCustomers(tenantId),
       this.ordersRepo.getStatusBreakdown(tenantId),
-      this.ordersRepo.getTopMeals(tenantId, trendSince, TOP_MEALS_COUNT),
+      this.ordersRepo.getTopMeals(
+        tenantId,
+        queryStart,
+        queryEnd,
+        TOP_MEALS_COUNT,
+      ),
     ]);
 
     return {
-      today: sumOrdersSince(recentPaidOrders, DateUtil.addDays(now, -1)),
-      last7Days: sumOrdersSince(recentPaidOrders, DateUtil.addDays(now, -7)),
+      today: sumOrdersSince(fixedWindowOrders, DateUtil.addDays(now, -1)),
+      last7Days: sumOrdersSince(fixedWindowOrders, DateUtil.addDays(now, -7)),
       activeOrders,
       totalCustomers,
-      revenueTrend: bucketOrdersByDay(recentPaidOrders, timezone, TREND_DAYS),
+      revenueTrend: bucketOrdersByDay(
+        rangeOrders,
+        timezone,
+        bucketStartStr,
+        bucketEndStr,
+      ),
       statusBreakdown,
       topMeals,
     };
   }
+}
+
+const DEFAULT_TREND_DAYS = 14;
+
+/**
+ * Two different concerns need two different kinds of boundary: the DB query
+ * needs real `Date` instants, widened by a day on each side so no tenant
+ * timezone offset (UTC-12..+14) can clip a row — `bucketOrdersByDay` drops
+ * anything outside the exact bucket range anyway, so over-fetching here is
+ * harmless. The chart buckets need exact tenant-local calendar-date
+ * *strings* — computing those from the widened Date objects instead (e.g.
+ * re-deriving `to`'s date via `toTenantDateStr` on a UTC `23:59:59.999`
+ * instant) silently rolls into the next day for any timezone ahead of UTC,
+ * which is the bug this shape avoids: the strings are the source of truth,
+ * never round-tripped through a Date.
+ */
+function resolveRange(
+  query: QueryOverviewDto,
+  now: Date,
+  timezone: string,
+): {
+  queryStart: Date;
+  queryEnd: Date;
+  bucketStartStr: string;
+  bucketEndStr: string;
+} {
+  if (query.from && query.to && query.to >= query.from) {
+    return {
+      queryStart: DateUtil.addDays(new Date(`${query.from}T00:00:00.000Z`), -1),
+      queryEnd: DateUtil.addDays(new Date(`${query.to}T23:59:59.999Z`), 1),
+      bucketStartStr: query.from,
+      bucketEndStr: query.to,
+    };
+  }
+  const days = query.days ?? DEFAULT_TREND_DAYS;
+  const rangeStart = DateUtil.addDays(now, -(days - 1));
+  return {
+    queryStart: rangeStart,
+    queryEnd: now,
+    bucketStartStr: DateUtil.toTenantDateStr(rangeStart, timezone),
+    bucketEndStr: DateUtil.toTenantDateStr(now, timezone),
+  };
 }
 
 function sumOrdersSince(
@@ -400,14 +466,12 @@ function sumOrdersSince(
 function bucketOrdersByDay(
   orders: { createdAt: Date; totalInPaise: number }[],
   timezone: string,
-  days: number,
+  bucketStartStr: string,
+  bucketEndStr: string,
 ): { date: string; orders: number; revenueInPaise: number }[] {
   const buckets = new Map<string, { orders: number; revenueInPaise: number }>();
-  for (let i = days - 1; i >= 0; i--) {
-    const dateStr = DateUtil.toTenantDateStr(
-      DateUtil.addDays(DateUtil.now(), -i),
-      timezone,
-    );
+  const dateStrs = DateUtil.enumerateDateStrs(bucketStartStr, bucketEndStr);
+  for (const dateStr of dateStrs) {
     buckets.set(dateStr, { orders: 0, revenueInPaise: 0 });
   }
   for (const order of orders) {

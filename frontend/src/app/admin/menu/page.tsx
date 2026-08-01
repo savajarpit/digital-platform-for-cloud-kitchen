@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Leaf, Pencil, Plus, Trash2, UtensilsCrossed } from "lucide-react";
+import { ChevronLeft, ChevronRight, Leaf, Pencil, Plus, Trash2, UtensilsCrossed } from "lucide-react";
 import {
   ApiError,
   createCategory,
@@ -16,6 +16,7 @@ import {
   type Meal,
   type MealInput,
 } from "@/lib/api/admin-menu";
+import type { PaginationMeta } from "@/lib/api/response";
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
@@ -28,15 +29,11 @@ import { formatPriceFromPaise } from "@/lib/format/currency";
 export default function MenuPage() {
   const canEdit = usePermission(PERMISSIONS.MENU_MANAGE);
   const [categories, setCategories] = useState<Category[] | null>(null);
-  const [meals, setMeals] = useState<Meal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listCategories(), listMeals()])
-      .then(([c, m]) => {
-        setCategories(c);
-        setMeals(m);
-      })
+    listCategories()
+      .then(setCategories)
       .catch(() => setError("Couldn't load menu."));
   }, []);
 
@@ -53,7 +50,7 @@ export default function MenuPage() {
         </p>
       )}
 
-      {!categories || !meals ? (
+      {!categories ? (
         <div className="card p-6">
           <Skeleton className="h-6 w-40" />
           <Skeleton className="mt-4 h-40 w-full" />
@@ -61,12 +58,7 @@ export default function MenuPage() {
       ) : (
         <>
           <CategoriesCard categories={categories} canEdit={canEdit} onChange={setCategories} />
-          <MealsCard
-            meals={meals}
-            categories={categories}
-            canEdit={canEdit}
-            onChange={setMeals}
-          />
+          <MealsCard categories={categories} canEdit={canEdit} />
         </>
       )}
     </div>
@@ -210,40 +202,48 @@ const emptyMealForm: MealInput = {
   isAvailable: true,
 };
 
-function MealsCard({
-  meals,
-  categories,
-  canEdit,
-  onChange,
-}: {
-  meals: Meal[];
-  categories: Category[];
-  canEdit: boolean;
-  onChange: (m: Meal[]) => void;
-}) {
+function MealsCard({ categories, canEdit }: { categories: Category[]; canEdit: boolean }) {
   const { showToast } = useToast();
   const confirm = useConfirm();
+  const [meals, setMeals] = useState<Meal[] | null>(null);
+  const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [page, setPage] = useState(1);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
+
+  useEffect(() => {
+    listMeals({ page })
+      .then(({ data, meta }) => {
+        setMeals(data);
+        setMeta(meta ?? null);
+      })
+      .catch(() => setLoadError("Couldn't load meals."));
+  }, [page, reloadToken]);
+
+  function refetch() {
+    setReloadToken((t) => t + 1);
+  }
 
   async function handleToggleAvailable(meal: Meal) {
     try {
-      const updated = await updateMeal(meal.id, { isAvailable: !meal.isAvailable });
-      onChange(meals.map((m) => (m.id === meal.id ? updated : m)));
+      await updateMeal(meal.id, { isAvailable: !meal.isAvailable });
+      refetch();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update meal.", "error");
     }
   }
 
-  function handleDelete(id: string) {
+  function handleDelete(id: string, name: string) {
     confirm({
-      message: "Delete this meal?",
+      message: `Delete "${name}"?`,
       confirmLabel: "Delete",
       processingLabel: "Deleting…",
       variant: "danger",
       onConfirm: async () => {
         try {
           await deleteMeal(id);
-          onChange(meals.filter((m) => m.id !== id));
+          refetch();
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete meal.", "error");
         }
@@ -267,86 +267,131 @@ function MealsCard({
         )}
       </div>
 
+      {loadError && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+          {loadError}
+        </p>
+      )}
+
       {editingId === "new" && (
         <MealForm
           categories={categories}
           initial={emptyMealForm}
           onCancel={() => setEditingId(null)}
           onSave={async (input) => {
-            const created = await createMeal(input);
-            onChange([...meals, created]);
+            await createMeal(input);
             setEditingId(null);
+            setPage(1);
+            refetch();
           }}
         />
       )}
 
-      <div className="flex flex-col gap-2">
-        {meals.map((meal) =>
-          editingId === meal.id ? (
-            <MealForm
-              key={meal.id}
-              categories={categories}
-              initial={{
-                name: meal.name,
-                description: meal.description ?? "",
-                imageUrl: meal.imageUrl ?? "",
-                priceInPaise: meal.priceInPaise,
-                categoryId: meal.categoryId ?? undefined,
-                isVegetarian: meal.isVegetarian,
-                isAvailable: meal.isAvailable,
-                dailyQuantityLimit: meal.dailyQuantityLimit ?? undefined,
-              }}
-              onCancel={() => setEditingId(null)}
-              onSave={async (input) => {
-                const updated = await updateMeal(meal.id, input);
-                onChange(meals.map((m) => (m.id === meal.id ? updated : m)));
-                setEditingId(null);
-              }}
-            />
-          ) : (
-            <div
-              key={meal.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 px-3.5 py-2.5 dark:border-zinc-800"
-            >
-              <div className="flex items-center gap-2">
-                {meal.isVegetarian && <Leaf className="h-3.5 w-3.5 shrink-0 text-primary-600" />}
-                <div>
-                  <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    {meal.name}
-                  </span>
-                  <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
-                    {categoryName(meal.categoryId)} · {formatPriceFromPaise(meal.priceInPaise)}
-                  </span>
+      {!meals ? (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 w-full" />
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {meals.map((meal) =>
+            editingId === meal.id ? (
+              <MealForm
+                key={meal.id}
+                categories={categories}
+                initial={{
+                  name: meal.name,
+                  description: meal.description ?? "",
+                  imageUrl: meal.imageUrl ?? "",
+                  priceInPaise: meal.priceInPaise,
+                  categoryId: meal.categoryId ?? undefined,
+                  nutrition: meal.nutrition ?? undefined,
+                  isVegetarian: meal.isVegetarian,
+                  isAvailable: meal.isAvailable,
+                  dailyQuantityLimit: meal.dailyQuantityLimit ?? undefined,
+                }}
+                onCancel={() => setEditingId(null)}
+                onSave={async (input) => {
+                  await updateMeal(meal.id, input);
+                  setEditingId(null);
+                  refetch();
+                }}
+              />
+            ) : (
+              <div
+                key={meal.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 px-3.5 py-2.5 dark:border-zinc-800"
+              >
+                <div className="flex items-center gap-2">
+                  {meal.isVegetarian && <Leaf className="h-3.5 w-3.5 shrink-0 text-primary-600" />}
+                  <div>
+                    <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      {meal.name}
+                    </span>
+                    <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
+                      {categoryName(meal.categoryId)} · {formatPriceFromPaise(meal.priceInPaise)}
+                      {meal.nutrition?.calories && ` · ${meal.nutrition.calories} cal`}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Toggle checked={meal.isAvailable} onChange={() => handleToggleAvailable(meal)} disabled={!canEdit} />
+                  <button
+                    type="button"
+                    onClick={() => setEditingId(meal.id)}
+                    disabled={!canEdit}
+                    className="cursor-pointer text-zinc-400 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label={`Edit ${meal.name}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(meal.id, meal.name)}
+                    disabled={!canEdit}
+                    className="cursor-pointer text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label={`Delete ${meal.name}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Toggle checked={meal.isAvailable} onChange={() => handleToggleAvailable(meal)} disabled={!canEdit} />
-                <button
-                  type="button"
-                  onClick={() => setEditingId(meal.id)}
-                  disabled={!canEdit}
-                  className="text-zinc-400 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label={`Edit ${meal.name}`}
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(meal.id)}
-                  disabled={!canEdit}
-                  className="text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label={`Delete ${meal.name}`}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          ),
-        )}
-        {meals.length === 0 && editingId !== "new" && (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">No meals yet.</p>
-        )}
-      </div>
+            ),
+          )}
+          {meals.length === 0 && editingId !== "new" && (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">No meals yet.</p>
+          )}
+        </div>
+      )}
+
+      {meta && meta.totalPages > 1 && (
+        <div className="flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800">
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            Page {meta.page} of {meta.totalPages} · {meta.total} meals
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => p - 1)}
+              disabled={!meta.hasPrev}
+              className="btn-ghost btn-sm"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!meta.hasNext}
+              className="btn-ghost btn-sm"
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -365,13 +410,31 @@ function MealForm({
   const { showToast } = useToast();
   const [form, setForm] = useState(initial);
   const [priceRupees, setPriceRupees] = useState(String(initial.priceInPaise / 100));
+  const [calories, setCalories] = useState(
+    initial.nutrition?.calories !== undefined ? String(initial.nutrition.calories) : "",
+  );
+  const [protein, setProtein] = useState(initial.nutrition?.protein ?? "");
+  const [carbs, setCarbs] = useState(initial.nutrition?.carbs ?? "");
+  const [fat, setFat] = useState(initial.nutrition?.fat ?? "");
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      await onSave({ ...form, priceInPaise: Math.round(Number(priceRupees) * 100) });
+      const hasNutrition = calories || protein || carbs || fat;
+      await onSave({
+        ...form,
+        priceInPaise: Math.round(Number(priceRupees) * 100),
+        nutrition: hasNutrition
+          ? {
+              ...(calories && { calories: Number(calories) }),
+              ...(protein && { protein }),
+              ...(carbs && { carbs }),
+              ...(fat && { fat }),
+            }
+          : undefined,
+      });
       showToast("Meal saved", "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't save meal.", "error");
@@ -445,6 +508,42 @@ function MealForm({
           placeholder="Daily limit (optional)"
           className="input w-full"
         />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+          Nutrition (optional — only shown on the meal card if filled in)
+        </label>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <input
+            type="number"
+            min={0}
+            value={calories}
+            onChange={(e) => setCalories(e.target.value)}
+            placeholder="Calories"
+            className="input w-full"
+          />
+          <input
+            type="text"
+            value={protein}
+            onChange={(e) => setProtein(e.target.value)}
+            placeholder="Protein (e.g. 18g)"
+            className="input w-full"
+          />
+          <input
+            type="text"
+            value={carbs}
+            onChange={(e) => setCarbs(e.target.value)}
+            placeholder="Carbs (e.g. 45g)"
+            className="input w-full"
+          />
+          <input
+            type="text"
+            value={fat}
+            onChange={(e) => setFat(e.target.value)}
+            placeholder="Fat (e.g. 16g)"
+            className="input w-full"
+          />
+        </div>
       </div>
       <div className="flex items-center gap-4">
         <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">

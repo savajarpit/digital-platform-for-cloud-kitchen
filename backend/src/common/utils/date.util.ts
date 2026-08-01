@@ -52,6 +52,17 @@ export class DateUtil {
     return date.toISOString().slice(0, 10);
   }
 
+  /** Every `YYYY-MM-DD` date from `startStr` to `endStr` inclusive — for seeding zero-filled chart buckets over an arbitrary (possibly custom, non-"today-relative") range. Capped at 366 to avoid a runaway loop on a malformed/reversed range. */
+  static enumerateDateStrs(startStr: string, endStr: string): string[] {
+    const dates: string[] = [];
+    let cursor = startStr;
+    while (cursor <= endStr && dates.length < 366) {
+      dates.push(cursor);
+      cursor = DateUtil.addDaysToDateStr(cursor, 1);
+    }
+    return dates;
+  }
+
   /** "HH:mm" → minutes since midnight. */
   static hhmmToMinutes(hhmm: string): number {
     const [h, m] = hhmm.split(':').map(Number);

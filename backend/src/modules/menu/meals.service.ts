@@ -3,8 +3,10 @@ import { MenuRepository } from './menu.repository';
 import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
 import { QueryMealsDto } from './dto/query-meals.dto';
+import { QueryAdminMealsDto } from './dto/query-admin-meals.dto';
 import { Meal, Prisma } from '../../generated/prisma';
 import { PromotionsService } from '../promotions/promotions.service';
+import { PaginationService } from '../../common/services/pagination.service';
 
 export type MealWithPromotion = Meal & {
   activePromotion: { promotionName: string; discountPercentage: number } | null;
@@ -15,7 +17,26 @@ export class MealsService {
   constructor(
     private readonly menuRepo: MenuRepository,
     private readonly promotionsService: PromotionsService,
+    private readonly pagination: PaginationService,
   ) {}
+
+  async findAllForAdmin(tenantId: string, query: QueryAdminMealsDto) {
+    const skip = this.pagination.getOffsetSkip(query.page, query.limit);
+    const [data, total] = await this.menuRepo.findMealsPaginated(
+      tenantId,
+      {
+        categoryId: query.categoryId,
+        search: query.search,
+        onlyAvailable: false,
+      },
+      skip,
+      query.limit,
+    );
+    return {
+      data,
+      meta: this.pagination.buildOffsetMeta(total, query.page, query.limit),
+    };
+  }
 
   async findAll(
     tenantId: string,
@@ -30,10 +51,11 @@ export class MealsService {
     // (onlyAvailable: false) doesn't need them.
     if (!onlyAvailable) return meals;
 
-    const promoMap = await this.promotionsService.getActiveScheduledDiscountsForMeals(
-      tenantId,
-      meals,
-    );
+    const promoMap =
+      await this.promotionsService.getActiveScheduledDiscountsForMeals(
+        tenantId,
+        meals,
+      );
     return meals.map((meal) => ({
       ...meal,
       activePromotion: promoMap.get(meal.id) ?? null,

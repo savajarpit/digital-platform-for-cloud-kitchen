@@ -42,11 +42,14 @@ export default function PromotionsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listCoupons(), listPromotions(), listMeals(), listCategories()])
+    // limit: 100 — this picker needs every meal (including unavailable ones,
+    // so a promo can still be configured for a temporarily-off item), not a
+    // browsable page; the admin Meals list is the one that paginates for real.
+    Promise.all([listCoupons(), listPromotions(), listMeals({ limit: 100 }), listCategories()])
       .then(([c, p, m, cats]) => {
         setCoupons(c);
         setPromotions(p);
-        setMeals(m);
+        setMeals(m.data);
         setCategories(cats);
       })
       .catch(() => setError("Couldn't load promotions."));

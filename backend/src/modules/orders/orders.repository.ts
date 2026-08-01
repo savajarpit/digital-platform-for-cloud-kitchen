@@ -234,16 +234,17 @@ export class OrdersRepository {
 
   // ── Overview dashboard aggregates ─────────────────────────
 
-  /** Paid orders since `since` — the one raw dataset today/last-7-days/the revenue trend are all bucketed from. */
-  findRecentPaidOrders(
+  /** Paid orders in [since, until] — the raw dataset both the fixed today/last-7-days tiles and the (separately ranged) revenue trend are bucketed from. */
+  findPaidOrdersInRange(
     tenantId: string,
     since: Date,
+    until: Date,
   ): Promise<{ createdAt: Date; totalInPaise: number }[]> {
     return this.prisma.order.findMany({
       where: {
         tenantId,
         paymentStatus: PaymentStatus.PAID,
-        createdAt: { gte: since },
+        createdAt: { gte: since, lte: until },
       },
       select: { createdAt: true, totalInPaise: true },
       orderBy: { createdAt: 'asc' },
@@ -279,6 +280,7 @@ export class OrdersRepository {
   async getTopMeals(
     tenantId: string,
     since: Date,
+    until: Date,
     take: number,
   ): Promise<{ mealId: string | null; name: string; quantitySold: number }[]> {
     const grouped = await this.prisma.orderItem.groupBy({
@@ -287,7 +289,7 @@ export class OrdersRepository {
         order: {
           tenantId,
           paymentStatus: PaymentStatus.PAID,
-          createdAt: { gte: since },
+          createdAt: { gte: since, lte: until },
         },
       },
       _sum: { quantity: true },

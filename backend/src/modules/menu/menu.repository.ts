@@ -49,18 +49,29 @@ export class MenuRepository {
 
   findMeals(tenantId: string, filter: MealFilter): Promise<Meal[]> {
     return this.prisma.meal.findMany({
-      where: {
-        tenantId,
-        deletedAt: null,
-        ...(filter.onlyAvailable ? { isAvailable: true } : {}),
-        ...(filter.categoryId ? { categoryId: filter.categoryId } : {}),
-        ...(filter.search
-          ? { name: { contains: filter.search, mode: 'insensitive' } }
-          : {}),
-      },
+      where: mealWhere(tenantId, filter),
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       include: { category: true },
     });
+  }
+
+  async findMealsPaginated(
+    tenantId: string,
+    filter: MealFilter,
+    skip: number,
+    take: number,
+  ): Promise<[Meal[], number]> {
+    const where = mealWhere(tenantId, filter);
+    return this.prisma.$transaction([
+      this.prisma.meal.findMany({
+        where,
+        skip,
+        take,
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        include: { category: true },
+      }),
+      this.prisma.meal.count({ where }),
+    ]);
   }
 
   findMealById(tenantId: string, id: string): Promise<Meal | null> {
@@ -93,4 +104,19 @@ export class MenuRepository {
       data: { deletedAt: new Date() },
     });
   }
+}
+
+function mealWhere(
+  tenantId: string,
+  filter: MealFilter,
+): Prisma.MealWhereInput {
+  return {
+    tenantId,
+    deletedAt: null,
+    ...(filter.onlyAvailable ? { isAvailable: true } : {}),
+    ...(filter.categoryId ? { categoryId: filter.categoryId } : {}),
+    ...(filter.search
+      ? { name: { contains: filter.search, mode: 'insensitive' } }
+      : {}),
+  };
 }

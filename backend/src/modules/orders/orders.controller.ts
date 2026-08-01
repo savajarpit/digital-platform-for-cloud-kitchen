@@ -13,6 +13,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { PreviewOrderDto } from './dto/preview-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
+import { QueryOverviewDto } from './dto/query-overview.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
@@ -47,8 +48,11 @@ export class OrdersController {
   @ApiOperation({
     summary: 'Admin: revenue/orders/customers summary for the dashboard',
   })
-  getOverview(@CurrentTenantId() tenantId: string) {
-    return this.ordersService.getOverview(tenantId);
+  getOverview(
+    @CurrentTenantId() tenantId: string,
+    @Query() query: QueryOverviewDto,
+  ) {
+    return this.ordersService.getOverview(tenantId, query);
   }
 
   @Get('admin')

@@ -1,4 +1,5 @@
-import { ApiError, proxyFetch } from "@/lib/api/client";
+import { ApiError, proxyFetch, proxyFetchPaginated } from "@/lib/api/client";
+import type { PaginationMeta } from "@/lib/api/response";
 
 export { ApiError };
 
@@ -36,6 +37,13 @@ export function deleteCategory(id: string): Promise<void> {
   return proxyFetch<void>(`/menu/categories/${id}`, { method: "DELETE" });
 }
 
+export interface MealNutrition {
+  calories?: number;
+  protein?: string;
+  carbs?: string;
+  fat?: string;
+}
+
 export interface Meal {
   id: string;
   categoryId: string | null;
@@ -43,6 +51,7 @@ export interface Meal {
   description: string | null;
   imageUrl: string | null;
   priceInPaise: number;
+  nutrition: MealNutrition | null;
   isVegetarian: boolean;
   isAvailable: boolean;
   dailyQuantityLimit: number | null;
@@ -55,14 +64,26 @@ export interface MealInput {
   imageUrl?: string;
   priceInPaise: number;
   categoryId?: string;
+  nutrition?: MealNutrition;
   isVegetarian?: boolean;
   isAvailable?: boolean;
   dailyQuantityLimit?: number;
   sortOrder?: number;
 }
 
-export function listMeals(): Promise<Meal[]> {
-  return proxyFetch<Meal[]>("/menu/meals/admin");
+export function listMeals(params: {
+  page?: number;
+  limit?: number;
+  categoryId?: string;
+  search?: string;
+} = {}): Promise<{ data: Meal[]; meta?: PaginationMeta }> {
+  const search = new URLSearchParams();
+  if (params.page) search.set("page", String(params.page));
+  if (params.limit) search.set("limit", String(params.limit));
+  if (params.categoryId) search.set("categoryId", params.categoryId);
+  if (params.search) search.set("search", params.search);
+  const qs = search.toString();
+  return proxyFetchPaginated<Meal[]>(`/menu/meals/admin${qs ? `?${qs}` : ""}`);
 }
 
 export function createMeal(input: MealInput): Promise<Meal> {

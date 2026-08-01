@@ -16,6 +16,7 @@ import { MealsService } from './meals.service';
 import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
 import { QueryMealsDto } from './dto/query-meals.dto';
+import { QueryAdminMealsDto } from './dto/query-admin-meals.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
@@ -46,12 +47,14 @@ export class MealsController {
   @Get('admin')
   @ApiBearerAuth('access-token')
   @ResponseMessage('Meals retrieved successfully')
-  @ApiOperation({ summary: 'List all meals (including unavailable) for admin' })
+  @ApiOperation({
+    summary: 'List all meals (including unavailable) for admin, paginated',
+  })
   findAllForAdmin(
     @CurrentTenantId() tenantId: string,
-    @Query() query: QueryMealsDto,
+    @Query() query: QueryAdminMealsDto,
   ) {
-    return this.mealsService.findAll(tenantId, query, false);
+    return this.mealsService.findAllForAdmin(tenantId, query);
   }
 
   @Public()

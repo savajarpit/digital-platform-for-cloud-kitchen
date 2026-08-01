@@ -4,3 +4,4 @@ export { default as databaseConfig } from './database.config';
 export { default as redisConfig } from './redis.config';
 export { default as stripeConfig } from './stripe.config';
 export { default as mailConfig } from './mail.config';
+export { default as platformBillingConfig } from './platform-billing.config';

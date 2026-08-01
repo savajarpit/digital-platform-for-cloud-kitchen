@@ -12,6 +12,13 @@ const STATUS_STYLES: Record<string, string> = {
   SUSPENDED: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400",
 };
 
+const BILLING_STATUS_STYLES: Record<string, string> = {
+  ACTIVE: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
+  PENDING_PAYMENT: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
+  PAST_DUE: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400",
+  CANCELLED: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
+};
+
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<TenantListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +65,7 @@ export default function TenantsPage() {
                 <th className="px-5 py-3">Domain</th>
                 <th className="px-5 py-3">Plan</th>
                 <th className="px-5 py-3">Status</th>
+                <th className="px-5 py-3">Billing</th>
                 <th className="px-5 py-3">Created</th>
               </tr>
             </thead>
@@ -88,6 +96,17 @@ export default function TenantsPage() {
                       {tenant.status}
                     </span>
                   </td>
+                  <td className="px-5 py-3">
+                    {tenant.platformSubscription ? (
+                      <span
+                        className={`badge ${BILLING_STATUS_STYLES[tenant.platformSubscription.status] ?? ""}`}
+                      >
+                        {tenant.platformSubscription.status.replace(/_/g, " ")}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-zinc-400">Not set up</span>
+                    )}
+                  </td>
                   <td className="px-5 py-3 text-zinc-500 dark:text-zinc-400">
                     {new Date(tenant.createdAt).toLocaleDateString()}
                   </td>
@@ -95,7 +114,7 @@ export default function TenantsPage() {
               ))}
               {tenants.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-5 py-8 text-center text-zinc-500 dark:text-zinc-400">
+                  <td colSpan={7} className="px-5 py-8 text-center text-zinc-500 dark:text-zinc-400">
                     No tenants yet.
                   </td>
                 </tr>

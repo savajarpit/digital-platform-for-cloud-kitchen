@@ -2,24 +2,33 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Bell, Building2, CreditCard, KeyRound, Puzzle } from "lucide-react";
+import { ArrowLeft, Bell, Building2, CreditCard, KeyRound, Puzzle, Receipt } from "lucide-react";
 import {
   ApiError,
+  cancelSubscriptionAtPeriodEnd,
+  createSubscriptionInvite,
   getRoleGrants,
   getTenant,
   getTenantFeatures,
+  listTenantInvoices,
+  manualActivateTenant,
+  resumeSubscription,
   setFeatureGrant,
   setPermissionGrant,
   updateTenant,
   updateTenantNotifications,
   updateTenantPayment,
+  type BillingCycle,
   type FeatureGrant,
   type PermissionGrant,
+  type PlatformInvoice,
   type TenantDetail,
 } from "@/lib/api/platform";
 import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { formatPriceFromPaise } from "@/lib/format/currency";
 
 const ROLES = ["OWNER", "STAFF"] as const;
 
@@ -65,6 +74,7 @@ export default function TenantDetailPage({ params }: { params: Promise<{ id: str
           </div>
 
           <BasicsCard tenant={tenant} onSaved={setTenant} />
+          <BillingCard tenant={tenant} onSaved={setTenant} />
           <NotificationCredentialsCard tenant={tenant} onSaved={setTenant} />
           <PaymentCredentialsCard tenant={tenant} onSaved={setTenant} />
           <PermissionGridCard tenantId={id} />
@@ -152,6 +162,274 @@ function BasicsCard({
       </div>
       <button type="submit" disabled={saving} className="btn-primary w-fit">
         {saving ? "Saving…" : "Save"}
+      </button>
+    </form>
+  );
+}
+
+const SUBSCRIPTION_STATUS_STYLES: Record<string, string> = {
+  ACTIVE: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
+  PENDING_PAYMENT: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
+  PAST_DUE: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400",
+  CANCELLED: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
+};
+
+function BillingCard({
+  tenant,
+  onSaved,
+}: {
+  tenant: TenantDetail;
+  onSaved: (t: TenantDetail) => void;
+}) {
+  const { showToast } = useToast();
+  const confirm = useConfirm();
+  const subscription = tenant.platformSubscription;
+  const [invoices, setInvoices] = useState<PlatformInvoice[] | null>(null);
+  const [activationUrl, setActivationUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!subscription) return;
+    listTenantInvoices(tenant.id)
+      .then(setInvoices)
+      .catch(() => showToast("Couldn't load invoices.", "error"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant.id, subscription?.status]);
+
+  function handleManualActivate() {
+    confirm({
+      message: "Manually activate this tenant? This skips the invite/payment flow entirely — use for comped or offline-paid accounts.",
+      confirmLabel: "Activate",
+      processingLabel: "Activating…",
+      onConfirm: async () => {
+        try {
+          await manualActivateTenant(tenant.id);
+          const refreshed = await getTenant(tenant.id);
+          onSaved(refreshed);
+          showToast("Tenant activated", "success");
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't activate tenant.", "error");
+        }
+      },
+    });
+  }
+
+  async function handleCopyLink() {
+    if (!activationUrl) return;
+    await navigator.clipboard.writeText(activationUrl);
+    showToast("Link copied", "success");
+  }
+
+  function handleCancel() {
+    confirm({
+      message:
+        "Schedule cancellation for this subscription? It stays active and keeps billing until the end of the current period, then cancels automatically — it won't cut the tenant off immediately.",
+      confirmLabel: "Schedule Cancellation",
+      processingLabel: "Scheduling…",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await cancelSubscriptionAtPeriodEnd(tenant.id);
+          const refreshed = await getTenant(tenant.id);
+          onSaved(refreshed);
+          showToast("Cancellation scheduled for end of period", "success");
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't schedule cancellation.", "error");
+        }
+      },
+    });
+  }
+
+  async function handleResume() {
+    try {
+      await resumeSubscription(tenant.id);
+      const refreshed = await getTenant(tenant.id);
+      onSaved(refreshed);
+      showToast("Subscription resumed", "success");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't resume subscription.", "error");
+    }
+  }
+
+  return (
+    <div className="card flex flex-col gap-4 p-6">
+      <div className="flex items-center gap-2">
+        <Receipt className="h-4 w-4 text-primary-600" />
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          Platform Billing
+        </h3>
+      </div>
+
+      {subscription ? (
+        <>
+          <div className="flex flex-wrap items-center gap-3">
+            <span
+              className={`badge ${SUBSCRIPTION_STATUS_STYLES[subscription.status] ?? ""}`}
+            >
+              {subscription.status.replace(/_/g, " ")}
+            </span>
+            <span className="text-sm text-zinc-600 dark:text-zinc-400">
+              {subscription.billingCycle === "MONTHLY" ? "Monthly" : "Yearly"}
+            </span>
+            {subscription.currentPeriodEnd && (
+              <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                Next billing: {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+
+          {subscription.status !== "ACTIVE" && (
+            <button type="button" onClick={handleManualActivate} className="btn-outline btn-sm w-fit">
+              Manual Activate
+            </button>
+          )}
+
+          {subscription.status === "ACTIVE" && subscription.cancelAtPeriodEnd && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/50 px-3.5 py-2.5 text-sm dark:border-amber-900 dark:bg-amber-950/30">
+              <span className="text-amber-700 dark:text-amber-400">
+                Cancels on{" "}
+                {subscription.currentPeriodEnd
+                  ? new Date(subscription.currentPeriodEnd).toLocaleDateString()
+                  : "the end of the current period"}
+              </span>
+              <button type="button" onClick={handleResume} className="btn-outline btn-sm">
+                Resume Subscription
+              </button>
+            </div>
+          )}
+
+          {subscription.status === "ACTIVE" && !subscription.cancelAtPeriodEnd && (
+            <button type="button" onClick={handleCancel} className="btn-outline btn-sm w-fit text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950">
+              Cancel Subscription
+            </button>
+          )}
+
+          {!invoices ? (
+            <Skeleton className="h-20 w-full" />
+          ) : invoices.length === 0 ? (
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">No charges yet.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {invoices.map((invoice) => (
+                <div
+                  key={invoice.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 px-3.5 py-2.5 text-sm dark:border-zinc-800"
+                >
+                  <div>
+                    <span
+                      className={
+                        invoice.status === "PAID"
+                          ? "font-medium text-primary-700 dark:text-primary-400"
+                          : "font-medium text-red-700 dark:text-red-400"
+                      }
+                    >
+                      {formatPriceFromPaise(invoice.amountInPaise)}
+                    </span>
+                    <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
+                      {new Date(invoice.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                  {invoice.invoiceUrl && (
+                    <a
+                      href={invoice.invoiceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium text-primary-600 hover:text-primary-700"
+                    >
+                      View invoice
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <CreateInviteForm
+          tenantId={tenant.id}
+          onCreated={(url) => setActivationUrl(url)}
+        />
+      )}
+
+      {activationUrl && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50/50 px-3.5 py-2.5 text-xs dark:border-primary-900 dark:bg-primary-950/30">
+          <span className="flex-1 truncate font-mono text-zinc-700 dark:text-zinc-300">
+            {activationUrl}
+          </span>
+          <button type="button" onClick={handleCopyLink} className="btn-ghost btn-sm shrink-0">
+            Copy
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CreateInviteForm({
+  tenantId,
+  onCreated,
+}: {
+  tenantId: string;
+  onCreated: (activationUrl: string) => void;
+}) {
+  const { showToast } = useToast();
+  const [planCode, setPlanCode] = useState("STANDARD");
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("MONTHLY");
+  const [amountRupees, setAmountRupees] = useState("999");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const { activationUrl } = await createSubscriptionInvite(tenantId, {
+        planCode,
+        billingCycle,
+        amountInPaise: Math.round(Number(amountRupees) * 100),
+      });
+      onCreated(activationUrl);
+      showToast("Activation invite created and emailed to the owner", "success");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't create invite.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        No subscription set up yet — create one to email this tenant&apos;s owner an activation
+        payment link.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <input
+          type="text"
+          value={planCode}
+          onChange={(e) => setPlanCode(e.target.value)}
+          placeholder="Plan code"
+          required
+          className="input w-full"
+        />
+        <select
+          value={billingCycle}
+          onChange={(e) => setBillingCycle(e.target.value as BillingCycle)}
+          className="input w-full"
+        >
+          <option value="MONTHLY">Monthly</option>
+          <option value="YEARLY">Yearly</option>
+        </select>
+        <input
+          type="number"
+          value={amountRupees}
+          onChange={(e) => setAmountRupees(e.target.value)}
+          placeholder="₹ per cycle"
+          min={1}
+          required
+          className="input w-full"
+        />
+      </div>
+      <button type="submit" disabled={saving} className="btn-primary w-fit btn-sm">
+        {saving ? "Creating…" : "Create Activation Link"}
       </button>
     </form>
   );

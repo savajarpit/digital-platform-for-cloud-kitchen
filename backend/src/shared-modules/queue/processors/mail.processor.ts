@@ -13,6 +13,29 @@ export interface ResetPasswordEmailJob {
   resetUrl: string;
 }
 
+export interface PlatformActivationInviteEmailJob {
+  email: string;
+  businessName: string;
+  activationUrl: string;
+  planCode: string;
+  amountInPaise: number;
+  billingCycle: 'MONTHLY' | 'YEARLY';
+}
+
+export interface PlatformInvoiceEmailJob {
+  email: string;
+  businessName: string;
+  amountInPaise: number;
+  invoiceUrl: string | null;
+}
+
+export interface PlatformPaymentFailedEmailJob {
+  email: string;
+  businessName: string;
+  amountInPaise: number;
+  isOwnerRecipient: boolean;
+}
+
 @Processor('mail')
 export class MailProcessor {
   private readonly logger = new Logger(MailProcessor.name);
@@ -30,6 +53,37 @@ export class MailProcessor {
   async sendResetPassword(job: Job<ResetPasswordEmailJob>) {
     await this.mailService.sendResetPassword(job.data.email, {
       resetUrl: job.data.resetUrl,
+    });
+  }
+
+  @Process('send-platform-activation-invite')
+  async sendPlatformActivationInvite(
+    job: Job<PlatformActivationInviteEmailJob>,
+  ) {
+    await this.mailService.sendPlatformActivationInvite(job.data.email, {
+      businessName: job.data.businessName,
+      activationUrl: job.data.activationUrl,
+      planCode: job.data.planCode,
+      amountInPaise: job.data.amountInPaise,
+      billingCycle: job.data.billingCycle,
+    });
+  }
+
+  @Process('send-platform-invoice')
+  async sendPlatformInvoice(job: Job<PlatformInvoiceEmailJob>) {
+    await this.mailService.sendPlatformInvoice(job.data.email, {
+      businessName: job.data.businessName,
+      amountInPaise: job.data.amountInPaise,
+      invoiceUrl: job.data.invoiceUrl,
+    });
+  }
+
+  @Process('send-platform-payment-failed')
+  async sendPlatformPaymentFailed(job: Job<PlatformPaymentFailedEmailJob>) {
+    await this.mailService.sendPlatformPaymentFailed(job.data.email, {
+      businessName: job.data.businessName,
+      amountInPaise: job.data.amountInPaise,
+      isOwnerRecipient: job.data.isOwnerRecipient,
     });
   }
 

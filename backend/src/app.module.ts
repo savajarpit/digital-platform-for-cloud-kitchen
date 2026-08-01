@@ -17,6 +17,7 @@ import {
   redisConfig,
   stripeConfig,
   mailConfig,
+  platformBillingConfig,
 } from './config';
 
 // Database
@@ -70,6 +71,7 @@ import { PlatformPagesModule } from './modules/platform-pages/platform-pages.mod
         redisConfig,
         stripeConfig,
         mailConfig,
+        platformBillingConfig,
       ],
       validationSchema: Joi.object({
         NODE_ENV: Joi.string()

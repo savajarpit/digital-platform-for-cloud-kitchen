@@ -9,6 +9,18 @@ import {
   resetPasswordTemplate,
   ResetPasswordTemplateData,
 } from './templates/reset-password.template';
+import {
+  platformActivationInviteTemplate,
+  PlatformActivationInviteTemplateData,
+} from './templates/platform-activation-invite.template';
+import {
+  platformInvoiceTemplate,
+  PlatformInvoiceTemplateData,
+} from './templates/platform-invoice.template';
+import {
+  platformPaymentFailedTemplate,
+  PlatformPaymentFailedTemplateData,
+} from './templates/platform-payment-failed.template';
 
 @Injectable()
 export class MailService {
@@ -58,6 +70,30 @@ export class MailService {
     data: ResetPasswordTemplateData,
   ): Promise<void> {
     const { subject, html } = resetPasswordTemplate(data);
+    await this.send(to, subject, html);
+  }
+
+  async sendPlatformActivationInvite(
+    to: string,
+    data: PlatformActivationInviteTemplateData,
+  ): Promise<void> {
+    const { subject, html } = platformActivationInviteTemplate(data);
+    await this.send(to, subject, html);
+  }
+
+  async sendPlatformInvoice(
+    to: string,
+    data: PlatformInvoiceTemplateData,
+  ): Promise<void> {
+    const { subject, html } = platformInvoiceTemplate(data);
+    await this.send(to, subject, html);
+  }
+
+  async sendPlatformPaymentFailed(
+    to: string,
+    data: PlatformPaymentFailedTemplateData,
+  ): Promise<void> {
+    const { subject, html } = platformPaymentFailedTemplate(data);
     await this.send(to, subject, html);
   }
 }

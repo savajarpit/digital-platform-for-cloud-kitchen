@@ -105,6 +105,14 @@ export class PlatformRepository {
           take: 1,
           select: { email: true },
         },
+        platformSubscription: {
+          select: {
+            status: true,
+            billingCycle: true,
+            currentPeriodEnd: true,
+            cancelAtPeriodEnd: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -122,6 +130,7 @@ export class PlatformRepository {
           take: 1,
           select: { id: true, email: true },
         },
+        platformSubscription: true,
       },
     });
   }

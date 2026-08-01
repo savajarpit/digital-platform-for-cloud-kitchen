@@ -2,6 +2,16 @@ import { ApiError, proxyFetch } from "@/lib/api/client";
 
 export { ApiError };
 
+export type PlatformSubscriptionStatus = "PENDING_PAYMENT" | "ACTIVE" | "PAST_DUE" | "CANCELLED";
+export type BillingCycle = "MONTHLY" | "YEARLY";
+
+export interface PlatformSubscriptionSummary {
+  status: PlatformSubscriptionStatus;
+  billingCycle: BillingCycle;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
 export interface TenantListItem {
   id: string;
   name: string;
@@ -12,6 +22,7 @@ export interface TenantListItem {
   createdAt: string;
   businessProfile: { displayName: string } | null;
   users: { email: string }[];
+  platformSubscription: PlatformSubscriptionSummary | null;
 }
 
 export interface TenantDetail extends TenantListItem {
@@ -173,4 +184,52 @@ export function setFeatureGrant(
     method: "PUT",
     body: JSON.stringify({ enabled }),
   });
+}
+
+// ── Platform billing (Phase 8) ─────────────────────────────────────
+
+export interface CreateSubscriptionInviteInput {
+  planCode: string;
+  billingCycle: BillingCycle;
+  amountInPaise: number;
+}
+
+export function createSubscriptionInvite(
+  tenantId: string,
+  input: CreateSubscriptionInviteInput,
+): Promise<{ activationUrl: string }> {
+  return proxyFetch(`/platform/tenants/${tenantId}/subscription`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function manualActivateTenant(tenantId: string): Promise<void> {
+  return proxyFetch<void>(`/platform/tenants/${tenantId}/activate`, { method: "PATCH" });
+}
+
+export function cancelSubscriptionAtPeriodEnd(tenantId: string): Promise<void> {
+  return proxyFetch<void>(`/platform/tenants/${tenantId}/subscription/cancel`, { method: "POST" });
+}
+
+export function resumeSubscription(tenantId: string): Promise<void> {
+  return proxyFetch<void>(`/platform/tenants/${tenantId}/subscription/resume`, { method: "POST" });
+}
+
+export type PlatformInvoiceStatus = "PAID" | "FAILED";
+
+export interface PlatformInvoice {
+  id: string;
+  razorpayInvoiceId: string | null;
+  razorpayPaymentId: string | null;
+  amountInPaise: number;
+  status: PlatformInvoiceStatus;
+  invoiceUrl: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  createdAt: string;
+}
+
+export function listTenantInvoices(tenantId: string): Promise<PlatformInvoice[]> {
+  return proxyFetch<PlatformInvoice[]>(`/platform/tenants/${tenantId}/invoices`);
 }

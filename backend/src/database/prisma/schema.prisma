@@ -78,6 +78,23 @@ enum PromotionType {
   SCHEDULED_DISCOUNT
 }
 
+enum BillingCycle {
+  MONTHLY
+  YEARLY
+}
+
+enum PlatformSubscriptionStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+}
+
+enum PlatformInvoiceStatus {
+  PAID
+  FAILED
+}
+
 // ─── Tenant ──────────────────────────────────────────────
 
 model Tenant {
@@ -109,6 +126,9 @@ model Tenant {
   promotions               Promotion[]
   staticPages              StaticPage[]
   platformTermsAcceptances PlatformTermsAcceptance[]
+  platformSubscription     PlatformSubscription?
+  activationInvites        TenantActivationInvite[]
+  platformInvoices         PlatformInvoice[]
 
   @@map("tenants")
 }
@@ -718,4 +738,86 @@ model PlatformPage {
   updatedAt   DateTime @updatedAt
 
   @@map("platform_pages")
+}
+
+// ─── Platform billing (Phase 8) — Arpit's own SaaS subscription revenue,
+// completely separate from any tenant's own PaymentSettings/commerce data.
+// Uses Arpit's own Razorpay account (env-configured, never a tenant's own
+// PaymentSettings row).
+
+model PlatformSubscription {
+  id                     String                     @id @default(uuid())
+  tenantId               String                     @unique
+  planCode               String
+  billingCycle           BillingCycle
+  amountInPaise          Int
+  status                 PlatformSubscriptionStatus @default(PENDING_PAYMENT)
+  razorpaySubscriptionId String?
+  razorpayCustomerId     String?
+  currentPeriodEnd       DateTime?
+  // True once SUPER_ADMIN has scheduled a cancellation — the subscription
+  // stays ACTIVE and keeps billing rights until currentPeriodEnd, then the
+  // `subscription.cancelled` webhook flips status to CANCELLED. Resumable
+  // (set back to false) any time before that webhook fires.
+  cancelAtPeriodEnd      Boolean                    @default(false)
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  tenant   Tenant            @relation(fields: [tenantId], references: [id])
+  invoices PlatformInvoice[]
+
+  @@index([tenantId])
+  @@map("platform_subscriptions")
+}
+
+// Opaque, high-entropy token backing a public, unauthenticated activation
+// link emailed to a prospective tenant — no login required to pay and
+// activate. `razorpaySubscriptionId` is filled in lazily on first visit to
+// the activation page (created once, reused on repeat visits/refreshes)
+// rather than at invite-creation time, so an invite that's never opened
+// never creates a stray Razorpay Subscription.
+model TenantActivationInvite {
+  id                     String       @id @default(uuid())
+  tenantId               String
+  token                  String       @unique
+  planCode               String
+  billingCycle           BillingCycle
+  amountInPaise          Int
+  razorpaySubscriptionId String?
+  expiresAt              DateTime
+  usedAt                 DateTime?
+  createdByUserId        String
+  createdAt              DateTime     @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([token])
+  @@map("tenant_activation_invites")
+}
+
+// One row per subscription charge attempt (success or failure), written
+// from the `subscription.charged`/`subscription.payment.failed` webhook
+// handlers — backs the admin billing dashboard's per-tenant payment
+// history. We never render our own platform invoice: `invoiceUrl` is
+// Razorpay's own generated invoice link, just stored and linked to.
+model PlatformInvoice {
+  id                     String                @id @default(uuid())
+  tenantId               String
+  platformSubscriptionId String
+  razorpayInvoiceId      String?
+  razorpayPaymentId      String?
+  amountInPaise          Int
+  status                 PlatformInvoiceStatus
+  invoiceUrl             String?
+  periodStart            DateTime?
+  periodEnd              DateTime?
+  createdAt              DateTime              @default(now())
+
+  tenant               Tenant               @relation(fields: [tenantId], references: [id])
+  platformSubscription PlatformSubscription @relation(fields: [platformSubscriptionId], references: [id])
+
+  @@index([tenantId])
+  @@index([platformSubscriptionId])
+  @@map("platform_invoices")
 }

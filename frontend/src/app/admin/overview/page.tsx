@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { ApiError, getOrdersOverview, type OrdersOverview } from "@/lib/api/admin-orders";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { formatPriceFromPaise } from "@/lib/format/currency";
+import { formatCompactPriceFromPaise, formatPriceFromPaise } from "@/lib/format/currency";
 
 const STATUS_BAR_COLORS: Record<string, string> = {
   PENDING_PAYMENT: "bg-zinc-400 dark:bg-zinc-600",
@@ -111,6 +111,8 @@ export default function OverviewPage() {
 
       <RevenueTrendChart
         trend={overview?.revenueTrend ?? null}
+        allTimeRevenue={overview?.allTimeRevenue ?? null}
+        rangeLabel={rangeLabel}
         preset={preset}
         onPresetChange={setPreset}
         customFrom={customFrom}
@@ -120,7 +122,7 @@ export default function OverviewPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <StatusBreakdownCard breakdown={overview?.statusBreakdown ?? null} />
+        <StatusBreakdownCard breakdown={overview?.statusBreakdown ?? null} rangeLabel={rangeLabel} />
         <TopMealsCard meals={overview?.topMeals ?? null} rangeLabel={rangeLabel} />
       </div>
     </div>
@@ -183,6 +185,8 @@ function formatShortDate(dateStr: string): string {
 
 function RevenueTrendChart({
   trend,
+  allTimeRevenue,
+  rangeLabel,
   preset,
   onPresetChange,
   customFrom,
@@ -191,6 +195,8 @@ function RevenueTrendChart({
   onCustomToChange,
 }: {
   trend: OrdersOverview["revenueTrend"] | null;
+  allTimeRevenue: OrdersOverview["allTimeRevenue"] | null;
+  rangeLabel: string;
   preset: RangePreset;
   onPresetChange: (preset: RangePreset) => void;
   customFrom: string;
@@ -210,6 +216,13 @@ function RevenueTrendChart({
   // evenly — a 365-bar year would otherwise squash to invisible slivers.
   // The container scrolls horizontally instead.
   const barWidthClass = !trend || trend.length <= 31 ? "w-6" : trend.length <= 120 ? "w-3" : "w-2";
+  // Above-bar value labels only fit without collisions up to ~31 bars —
+  // beyond that the hover tooltip is the only way to read an exact amount.
+  const showValueLabels = barWidthClass === "w-6";
+  const rangeTotal = (trend ?? []).reduce(
+    (acc, t) => ({ orders: acc.orders + t.orders, revenueInPaise: acc.revenueInPaise + t.revenueInPaise }),
+    { orders: 0, revenueInPaise: 0 },
+  );
 
   return (
     <div className="card flex flex-col gap-4 p-6">
@@ -298,10 +311,33 @@ function RevenueTrendChart({
           </table>
         </div>
       ) : (
-        <div className="overflow-x-auto pb-1">
-          <div className="relative flex h-40 items-end gap-1">
+        // pt-14 reserves room above the bars for the hover tooltip — the
+        // container needs overflow-x-auto for wide ranges, which per the CSS
+        // overflow spec also computes overflow-y to "auto" (clipping,
+        // un-scrollable upward past the box's own top edge) rather than
+        // staying "visible", so the tooltip needs space *inside* the box.
+        <div className="overflow-x-auto pt-14 pb-1">
+          {showValueLabels && (
+            <div className="flex gap-1">
+              {trend.map((day) => (
+                <div key={day.date} className={`shrink-0 text-center ${barWidthClass}`}>
+                  <span className="text-[10px] font-medium whitespace-nowrap text-zinc-500 dark:text-zinc-400">
+                    {day.revenueInPaise > 0 ? formatCompactPriceFromPaise(day.revenueInPaise) : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="relative flex h-36 items-end gap-1">
             {trend.map((day, i) => {
               const heightPct = Math.max(2, (day.revenueInPaise / max) * 100);
+              // The first/last couple of bars sit right at the scroll
+              // container's edge — a centered tooltip would spill past the
+              // edge and get clipped (overflow-x-auto has nowhere to scroll
+              // to reach negative/over-max offsets), so those anchor to the
+              // bar's own edge instead of centering on it.
+              const tooltipPositionClass =
+                i <= 1 ? "left-0" : i >= trend.length - 2 ? "right-0" : "left-1/2 -translate-x-1/2";
               return (
                 <div
                   key={day.date}
@@ -314,10 +350,14 @@ function RevenueTrendChart({
                     style={{ height: `${heightPct}%` }}
                   />
                   {hoverIndex === i && (
-                    <div className="absolute bottom-full left-1/2 z-10 mb-1.5 w-max -translate-x-1/2 rounded-md bg-zinc-900 px-2.5 py-1.5 text-xs text-white shadow-lg dark:bg-zinc-700">
-                      <div className="font-medium">{day.date}</div>
-                      <div>{formatPriceFromPaise(day.revenueInPaise)}</div>
-                      <div className="text-zinc-300">
+                    <div
+                      className={`absolute bottom-full ${tooltipPositionClass} z-20 mb-1.5 w-max rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-800`}
+                    >
+                      <div className="font-medium text-zinc-900 dark:text-zinc-100">{day.date}</div>
+                      <div className="font-semibold text-primary-600 dark:text-primary-400">
+                        {formatPriceFromPaise(day.revenueInPaise)}
+                      </div>
+                      <div className="text-zinc-500 dark:text-zinc-400">
                         {day.orders} order{day.orders === 1 ? "" : "s"}
                       </div>
                     </div>
@@ -339,11 +379,46 @@ function RevenueTrendChart({
           </div>
         </div>
       )}
+
+      {trend && (
+        <div className="flex flex-wrap items-center gap-6 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+          <div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">Revenue — {rangeLabel}</p>
+            <p className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+              {formatPriceFromPaise(rangeTotal.revenueInPaise)}
+            </p>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              {rangeTotal.orders} order{rangeTotal.orders === 1 ? "" : "s"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">All-time Revenue</p>
+            {allTimeRevenue ? (
+              <>
+                <p className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                  {formatPriceFromPaise(allTimeRevenue.revenueInPaise)}
+                </p>
+                <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                  {allTimeRevenue.orders} order{allTimeRevenue.orders === 1 ? "" : "s"}
+                </p>
+              </>
+            ) : (
+              <Skeleton className="mt-1 h-6 w-24" />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function StatusBreakdownCard({ breakdown }: { breakdown: OrdersOverview["statusBreakdown"] | null }) {
+function StatusBreakdownCard({
+  breakdown,
+  rangeLabel,
+}: {
+  breakdown: OrdersOverview["statusBreakdown"] | null;
+  rangeLabel: string;
+}) {
   const max = Math.max(1, ...(breakdown ?? []).map((b) => b.count));
   const total = (breakdown ?? []).reduce((sum, b) => sum + b.count, 0);
 
@@ -352,13 +427,13 @@ function StatusBreakdownCard({ breakdown }: { breakdown: OrdersOverview["statusB
       <div className="flex items-center gap-2">
         <ListOrdered className="h-4 w-4 text-primary-600" />
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-          Orders by Status
+          Orders by Status — {rangeLabel}
         </h3>
       </div>
       {!breakdown ? (
         <Skeleton className="h-32 w-full" />
       ) : total === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No orders yet.</p>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">No orders in this period.</p>
       ) : (
         <div className="flex flex-col gap-3">
           {breakdown.map((b) => (

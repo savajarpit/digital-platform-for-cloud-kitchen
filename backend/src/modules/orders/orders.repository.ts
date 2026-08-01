@@ -268,13 +268,29 @@ export class OrdersRepository {
 
   async getStatusBreakdown(
     tenantId: string,
+    since: Date,
+    until: Date,
   ): Promise<{ status: OrderStatus; count: number }[]> {
     const grouped = await this.prisma.order.groupBy({
       by: ['status'],
-      where: { tenantId },
+      where: { tenantId, createdAt: { gte: since, lte: until } },
       _count: { _all: true },
     });
     return grouped.map((g) => ({ status: g.status, count: g._count._all }));
+  }
+
+  async getAllTimeRevenue(
+    tenantId: string,
+  ): Promise<{ orders: number; revenueInPaise: number }> {
+    const result = await this.prisma.order.aggregate({
+      where: { tenantId, paymentStatus: PaymentStatus.PAID },
+      _sum: { totalInPaise: true },
+      _count: { _all: true },
+    });
+    return {
+      orders: result._count._all,
+      revenueInPaise: result._sum.totalInPaise ?? 0,
+    };
   }
 
   async getTopMeals(

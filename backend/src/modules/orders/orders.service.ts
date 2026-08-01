@@ -348,13 +348,13 @@ export class OrdersService {
   /**
    * Admin dashboard summary — today/last-7-days revenue, an active-orders
    * count (needs kitchen/delivery attention right now), total customers,
-   * order-status breakdown, and a revenue trend + top-selling meals scoped
-   * to `query` (a `days` preset, default 14, or an explicit `from`/`to`
-   * custom range — `from`/`to` win if both are given). "Today"/"last 7
-   * days" are always the fixed rolling windows regardless of that range —
-   * they're headline KPIs, not part of what's being filtered. Rolling
-   * windows off `now`, not tenant-midnight-exact boundaries — precise
-   * enough for a dashboard, not a ledger.
+   * an all-time revenue total, and a revenue trend + order-status breakdown
+   * + top-selling meals all scoped to `query` (a `days` preset, default 14,
+   * or an explicit `from`/`to` custom range — `from`/`to` win if both are
+   * given). "Today"/"last 7 days" and "all-time revenue" are always fixed
+   * windows regardless of that range — they're headline KPIs, not part of
+   * what's being filtered. Rolling windows off `now`, not tenant-midnight-
+   * exact boundaries — precise enough for a dashboard, not a ledger.
    */
   async getOverview(tenantId: string, query: QueryOverviewDto) {
     const TOP_MEALS_COUNT = 15;
@@ -373,6 +373,7 @@ export class OrdersService {
       rangeOrders,
       activeOrders,
       totalCustomers,
+      allTimeRevenue,
       statusBreakdown,
       topMeals,
     ] = await Promise.all([
@@ -384,7 +385,8 @@ export class OrdersService {
       this.ordersRepo.findPaidOrdersInRange(tenantId, queryStart, queryEnd),
       this.ordersRepo.countActiveOrders(tenantId),
       this.usersRepo.countCustomers(tenantId),
-      this.ordersRepo.getStatusBreakdown(tenantId),
+      this.ordersRepo.getAllTimeRevenue(tenantId),
+      this.ordersRepo.getStatusBreakdown(tenantId, queryStart, queryEnd),
       this.ordersRepo.getTopMeals(
         tenantId,
         queryStart,
@@ -398,6 +400,7 @@ export class OrdersService {
       last7Days: sumOrdersSince(fixedWindowOrders, DateUtil.addDays(now, -7)),
       activeOrders,
       totalCustomers,
+      allTimeRevenue,
       revenueTrend: bucketOrdersByDay(
         rangeOrders,
         timezone,

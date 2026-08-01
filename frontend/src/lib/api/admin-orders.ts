@@ -71,6 +71,7 @@ export interface OrdersOverview {
   last7Days: { orders: number; revenueInPaise: number };
   activeOrders: number;
   totalCustomers: number;
+  allTimeRevenue: { orders: number; revenueInPaise: number };
   revenueTrend: { date: string; orders: number; revenueInPaise: number }[];
   statusBreakdown: { status: string; count: number }[];
   topMeals: { mealId: string | null; name: string; quantitySold: number }[];

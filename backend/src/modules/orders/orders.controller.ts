@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -31,12 +39,27 @@ export class OrdersController {
   }
 
   // Must come before @Get(':id') — otherwise "admin" would be parsed as an order id.
+  @Get('admin/overview')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('orders.manage')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Overview retrieved successfully')
+  @ApiOperation({
+    summary: 'Admin: revenue/orders/customers summary for the dashboard',
+  })
+  getOverview(@CurrentTenantId() tenantId: string) {
+    return this.ordersService.getOverview(tenantId);
+  }
+
   @Get('admin')
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
   @RequirePermission('orders.manage')
   @ApiBearerAuth('access-token')
   @ResponseMessage('Orders retrieved successfully')
-  @ApiOperation({ summary: 'Admin: list every order for this tenant (paginated, filterable by status)' })
+  @ApiOperation({
+    summary:
+      'Admin: list every order for this tenant (paginated, filterable by status)',
+  })
   findAllForAdmin(
     @CurrentTenantId() tenantId: string,
     @Query() query: QueryAdminOrdersDto,
@@ -90,7 +113,9 @@ export class OrdersController {
   @RequirePermission('orders.manage')
   @ApiBearerAuth('access-token')
   @ResponseMessage('Order status updated successfully')
-  @ApiOperation({ summary: 'Admin: progress an order through kitchen/delivery statuses' })
+  @ApiOperation({
+    summary: 'Admin: progress an order through kitchen/delivery statuses',
+  })
   updateStatus(
     @CurrentTenantId() tenantId: string,
     @Param('id') id: string,

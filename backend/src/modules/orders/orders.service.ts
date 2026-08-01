@@ -20,6 +20,7 @@ import { MealsService } from '../menu/meals.service';
 import { OrderAcceptanceService } from '../settings/order-acceptance.service';
 import { SettingsRepository } from '../settings/settings.repository';
 import { PromotionsService, CartMeal } from '../promotions/promotions.service';
+import { UsersRepository } from '../users/users.repository';
 import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-client.service';
 import { PaginationService } from '../../common/services/pagination.service';
 import { DateUtil } from '../../common/utils/date.util';
@@ -54,6 +55,7 @@ export class OrdersService {
     private readonly orderAcceptanceService: OrderAcceptanceService,
     private readonly settingsRepo: SettingsRepository,
     private readonly promotionsService: PromotionsService,
+    private readonly usersRepo: UsersRepository,
     private readonly razorpayClient: RazorpayClientService,
     private readonly pagination: PaginationService,
   ) {}
@@ -341,6 +343,82 @@ export class OrdersService {
     await this.ordersRepo.updateStatus(id, dto.status);
     return { ...order, status: dto.status };
   }
+
+  /**
+   * Admin dashboard summary — today/last-7-days revenue, an active-orders
+   * count (needs kitchen/delivery attention right now), total customers, a
+   * 14-day revenue trend, order-status breakdown, and top-selling meals.
+   * "Today"/"last 7 days" are rolling windows from now, not tenant-midnight-
+   * exact calendar boundaries — precise enough for a dashboard, not a ledger.
+   */
+  async getOverview(tenantId: string) {
+    const TREND_DAYS = 14;
+    const TOP_MEALS_COUNT = 5;
+    const now = DateUtil.now();
+    const trendSince = DateUtil.addDays(now, -TREND_DAYS);
+
+    const profile = await this.settingsRepo.findBusinessProfile(tenantId);
+    const timezone = profile?.timezone ?? 'Asia/Kolkata';
+
+    const [
+      recentPaidOrders,
+      activeOrders,
+      totalCustomers,
+      statusBreakdown,
+      topMeals,
+    ] = await Promise.all([
+      this.ordersRepo.findRecentPaidOrders(tenantId, trendSince),
+      this.ordersRepo.countActiveOrders(tenantId),
+      this.usersRepo.countCustomers(tenantId),
+      this.ordersRepo.getStatusBreakdown(tenantId),
+      this.ordersRepo.getTopMeals(tenantId, trendSince, TOP_MEALS_COUNT),
+    ]);
+
+    return {
+      today: sumOrdersSince(recentPaidOrders, DateUtil.addDays(now, -1)),
+      last7Days: sumOrdersSince(recentPaidOrders, DateUtil.addDays(now, -7)),
+      activeOrders,
+      totalCustomers,
+      revenueTrend: bucketOrdersByDay(recentPaidOrders, timezone, TREND_DAYS),
+      statusBreakdown,
+      topMeals,
+    };
+  }
+}
+
+function sumOrdersSince(
+  orders: { createdAt: Date; totalInPaise: number }[],
+  since: Date,
+): { orders: number; revenueInPaise: number } {
+  const inWindow = orders.filter((o) => o.createdAt >= since);
+  return {
+    orders: inWindow.length,
+    revenueInPaise: inWindow.reduce((sum, o) => sum + o.totalInPaise, 0),
+  };
+}
+
+function bucketOrdersByDay(
+  orders: { createdAt: Date; totalInPaise: number }[],
+  timezone: string,
+  days: number,
+): { date: string; orders: number; revenueInPaise: number }[] {
+  const buckets = new Map<string, { orders: number; revenueInPaise: number }>();
+  for (let i = days - 1; i >= 0; i--) {
+    const dateStr = DateUtil.toTenantDateStr(
+      DateUtil.addDays(DateUtil.now(), -i),
+      timezone,
+    );
+    buckets.set(dateStr, { orders: 0, revenueInPaise: 0 });
+  }
+  for (const order of orders) {
+    const bucket = buckets.get(
+      DateUtil.toTenantDateStr(order.createdAt, timezone),
+    );
+    if (!bucket) continue; // outside the seeded window (timezone-edge order) — drop, not a ledger
+    bucket.orders += 1;
+    bucket.revenueInPaise += order.totalInPaise;
+  }
+  return Array.from(buckets, ([date, stats]) => ({ date, ...stats }));
 }
 
 function generateOrderNumber(): string {

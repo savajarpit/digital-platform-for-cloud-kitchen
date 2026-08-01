@@ -231,4 +231,73 @@ export class OrdersRepository {
   updateStatus(id: string, status: OrderStatus): Promise<Order> {
     return this.prisma.order.update({ where: { id }, data: { status } });
   }
+
+  // ── Overview dashboard aggregates ─────────────────────────
+
+  /** Paid orders since `since` — the one raw dataset today/last-7-days/the revenue trend are all bucketed from. */
+  findRecentPaidOrders(
+    tenantId: string,
+    since: Date,
+  ): Promise<{ createdAt: Date; totalInPaise: number }[]> {
+    return this.prisma.order.findMany({
+      where: {
+        tenantId,
+        paymentStatus: PaymentStatus.PAID,
+        createdAt: { gte: since },
+      },
+      select: { createdAt: true, totalInPaise: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  countActiveOrders(tenantId: string): Promise<number> {
+    return this.prisma.order.count({
+      where: {
+        tenantId,
+        status: {
+          in: [
+            OrderStatus.CONFIRMED,
+            OrderStatus.PREPARING,
+            OrderStatus.OUT_FOR_DELIVERY,
+          ],
+        },
+      },
+    });
+  }
+
+  async getStatusBreakdown(
+    tenantId: string,
+  ): Promise<{ status: OrderStatus; count: number }[]> {
+    const grouped = await this.prisma.order.groupBy({
+      by: ['status'],
+      where: { tenantId },
+      _count: { _all: true },
+    });
+    return grouped.map((g) => ({ status: g.status, count: g._count._all }));
+  }
+
+  async getTopMeals(
+    tenantId: string,
+    since: Date,
+    take: number,
+  ): Promise<{ mealId: string | null; name: string; quantitySold: number }[]> {
+    const grouped = await this.prisma.orderItem.groupBy({
+      by: ['mealId', 'nameSnapshot'],
+      where: {
+        order: {
+          tenantId,
+          paymentStatus: PaymentStatus.PAID,
+          createdAt: { gte: since },
+        },
+      },
+      _sum: { quantity: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take,
+    });
+    return grouped.map((g) => ({
+      mealId: g.mealId,
+      name: g.nameSnapshot,
+      quantitySold: g._sum.quantity ?? 0,
+    }));
+  }
 }

@@ -58,6 +58,20 @@ export class DateUtil {
     return h * 60 + (m || 0);
   }
 
+  /** Any `Date` formatted as a `YYYY-MM-DD` calendar date in the given timezone — for bucketing historical rows (e.g. revenue-by-day), not just "now". */
+  static toTenantDateStr(date: Date, timezone: string): string {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(date);
+
+    const map: Record<string, string> = {};
+    for (const part of parts) map[part.type] = part.value;
+    return `${map.year}-${map.month}-${map.day}`;
+  }
+
   /** Day of week in the tenant's timezone, 0=Sun..6=Sat (matches Date#getDay()). */
   static getTenantDayOfWeek(timezone: string): number {
     const weekday = new Intl.DateTimeFormat('en-US', {

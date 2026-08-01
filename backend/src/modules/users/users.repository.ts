@@ -28,6 +28,12 @@ export class UsersRepository {
     });
   }
 
+  countCustomers(tenantId: string): Promise<number> {
+    return this.prisma.user.count({
+      where: { tenantId, role: Role.CUSTOMER, deletedAt: null },
+    });
+  }
+
   async findAll(
     tenantId: string,
     skip: number,
@@ -76,7 +82,11 @@ export class UsersRepository {
         take,
         orderBy: { createdAt: 'desc' },
         include: {
-          _count: { select: { orders: { where: { status: { not: 'PENDING_PAYMENT' } } } } },
+          _count: {
+            select: {
+              orders: { where: { status: { not: 'PENDING_PAYMENT' } } },
+            },
+          },
         },
       }),
       this.prisma.user.count({ where }),

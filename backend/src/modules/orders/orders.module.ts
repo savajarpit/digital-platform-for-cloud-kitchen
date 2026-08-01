@@ -6,6 +6,7 @@ import { AddressesModule } from '../addresses/addresses.module';
 import { MenuModule } from '../menu/menu.module';
 import { SettingsModule } from '../settings/settings.module';
 import { PromotionsModule } from '../promotions/promotions.module';
+import { UsersModule } from '../users/users.module';
 import { RazorpayClientModule } from '../../shared-modules/razorpay/razorpay-client.module';
 import { PaginationService } from '../../common/services/pagination.service';
 
@@ -15,6 +16,7 @@ import { PaginationService } from '../../common/services/pagination.service';
     MenuModule,
     SettingsModule,
     PromotionsModule,
+    UsersModule,
     RazorpayClientModule,
   ],
   controllers: [OrdersController],

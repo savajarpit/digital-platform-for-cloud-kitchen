@@ -35,6 +35,12 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
       'Lets a customer cancel their own subscription — no automatic refund, stops future deliveries only',
   },
   {
+    key: 'subscription-plan-time-lock',
+    name: 'Lock Subscription Delivery Times',
+    description:
+      'Hides delivery-time selection for subscription plans (at signup and per-day changes) — customers can still change the delivery address, not the time',
+  },
+  {
     key: 'delivery-management',
     name: 'Delivery Management',
     description: 'In-house delivery assignment and driver-scoped tracking',

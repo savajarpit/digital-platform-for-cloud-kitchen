@@ -30,10 +30,11 @@ export interface CreateOrderInput {
   items: OrderItemInput[];
   razorpayOrderId: string;
   deliveryDate: Date;
-  deliverySlotId: string;
+  deliverySlotId: string | null;
   deliverySlotName: string;
   deliveryWindowStart: string;
   deliveryWindowEnd: string;
+  isInstant?: boolean;
 }
 
 const ORDER_INCLUDE = {
@@ -97,6 +98,7 @@ export class OrdersRepository {
           deliverySlotName: input.deliverySlotName,
           deliveryWindowStart: input.deliveryWindowStart,
           deliveryWindowEnd: input.deliveryWindowEnd,
+          isInstant: input.isInstant ?? false,
           items: {
             create: input.items.map((item) => ({
               mealId: item.mealId,

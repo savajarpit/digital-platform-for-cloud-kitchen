@@ -222,32 +222,68 @@ export class OrdersService {
       ? 0
       : (serviceability.deliveryFeeInPaise ?? 0);
 
-    const [profile, slot] = await Promise.all([
-      this.settingsRepo.findBusinessProfile(tenantId),
-      this.settingsRepo.findDeliverySlotById(tenantId, dto.deliverySlotId),
-    ]);
-    if (!slot || !slot.isActive) {
-      throw new BadRequestException('Selected delivery slot is not available.');
-    }
-
+    const profile = await this.settingsRepo.findBusinessProfile(tenantId);
     const timezone = profile?.timezone ?? 'Asia/Kolkata';
-    const maxAdvanceOrderDays = profile?.maxAdvanceOrderDays ?? 2;
     const { dateStr: todayStr, minutesSinceMidnight: nowMinutes } =
       DateUtil.getTenantNow(timezone);
-    const maxDateStr = DateUtil.addDaysToDateStr(todayStr, maxAdvanceOrderDays);
 
-    if (dto.deliveryDate < todayStr || dto.deliveryDate > maxDateStr) {
-      throw new BadRequestException(
-        `Delivery date must be between ${todayStr} and ${maxDateStr}.`,
+    let deliveryDate: Date;
+    let deliverySlotId: string | null;
+    let deliverySlotName: string;
+    let deliveryWindowStart: string;
+    let deliveryWindowEnd: string;
+
+    if (dto.isInstant) {
+      const instantStatus =
+        await this.orderAcceptanceService.getInstantDeliveryStatus(tenantId);
+      if (!instantStatus.available) {
+        throw new BadRequestException(
+          instantStatus.reason ??
+            'Instant delivery is not available right now.',
+        );
+      }
+      deliveryDate = new Date(`${todayStr}T00:00:00.000Z`);
+      deliverySlotId = null;
+      deliverySlotName = 'Instant Delivery';
+      deliveryWindowStart = DateUtil.minutesToHHMM(
+        nowMinutes + instantStatus.etaMinMinutes,
       );
-    }
-    if (
-      dto.deliveryDate === todayStr &&
-      DateUtil.hhmmToMinutes(slot.startTime) <= nowMinutes
-    ) {
-      throw new BadRequestException(
-        'This delivery slot has already started today — pick a later slot or a future date.',
+      deliveryWindowEnd = DateUtil.minutesToHHMM(
+        nowMinutes + instantStatus.etaMaxMinutes,
       );
+    } else {
+      const slot = await this.settingsRepo.findDeliverySlotById(
+        tenantId,
+        dto.deliverySlotId!,
+      );
+      if (!slot || !slot.isActive) {
+        throw new BadRequestException(
+          'Selected delivery slot is not available.',
+        );
+      }
+      const maxAdvanceOrderDays = profile?.maxAdvanceOrderDays ?? 2;
+      const maxDateStr = DateUtil.addDaysToDateStr(
+        todayStr,
+        maxAdvanceOrderDays,
+      );
+      if (dto.deliveryDate! < todayStr || dto.deliveryDate! > maxDateStr) {
+        throw new BadRequestException(
+          `Delivery date must be between ${todayStr} and ${maxDateStr}.`,
+        );
+      }
+      if (
+        dto.deliveryDate === todayStr &&
+        DateUtil.hhmmToMinutes(slot.startTime) <= nowMinutes
+      ) {
+        throw new BadRequestException(
+          'This delivery slot has already started today — pick a later slot or a future date.',
+        );
+      }
+      deliveryDate = new Date(`${dto.deliveryDate}T00:00:00.000Z`);
+      deliverySlotId = slot.id;
+      deliverySlotName = slot.name;
+      deliveryWindowStart = slot.startTime;
+      deliveryWindowEnd = slot.endTime;
     }
 
     const totalInPaise = effectiveSubtotalInPaise + deliveryFeeInPaise;
@@ -280,11 +316,12 @@ export class OrdersService {
       notes: dto.notes,
       items: pricing.items,
       razorpayOrderId,
-      deliveryDate: new Date(`${dto.deliveryDate}T00:00:00.000Z`),
-      deliverySlotId: slot.id,
-      deliverySlotName: slot.name,
-      deliveryWindowStart: slot.startTime,
-      deliveryWindowEnd: slot.endTime,
+      deliveryDate,
+      deliverySlotId,
+      deliverySlotName,
+      deliveryWindowStart,
+      deliveryWindowEnd,
+      isInstant: dto.isInstant ?? false,
     });
 
     return { order, razorpayOrderId, razorpayKeyId: keyId };

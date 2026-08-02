@@ -35,6 +35,7 @@ export interface Order {
   deliverySlotName: string;
   deliveryWindowStart: string;
   deliveryWindowEnd: string;
+  isInstant: boolean;
   razorpayOrderId: string | null;
   notes: string | null;
   createdAt: string;
@@ -46,8 +47,9 @@ export interface CreateOrderInput {
   addressId: string;
   items: { mealId: string; quantity: number }[];
   notes?: string;
-  deliveryDate: string;
-  deliverySlotId: string;
+  isInstant?: boolean;
+  deliveryDate?: string;
+  deliverySlotId?: string;
   couponCode?: string;
 }
 

@@ -26,6 +26,11 @@ import { UpdateSubscriptionSettingsDto } from './dto/update-subscription-setting
 
 const PREVIEW_DAYS_AHEAD = 14;
 const CANCEL_FEATURE_KEY = 'subscription-self-cancel';
+// SUPER_ADMIN opt-in — presence of the grant HIDES delivery-time selection
+// (both at signup and per-day overrides) rather than unlocking it, so a
+// brand-new tenant with no grant row keeps today's working behavior instead
+// of silently losing the time picker the moment this feature key exists.
+const TIME_LOCK_FEATURE_KEY = 'subscription-plan-time-lock';
 
 @Injectable()
 export class SubscriptionsService {
@@ -186,7 +191,43 @@ export class SubscriptionsService {
       id,
     );
     if (!plan) throw new NotFoundException('Plan not found');
-    return plan;
+    const timeLocked = await this.featuresService.hasFeature(
+      tenantId,
+      TIME_LOCK_FEATURE_KEY,
+    );
+    return { ...plan, timeSelectionEnabled: !timeLocked };
+  }
+
+  // ─── Admin: kitchen prep planner ─────────────────────────
+
+  /** Projected quantities for a specific plan-template day, independent of
+   * calendar dates — (active subscriber count on this plan) x (that day's
+   * meals). Deliberately NOT a real-date projection: subscribers start on
+   * staggered days, so "who's actually on day 3 next Tuesday" would need a
+   * full per-subscriber simulation. This answers the simpler, more useful
+   * question an owner actually asks: "if everyone on this plan hits day N,
+   * what do I prepare?" */
+  async getPrepPlan(tenantId: string, planId: string, dayNumber: number) {
+    const plan = await this.subscriptionsRepo.findPlanByIdAdmin(
+      tenantId,
+      planId,
+    );
+    if (!plan) throw new NotFoundException('Plan not found');
+
+    const [day, subscriberCount] = await Promise.all([
+      this.subscriptionsRepo.findPlanDayWithSlots(planId, dayNumber),
+      this.subscriptionsRepo.countActiveSubscriptionsForPlan(tenantId, planId),
+    ]);
+
+    const items = (day?.slots ?? [])
+      .filter((slot) => slot.meal)
+      .map((slot) => ({
+        slotType: slot.slotType,
+        mealName: slot.meal!.name,
+        quantity: subscriberCount,
+      }));
+
+    return { planId, planName: plan.name, dayNumber, subscriberCount, items };
   }
 
   // ─── Subscribe + payment ─────────────────────────────────
@@ -211,6 +252,15 @@ export class SubscriptionsService {
     await this.addressesService.findOne(tenantId, userId, dto.addressId);
 
     if (dto.deliverySlotId) {
+      const timeLocked = await this.featuresService.hasFeature(
+        tenantId,
+        TIME_LOCK_FEATURE_KEY,
+      );
+      if (timeLocked) {
+        throw new BadRequestException(
+          'Delivery time selection is disabled for subscription plans — only address changes are available.',
+        );
+      }
       const slot = await this.subscriptionsRepo.findDeliverySlotById(
         tenantId,
         dto.deliverySlotId,
@@ -352,14 +402,30 @@ export class SubscriptionsService {
     );
     if (!subscription) throw new NotFoundException('Subscription not found');
 
-    const [timezone, addresses, deliverySlots, canCancel] = await Promise.all([
-      this.getTenantTimezone(tenantId),
-      this.addressesService.findAll(tenantId, userId),
-      this.settingsRepo.findActiveDeliverySlots(tenantId),
-      this.featuresService.hasFeature(tenantId, CANCEL_FEATURE_KEY),
-    ]);
-    const upcoming = buildUpcomingPreview(subscription, timezone);
-    return { ...subscription, upcoming, addresses, deliverySlots, canCancel };
+    const timezone = await this.getTenantTimezone(tenantId);
+    const [addresses, deliverySlots, canCancel, timeLocked, earliest] =
+      await Promise.all([
+        this.addressesService.findAll(tenantId, userId),
+        this.settingsRepo.findActiveDeliverySlots(tenantId),
+        this.featuresService.hasFeature(tenantId, CANCEL_FEATURE_KEY),
+        this.featuresService.hasFeature(tenantId, TIME_LOCK_FEATURE_KEY),
+        this.getEarliestEditableDate(tenantId, timezone),
+      ]);
+    const canOverrideTime = !timeLocked;
+    const upcoming = buildUpcomingPreview(
+      subscription,
+      timezone,
+      earliest.dateStr,
+    );
+    return {
+      ...subscription,
+      upcoming,
+      addresses,
+      deliverySlots,
+      canCancel,
+      canOverrideTime,
+      earliestEditableDate: earliest.dateStr,
+    };
   }
 
   async getInvoice(tenantId: string, userId: string, id: string) {
@@ -451,6 +517,15 @@ export class SubscriptionsService {
       await this.addressesService.findOne(tenantId, userId, dto.addressId);
     }
     if (dto.deliverySlotId) {
+      const timeLocked = await this.featuresService.hasFeature(
+        tenantId,
+        TIME_LOCK_FEATURE_KEY,
+      );
+      if (timeLocked) {
+        throw new BadRequestException(
+          'Delivery time selection is disabled for subscription plans — only address changes are available.',
+        );
+      }
       const slot = await this.subscriptionsRepo.findDeliverySlotById(
         tenantId,
         dto.deliverySlotId,
@@ -498,7 +573,25 @@ export class SubscriptionsService {
   /** The single lead-time rule governing skip/pause/day-override edits —
    * a change must land at least noticeHoursBeforeDelivery from now, a real
    * date-string comparison rather than an instant race against the nightly
-   * cron's own fixed run time. */
+   * cron's own fixed run time. Shared with findMySubscription() so the
+   * frontend can grey out unchangeable days up front instead of letting the
+   * customer submit and land on a rejection. */
+  private async getEarliestEditableDate(
+    tenantId: string,
+    timezone: string,
+  ): Promise<{ dateStr: string; noticeHours: number }> {
+    const settings = await this.subscriptionsRepo.findSettings(tenantId);
+    const noticeHours = settings?.noticeHoursBeforeDelivery ?? 24;
+    const earliestInstant = DateUtil.addMinutes(
+      DateUtil.now(),
+      noticeHours * 60,
+    );
+    return {
+      dateStr: DateUtil.toTenantDateStr(earliestInstant, timezone),
+      noticeHours,
+    };
+  }
+
   private async assertWithinNoticeWindow(
     tenantId: string,
     dateStr: string,
@@ -508,13 +601,8 @@ export class SubscriptionsService {
     if (dateStr < todayStr) {
       throw new BadRequestException('Cannot change a date in the past');
     }
-    const settings = await this.subscriptionsRepo.findSettings(tenantId);
-    const noticeHours = settings?.noticeHoursBeforeDelivery ?? 24;
-    const earliestInstant = DateUtil.addMinutes(
-      DateUtil.now(),
-      noticeHours * 60,
-    );
-    const earliestDateStr = DateUtil.toTenantDateStr(earliestInstant, timezone);
+    const { dateStr: earliestDateStr, noticeHours } =
+      await this.getEarliestEditableDate(tenantId, timezone);
     if (dateStr < earliestDateStr) {
       throw new BadRequestException(
         `Changes need at least ${noticeHours}h notice — the earliest editable day is ${earliestDateStr}.`,
@@ -540,6 +628,10 @@ export interface UpcomingPreviewDay {
   addressId: string;
   deliverySlotId: string | null;
   isOverridden: boolean;
+  /** Too close to delivery to skip/pause/override — the notice window has
+   * already passed. The frontend should hide those controls and explain
+   * why instead of letting the customer submit and hit a rejection. */
+  locked: boolean;
 }
 
 /** Projects the next PREVIEW_DAYS_AHEAD calendar days (capped at cycleEnd) —
@@ -575,6 +667,7 @@ function buildUpcomingPreview(
     };
   },
   timezone: string,
+  earliestEditableDateStr: string,
 ): UpcomingPreviewDay[] {
   if (!subscription.cycleEnd || !subscription.startDate) return [];
   const { dateStr: todayStr } = DateUtil.getTenantNow(timezone);
@@ -605,6 +698,7 @@ function buildUpcomingPreview(
     const addressId = override?.addressId ?? subscription.addressId;
     const deliverySlotId =
       override?.deliverySlotId ?? subscription.deliverySlotId ?? null;
+    const locked = cursor < earliestEditableDateStr;
 
     if (skip) {
       preview.push({
@@ -614,6 +708,7 @@ function buildUpcomingPreview(
         addressId,
         deliverySlotId,
         isOverridden: Boolean(override),
+        locked,
       });
     } else {
       const templateDayNumber =
@@ -632,6 +727,7 @@ function buildUpcomingPreview(
         addressId,
         deliverySlotId,
         isOverridden: Boolean(override),
+        locked,
       });
       counter += 1;
     }

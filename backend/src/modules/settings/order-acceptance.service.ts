@@ -7,6 +7,13 @@ export interface OrderWindowStatus {
   reason?: string;
 }
 
+export interface InstantDeliveryStatus {
+  available: boolean;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+  reason?: string;
+}
+
 const STATUS_CACHE_TTL_SECONDS = 60;
 const WEEKDAY_MAP: Record<string, string> = {
   Mon: 'mon',
@@ -63,6 +70,38 @@ export class OrderAcceptanceService {
   /** Called after an admin edits operating hours/timezone — the cached status would otherwise be stale for up to 60s. */
   async invalidateCache(tenantId: string): Promise<void> {
     await this.redis.del(`order-window:${tenantId}`);
+  }
+
+  /** Instant delivery is available only when the owner has turned it on
+   * AND the kitchen is within its normal working hours — reuses getStatus()
+   * rather than duplicating the operating-hours math, so the two can never
+   * disagree about whether the kitchen is currently open. */
+  async getInstantDeliveryStatus(
+    tenantId: string,
+  ): Promise<InstantDeliveryStatus> {
+    const [settings, windowStatus] = await Promise.all([
+      this.settingsRepo.findInstantDeliverySettings(tenantId),
+      this.getStatus(tenantId),
+    ]);
+    const etaMinMinutes = settings?.etaMinMinutes ?? 30;
+    const etaMaxMinutes = settings?.etaMaxMinutes ?? 45;
+    if (!settings?.isEnabled) {
+      return {
+        available: false,
+        etaMinMinutes,
+        etaMaxMinutes,
+        reason: 'Instant delivery is not offered right now.',
+      };
+    }
+    if (!windowStatus.isAcceptingOrders) {
+      return {
+        available: false,
+        etaMinMinutes,
+        etaMaxMinutes,
+        reason: windowStatus.reason ?? 'Kitchen is currently closed.',
+      };
+    }
+    return { available: true, etaMinMinutes, etaMaxMinutes };
   }
 
   private async computeStatus(tenantId: string): Promise<OrderWindowStatus> {

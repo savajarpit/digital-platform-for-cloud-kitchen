@@ -378,6 +378,17 @@ export class SubscriptionsRepository {
     });
   }
 
+  /** Active subscriber count for a plan — the multiplier behind the kitchen
+   * prep planner's per-day meal quantities. */
+  countActiveSubscriptionsForPlan(
+    tenantId: string,
+    planId: string,
+  ): Promise<number> {
+    return this.prisma.subscription.count({
+      where: { tenantId, planId, status: SubscriptionStatus.ACTIVE },
+    });
+  }
+
   async createMaterializedOrder(input: {
     tenantId: string;
     userId: string;

@@ -69,6 +69,16 @@ export class DateUtil {
     return h * 60 + (m || 0);
   }
 
+  /** Minutes since midnight → "HH:mm", wrapping past 23:59 back to 00:00 —
+   * an instant-delivery ETA window computed a few minutes before midnight
+   * should still render a valid clock time rather than "24:07". */
+  static minutesToHHMM(minutes: number): string {
+    const wrapped = ((minutes % 1440) + 1440) % 1440;
+    const h = Math.floor(wrapped / 60);
+    const m = wrapped % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
   /** Any `Date` formatted as a `YYYY-MM-DD` calendar date in the given timezone — for bucketing historical rows (e.g. revenue-by-day), not just "now". */
   static toTenantDateStr(date: Date, timezone: string): string {
     const parts = new Intl.DateTimeFormat('en-US', {

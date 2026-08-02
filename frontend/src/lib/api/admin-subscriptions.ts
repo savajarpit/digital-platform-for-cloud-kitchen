@@ -166,3 +166,18 @@ export function updateSubscriptionSettings(
 export function getTodaysDeliveries(): Promise<TodaysDeliveries> {
   return proxyFetch<TodaysDeliveries>("/subscriptions/admin/today");
 }
+
+export interface PrepPlan {
+  planId: string;
+  planName: string;
+  dayNumber: number;
+  subscriberCount: number;
+  items: { slotType: MealSlotType; mealName: string; quantity: number }[];
+}
+
+/** Projected quantities for a plan's template day = active subscriber count x that day's meals — independent of calendar dates, since subscribers start on staggered days. */
+export function getPrepPlan(planId: string, dayNumber: number): Promise<PrepPlan> {
+  return proxyFetch<PrepPlan>(
+    `/subscriptions/admin/prep-plan?planId=${encodeURIComponent(planId)}&dayNumber=${dayNumber}`,
+  );
+}

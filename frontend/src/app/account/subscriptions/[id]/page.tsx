@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   FileText,
   ImageOff,
+  Lock,
   MapPin,
   SkipForward,
 } from "lucide-react";
@@ -26,6 +27,7 @@ import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { formatTime12h } from "@/lib/format/time";
 
 const SLOT_LABELS: Record<string, string> = {
   BREAKFAST: "Breakfast",
@@ -214,6 +216,12 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 Paused days are banked — your plan simply runs that many days longer once resumed.
+                Changes need at least a day&apos;s notice, so the earliest start is{" "}
+                {new Date(subscription.earliestEditableDate).toLocaleDateString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                })}
+                .
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex flex-col gap-1">
@@ -222,7 +230,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     type="date"
                     value={pauseFrom}
                     onChange={(e) => setPauseFrom(e.target.value)}
-                    min={new Date().toISOString().slice(0, 10)}
+                    min={subscription.earliestEditableDate}
                     className="input"
                   />
                 </div>
@@ -232,7 +240,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     type="date"
                     value={pauseTo}
                     onChange={(e) => setPauseTo(e.target.value)}
-                    min={pauseFrom || new Date().toISOString().slice(0, 10)}
+                    min={pauseFrom || subscription.earliestEditableDate}
                     className="input"
                   />
                 </div>
@@ -290,6 +298,10 @@ function DayCard({
 
   const address = subscription.addresses.find((a) => a.id === day.addressId);
   const slot = subscription.deliverySlots.find((s) => s.id === day.deliverySlotId);
+  // A single delivery window can't realistically cover breakfast AND dinner —
+  // only offer a time change when the day has at most one meal, and only if
+  // the tenant hasn't had time-selection locked platform-side.
+  const canChangeTime = subscription.canOverrideTime && day.meals.length <= 1;
 
   return (
     <div className="rounded-lg border border-zinc-100 dark:border-zinc-800">
@@ -320,6 +332,12 @@ function DayCard({
                 Changed
               </span>
             )}
+            {day.locked && (
+              <span className="badge inline-flex items-center gap-1 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+                <Lock className="h-3 w-3" />
+                Locked
+              </span>
+            )}
             {!day.skipped && day.meals.length > 0 && (
               <span className="text-xs text-zinc-400">
                 {day.meals.length} meal{day.meals.length === 1 ? "" : "s"}
@@ -331,7 +349,7 @@ function DayCard({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {!day.skipped && (
+          {!day.skipped && !day.locked && (
             <button
               type="button"
               onClick={(e) => {
@@ -385,54 +403,66 @@ function DayCard({
             <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>
               {address ? `${address.line1}, ${address.city}` : "Address unavailable"}
-              {slot && ` · ${slot.name} (${slot.startTime}–${slot.endTime})`}
+              {slot && ` · ${slot.name} (${formatTime12h(slot.startTime)}–${formatTime12h(slot.endTime)})`}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Change address for this day
-              </label>
-              <select
-                value={addressId}
-                onChange={(e) => setAddressId(e.target.value)}
-                className="input py-1.5 text-sm"
-              >
-                {subscription.addresses.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.label ? `${a.label} — ` : ""}
-                    {a.line1}, {a.city}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Change time for this day
-              </label>
-              <select
-                value={slotId}
-                onChange={(e) => setSlotId(e.target.value)}
-                className="input py-1.5 text-sm"
-              >
-                <option value="">No preference</option>
-                {subscription.deliverySlots.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.startTime}–{s.endTime})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="button"
-              onClick={() => onSaveOverride(addressId, slotId)}
-              disabled={busy}
-              className="btn-primary btn-sm"
+          {day.locked ? (
+            <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+              Too close to delivery to change — this day is locked.
+            </p>
+          ) : (
+            <div
+              className={`grid grid-cols-1 gap-2 sm:items-end ${
+                canChangeTime ? "sm:grid-cols-[1fr_1fr_auto]" : "sm:grid-cols-[1fr_auto]"
+              }`}
             >
-              Save
-            </button>
-          </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Change address for this day
+                </label>
+                <select
+                  value={addressId}
+                  onChange={(e) => setAddressId(e.target.value)}
+                  className="input py-1.5 text-sm"
+                >
+                  {subscription.addresses.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label ? `${a.label} — ` : ""}
+                      {a.line1}, {a.city}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {canChangeTime && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Change time for this day
+                  </label>
+                  <select
+                    value={slotId}
+                    onChange={(e) => setSlotId(e.target.value)}
+                    className="input py-1.5 text-sm"
+                  >
+                    <option value="">No preference</option>
+                    {subscription.deliverySlots.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({formatTime12h(s.startTime)}–{formatTime12h(s.endTime)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => onSaveOverride(addressId, canChangeTime ? slotId : "")}
+                disabled={busy}
+                className="btn-primary btn-sm"
+              >
+                Save
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

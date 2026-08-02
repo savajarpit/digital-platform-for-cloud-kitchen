@@ -8,6 +8,7 @@ import { SettingsRepository } from './settings.repository';
 import {
   BusinessProfile,
   DeliverySlot,
+  InstantDeliverySettings,
   NotificationSettings,
   OrderAcceptanceSettings,
   PaymentSettings,
@@ -20,6 +21,7 @@ import {
 } from './dto/public-config-response.dto';
 import { UpdateBusinessProfileDto } from './dto/update-business-profile.dto';
 import { UpdateOrderAcceptanceDto } from './dto/update-order-acceptance.dto';
+import { UpdateInstantDeliverySettingsDto } from './dto/update-instant-delivery-settings.dto';
 import { UpdateDeliveryZonesDto } from './dto/update-delivery-zones.dto';
 import { CreateServiceablePincodeDto } from './dto/create-serviceable-pincode.dto';
 import { UpdateServiceablePincodeDto } from './dto/update-serviceable-pincode.dto';
@@ -131,6 +133,33 @@ export class SettingsService {
         ? { operatingHours: operatingHours as unknown as Prisma.InputJsonValue }
         : {}),
     });
+  }
+
+  // ── Instant delivery ──────────────────────────────────────
+
+  async getInstantDeliverySettings(
+    tenantId: string,
+  ): Promise<InstantDeliverySettings> {
+    const settings =
+      await this.settingsRepo.findInstantDeliverySettings(tenantId);
+    return (
+      settings ?? {
+        id: '',
+        tenantId,
+        isEnabled: false,
+        etaMinMinutes: 30,
+        etaMaxMinutes: 45,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      }
+    );
+  }
+
+  updateInstantDeliverySettings(
+    tenantId: string,
+    dto: UpdateInstantDeliverySettingsDto,
+  ): Promise<InstantDeliverySettings> {
+    return this.settingsRepo.upsertInstantDeliverySettings(tenantId, dto);
   }
 
   // ── Delivery zones (kitchen geo, fees, advance-order window) ─

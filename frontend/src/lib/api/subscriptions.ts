@@ -26,6 +26,7 @@ export interface PlanDetail {
   durationDays: number;
   priceInPaise: number;
   days: PlanDay[];
+  timeSelectionEnabled: boolean;
 }
 
 export interface UpcomingPreviewDay {
@@ -35,6 +36,8 @@ export interface UpcomingPreviewDay {
   addressId: string;
   deliverySlotId: string | null;
   isOverridden: boolean;
+  /** Too close to delivery to skip/pause/override — hide the controls and explain why instead of letting the request fail. */
+  locked: boolean;
 }
 
 export interface SubscriptionSummary {
@@ -63,6 +66,10 @@ export interface SubscriptionDetail extends SubscriptionSummary {
   addresses: Address[];
   deliverySlots: DeliverySlot[];
   canCancel: boolean;
+  /** False when the SUPER_ADMIN has locked delivery-time selection for this tenant's plans — only address changes remain available. */
+  canOverrideTime: boolean;
+  /** The earliest date (YYYY-MM-DD) a skip/pause/override can still target — anything before this is within the notice window and should show as locked, not be submitted and rejected. */
+  earliestEditableDate: string;
 }
 
 export interface SubscriptionInvoice {

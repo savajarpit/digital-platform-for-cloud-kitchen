@@ -19,6 +19,7 @@ import { UpdatePlanDto } from './dto/update-plan.dto';
 import { UpsertPlanDaysDto } from './dto/upsert-plan-days.dto';
 import { PublishPlanDto } from './dto/publish-plan.dto';
 import { QueryAdminPlansDto } from './dto/query-admin-plans.dto';
+import { QueryPrepPlanDto } from './dto/query-prep-plan.dto';
 import { SubscribeDto } from './dto/subscribe.dto';
 import { VerifyPlanPaymentDto } from './dto/verify-plan-payment.dto';
 import { SkipDayDto } from './dto/skip-day.dto';
@@ -235,6 +236,27 @@ export class SubscriptionsController {
   })
   getTodaysDeliveries(@CurrentTenantId() tenantId: string) {
     return this.subscriptionsService.getTodaysDeliveries(tenantId);
+  }
+
+  @Get('admin/prep-plan')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Prep plan retrieved successfully')
+  @ApiOperation({
+    summary:
+      "Admin: projected meal quantities for a plan's template day — active subscriber count x that day's meals",
+  })
+  getPrepPlan(
+    @CurrentTenantId() tenantId: string,
+    @Query() query: QueryPrepPlanDto,
+  ) {
+    return this.subscriptionsService.getPrepPlan(
+      tenantId,
+      query.planId,
+      query.dayNumber,
+    );
   }
 
   // ─── Customer ──────────────────────────────────────────────

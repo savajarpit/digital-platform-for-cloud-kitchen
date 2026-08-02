@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import {
   BusinessProfile,
   DeliverySlot,
+  InstantDeliverySettings,
   NotificationSettings,
   OrderAcceptanceSettings,
   PaymentSettings,
@@ -72,6 +73,25 @@ export class SettingsRepository {
     data: Omit<Prisma.PaymentSettingsUncheckedCreateInput, 'tenantId'>,
   ): Promise<PaymentSettings> {
     return this.prisma.paymentSettings.upsert({
+      where: { tenantId },
+      update: data,
+      create: { ...data, tenantId },
+    });
+  }
+
+  findInstantDeliverySettings(
+    tenantId: string,
+  ): Promise<InstantDeliverySettings | null> {
+    return this.prisma.instantDeliverySettings.findUnique({
+      where: { tenantId },
+    });
+  }
+
+  upsertInstantDeliverySettings(
+    tenantId: string,
+    data: Omit<Prisma.InstantDeliverySettingsUncheckedCreateInput, 'tenantId'>,
+  ): Promise<InstantDeliverySettings> {
+    return this.prisma.instantDeliverySettings.upsert({
       where: { tenantId },
       update: data,
       create: { ...data, tenantId },

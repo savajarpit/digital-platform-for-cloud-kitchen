@@ -3,7 +3,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Clock, Tag } from "lucide-react";
+import { CalendarClock, Clock, ImageOff, Tag } from "lucide-react";
 import {
   ApiError,
   getPlan,
@@ -19,6 +19,7 @@ import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { formatTime12h } from "@/lib/format/time";
 
 const SLOT_LABELS: Record<string, string> = {
   BREAKFAST: "Breakfast",
@@ -167,24 +168,39 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                 <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                   Day {day.dayNumber}
                 </h3>
-                <div className="mt-2 flex flex-col gap-1.5">
+                <div className="mt-3 flex flex-col gap-3">
                   {day.slots.length === 0 ? (
-                    <p className="text-xs text-zinc-400">No meals set for this day yet.</p>
+                    <p className="text-xs text-zinc-400 italic">Meals for this day to be decided.</p>
                   ) : (
                     day.slots.map((slot) => (
-                      <div key={slot.id} className="flex items-center justify-between text-sm">
-                        <span className="text-zinc-500 dark:text-zinc-400">
-                          {SLOT_LABELS[slot.slotType] ?? slot.slotType}
-                        </span>
-                        <span
-                          className={
-                            slot.meal
-                              ? "font-medium text-zinc-900 dark:text-zinc-100"
-                              : "text-zinc-400 italic dark:text-zinc-500"
-                          }
-                        >
-                          {slot.meal?.name ?? "Meal to be announced"}
-                        </span>
+                      <div key={slot.id} className="flex items-center gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
+                          {slot.meal?.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={slot.meal.imageUrl}
+                              alt={slot.meal.name}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <ImageOff className="h-5 w-5 text-zinc-300 dark:text-zinc-600" strokeWidth={1.5} />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs text-zinc-400">
+                            {SLOT_LABELS[slot.slotType] ?? slot.slotType}
+                          </p>
+                          <p
+                            className={
+                              slot.meal
+                                ? "truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
+                                : "truncate text-sm text-zinc-400 italic dark:text-zinc-500"
+                            }
+                          >
+                            {slot.meal?.name ?? "Meal to be announced"}
+                          </p>
+                        </div>
                       </div>
                     ))
                   )}
@@ -231,7 +247,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                   ))}
                 </select>
               </div>
-              {deliverySlots.length > 0 && (
+              {plan.timeSelectionEnabled && deliverySlots.length > 0 && (
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                     Delivery time (every day, unless changed later)
@@ -244,7 +260,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                     <option value="">No preference</option>
                     {deliverySlots.map((slot) => (
                       <option key={slot.id} value={slot.id}>
-                        {slot.name} ({slot.startTime}–{slot.endTime})
+                        {slot.name} ({formatTime12h(slot.startTime)}–{formatTime12h(slot.endTime)})
                       </option>
                     ))}
                   </select>

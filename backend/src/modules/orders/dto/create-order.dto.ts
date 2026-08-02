@@ -1,6 +1,7 @@
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -8,6 +9,7 @@ import {
   Matches,
   Min,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -42,20 +44,33 @@ export class CreateOrderDto {
   @MaxLength(500)
   notes?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
+    description:
+      'Deliver as soon as possible instead of a picked day/slot — requires the tenant to have instant delivery enabled and the kitchen open right now',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isInstant?: boolean;
+
+  @ApiPropertyOptional({
     example: '2026-07-27',
     description:
-      "Requested delivery date, YYYY-MM-DD, in the tenant's timezone",
+      "Requested delivery date, YYYY-MM-DD, in the tenant's timezone — required unless isInstant is true",
   })
+  @ValidateIf((o: CreateOrderDto) => !o.isInstant)
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, {
     message: 'deliveryDate must be in YYYY-MM-DD format',
   })
-  deliveryDate: string;
+  deliveryDate?: string;
 
-  @ApiProperty({ example: 'b3f1c2a0-...' })
+  @ApiPropertyOptional({
+    example: 'b3f1c2a0-...',
+    description: 'Required unless isInstant is true',
+  })
+  @ValidateIf((o: CreateOrderDto) => !o.isInstant)
   @IsUUID()
-  deliverySlotId: string;
+  deliverySlotId?: string;
 
   @ApiPropertyOptional({ example: 'WELCOME10' })
   @IsOptional()

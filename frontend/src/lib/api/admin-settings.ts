@@ -123,6 +123,31 @@ export function updateOrderAcceptance(
   });
 }
 
+export interface InstantDeliverySettings {
+  isEnabled: boolean;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+}
+
+export interface UpdateInstantDeliveryInput {
+  isEnabled?: boolean;
+  etaMinMinutes?: number;
+  etaMaxMinutes?: number;
+}
+
+export function getInstantDeliverySettings(): Promise<InstantDeliverySettings> {
+  return proxyFetch<InstantDeliverySettings>("/settings/instant-delivery");
+}
+
+export function updateInstantDeliverySettings(
+  input: UpdateInstantDeliveryInput,
+): Promise<InstantDeliverySettings> {
+  return proxyFetch<InstantDeliverySettings>("/settings/instant-delivery", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 // ── Delivery zones (kitchen geo, fees, advance window) ────────
 
 export interface UpdateDeliveryZonesInput {

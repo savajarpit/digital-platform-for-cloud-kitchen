@@ -73,7 +73,11 @@
     "applying": "Applying…",
     "remove": "Remove",
     "couponApplied": "Coupon \"{code}\" applied",
-    "discount": "Discount"
+    "discount": "Discount",
+    "instantDelivery": "Instant delivery",
+    "instantDeliveryEta": "Ready in {min}–{max} min",
+    "scheduleForLater": "Schedule for later",
+    "instantDeliveryUnavailable": "Instant delivery isn't available right now — pick a day and slot below."
   },
   "address": {
     "title": "Delivery Addresses",

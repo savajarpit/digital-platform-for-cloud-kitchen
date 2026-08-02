@@ -4,14 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, Clock, MapPin, Plus } from "lucide-react";
+import { CheckCircle2, Clock, MapPin, Plus, Zap } from "lucide-react";
 import { useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { ApiError, listAddresses, checkServiceability, type Address, type ServiceabilityResult } from "@/lib/api/addresses";
 import { createOrder, previewOrder } from "@/lib/api/orders";
 import { verifyPayment } from "@/lib/api/payments";
 import { getOrderWindowStatus } from "@/lib/api/order-window";
-import { getDeliverySlots, type DeliverySlot } from "@/lib/api/delivery-slots";
+import {
+  getDeliverySlots,
+  getInstantDeliveryStatus,
+  type DeliverySlot,
+  type InstantDeliveryStatus,
+} from "@/lib/api/delivery-slots";
 import { formatTime12h, hhmmToMinutes } from "@/lib/format/time";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { AddressForm } from "@/components/addresses/AddressForm";
@@ -38,6 +43,8 @@ export default function CheckoutPage() {
   const [dayOptions, setDayOptions] = useState<{ value: string; label: string }[]>([]);
   const [selectedDay, setSelectedDay] = useState("");
   const [selectedSlotId, setSelectedSlotId] = useState("");
+  const [instantStatus, setInstantStatus] = useState<InstantDeliveryStatus | null>(null);
+  const [isInstant, setIsInstant] = useState(false);
   const [todayStr, setTodayStr] = useState("");
   const [nowMinutes, setNowMinutes] = useState(0);
   const [couponInput, setCouponInput] = useState("");
@@ -54,6 +61,15 @@ export default function CheckoutPage() {
     getOrderWindowStatus().then((status) => {
       if (!status.isAcceptingOrders) setWindowClosed(status.reason ?? "Not currently accepting orders");
     });
+
+    // Auto-selected by default whenever it's actually available — the
+    // customer can still switch to scheduling a later day/slot instead.
+    getInstantDeliveryStatus()
+      .then((status) => {
+        setInstantStatus(status);
+        setIsInstant(status.available);
+      })
+      .catch(() => setInstantStatus({ available: false, etaMinMinutes: 30, etaMaxMinutes: 45 }));
 
     getDeliverySlots().then((config) => {
       const now = new Date();
@@ -167,14 +183,16 @@ export default function CheckoutPage() {
   }
 
   async function handlePlaceOrder() {
-    if (!selectedAddressId || !selectedDay || !effectiveSlotId) return;
+    if (!selectedAddressId) return;
+    if (!isInstant && (!selectedDay || !effectiveSlotId)) return;
     setIsPlacingOrder(true);
     try {
       const { order, razorpayOrderId, razorpayKeyId } = await createOrder({
         addressId: selectedAddressId,
         items: items.map((i) => ({ mealId: i.mealId, quantity: i.quantity })),
-        deliveryDate: selectedDay,
-        deliverySlotId: effectiveSlotId,
+        ...(isInstant
+          ? { isInstant: true }
+          : { deliveryDate: selectedDay, deliverySlotId: effectiveSlotId }),
         couponCode: appliedCoupon?.code,
       });
 
@@ -313,7 +331,59 @@ export default function CheckoutPage() {
               <Clock className="h-4 w-4 text-primary-600" />
               {t("deliverySlot")}
             </h2>
-            {slots === null ? (
+
+            {instantStatus?.available && (
+              <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label
+                  className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 transition-colors ${
+                    isInstant
+                      ? "border-primary-600 bg-primary-50 dark:bg-primary-950"
+                      : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="deliveryMode"
+                    checked={isInstant}
+                    onChange={() => setIsInstant(true)}
+                    className="h-4 w-4 accent-primary-600"
+                  />
+                  <Zap className="h-4 w-4 text-primary-600" />
+                  <div>
+                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      {t("instantDelivery")}
+                    </p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {t("instantDeliveryEta", {
+                        min: instantStatus.etaMinMinutes,
+                        max: instantStatus.etaMaxMinutes,
+                      })}
+                    </p>
+                  </div>
+                </label>
+                <label
+                  className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 transition-colors ${
+                    !isInstant
+                      ? "border-primary-600 bg-primary-50 dark:bg-primary-950"
+                      : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="deliveryMode"
+                    checked={!isInstant}
+                    onChange={() => setIsInstant(false)}
+                    className="h-4 w-4 accent-primary-600"
+                  />
+                  <Clock className="h-4 w-4 text-zinc-500" />
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    {t("scheduleForLater")}
+                  </p>
+                </label>
+              </div>
+            )}
+
+            {isInstant ? null : slots === null ? (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Skeleton className="h-10 w-full" />
                 <Skeleton className="h-10 w-full" />
@@ -473,8 +543,7 @@ export default function CheckoutPage() {
             disabled={
               isPlacingOrder ||
               !selectedAddressId ||
-              !selectedDay ||
-              !effectiveSlotId ||
+              (!isInstant && (!selectedDay || !effectiveSlotId)) ||
               !agreedToTerms ||
               Boolean(windowClosed) ||
               belowMinOrder ||

@@ -179,6 +179,7 @@ model Tenant {
   subscriptions            Subscription[]
   subscriptionInvoices     SubscriptionInvoice[]
   subscriptionSettings     SubscriptionSettings?
+  instantDeliverySettings  InstantDeliverySettings?
   staticPages              StaticPage[]
   platformTermsAcceptances PlatformTermsAcceptance[]
   platformSubscription     PlatformSubscription?
@@ -321,6 +322,24 @@ model DeliverySlot {
 
   @@index([tenantId])
   @@map("delivery_slots")
+}
+
+model InstantDeliverySettings {
+  id            String   @id @default(uuid())
+  tenantId      String   @unique
+  isEnabled     Boolean  @default(false)
+  // The ETA range shown to customers (e.g. "30-45 min") and used to
+  // snapshot deliveryWindowStart/End on an instant order at the moment
+  // it's placed.
+  etaMinMinutes Int      @default(30)
+  etaMaxMinutes Int      @default(45)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("instant_delivery_settings")
 }
 
 model NotificationSettings {
@@ -574,6 +593,11 @@ model Order {
   // admin "Today's Deliveries" view query real Order rows directly instead
   // of pattern-matching the notes text.
   subscriptionId      String?
+  // True when placed via the instant-delivery option instead of a picked
+  // day/slot — deliverySlotId is null and deliveryWindowStart/End are a
+  // snapshot of now + the tenant's configured ETA at order time, not a
+  // named DeliverySlot's fixed window.
+  isInstant           Boolean       @default(false)
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 

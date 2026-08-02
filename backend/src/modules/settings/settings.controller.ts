@@ -28,6 +28,7 @@ import { Role } from '../../common/enums/role.enum';
 import { PublicConfigResponseDto } from './dto/public-config-response.dto';
 import { UpdateBusinessProfileDto } from './dto/update-business-profile.dto';
 import { UpdateOrderAcceptanceDto } from './dto/update-order-acceptance.dto';
+import { UpdateInstantDeliverySettingsDto } from './dto/update-instant-delivery-settings.dto';
 import { UpdateDeliveryZonesDto } from './dto/update-delivery-zones.dto';
 import { CreateServiceablePincodeDto } from './dto/create-serviceable-pincode.dto';
 import { UpdateServiceablePincodeDto } from './dto/update-serviceable-pincode.dto';
@@ -79,6 +80,19 @@ export class SettingsController {
     if (!tenantId)
       throw new NotFoundException('No tenant context for this request');
     return this.settingsService.getDeliverySlots(tenantId);
+  }
+
+  @Public()
+  @Get('instant-delivery/status')
+  @ResponseMessage('Instant delivery status retrieved successfully')
+  @ApiOperation({
+    summary:
+      'Whether instant delivery is currently offered (enabled + kitchen open) + its ETA window',
+  })
+  getInstantDeliveryStatus(@CurrentTenant('id') tenantId: string | undefined) {
+    if (!tenantId)
+      throw new NotFoundException('No tenant context for this request');
+    return this.orderAcceptanceService.getInstantDeliveryStatus(tenantId);
   }
 
   // ── Business profile / branding ──────────────────────────
@@ -134,6 +148,34 @@ export class SettingsController {
     );
     await this.orderAcceptanceService.invalidateCache(tenantId);
     return result;
+  }
+
+  // ── Instant delivery ───────────────────────────────────────
+
+  @Get('instant-delivery')
+  @Roles(...ADMIN_ROLES)
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Instant delivery settings retrieved successfully')
+  @ApiOperation({
+    summary: 'Admin: get the instant-delivery toggle + ETA window',
+  })
+  getInstantDeliverySettings(@CurrentTenantId() tenantId: string) {
+    return this.settingsService.getInstantDeliverySettings(tenantId);
+  }
+
+  @Patch('instant-delivery')
+  @Roles(...ADMIN_ROLES)
+  @RequirePermission('settings.order-hours.edit')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Instant delivery settings updated successfully')
+  @ApiOperation({
+    summary: 'Admin: update the instant-delivery toggle + ETA window',
+  })
+  updateInstantDeliverySettings(
+    @CurrentTenantId() tenantId: string,
+    @Body() dto: UpdateInstantDeliverySettingsDto,
+  ) {
+    return this.settingsService.updateInstantDeliverySettings(tenantId, dto);
   }
 
   // ── Delivery zones (kitchen geo, fees, advance window, slots, pincodes) ─

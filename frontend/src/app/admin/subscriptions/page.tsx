@@ -1,21 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  CalendarClock,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+  Pencil,
+  Plus,
+  Settings,
+  Trash2,
+  Users,
+} from "lucide-react";
 import {
   ApiError,
   createPlan,
   deletePlan,
   getPlanAdmin,
+  getSubscriptionSettings,
+  getTodaysDeliveries,
   listPlansAdmin,
+  listSubscriptionsAdmin,
   publishPlan,
   replacePlanDays,
   updatePlan,
+  updateSubscriptionSettings,
+  type AdminSubscription,
   type MealSlotType,
   type Plan,
   type PlanAccentColor,
   type PlanDayInput,
   type PlanInput,
+  type SubscriptionSettings,
+  type TodaysDeliveries,
 } from "@/lib/api/admin-subscriptions";
 import { listMeals, type Meal } from "@/lib/api/admin-menu";
 import type { PaginationMeta } from "@/lib/api/response";
@@ -27,6 +44,14 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+
+type Tab = "plans" | "subscribers" | "today" | "settings";
+const TABS: { key: Tab; label: string; icon: typeof CalendarClock }[] = [
+  { key: "plans", label: "Plans", icon: CalendarClock },
+  { key: "subscribers", label: "Subscribers", icon: Users },
+  { key: "today", label: "Today's Deliveries", icon: ClipboardList },
+  { key: "settings", label: "Settings", icon: Settings },
+];
 
 const SLOT_TYPES: MealSlotType[] = ["BREAKFAST", "LUNCH", "DINNER"];
 const SLOT_LABELS: Record<MealSlotType, string> = {
@@ -42,6 +67,7 @@ export default function AdminSubscriptionsPage() {
   const canEdit = usePermission(PERMISSIONS.SUBSCRIPTIONS_MANAGE);
   const { showToast } = useToast();
   const confirm = useConfirm();
+  const [tab, setTab] = useState<Tab>("plans");
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
   const [page, setPage] = useState(1);
@@ -103,19 +129,37 @@ export default function AdminSubscriptionsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-primary-600">
           <CalendarClock className="h-5 w-5" />
           <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
             Subscription Plans
           </h2>
         </div>
-        {canEdit && !creating && editingPlanId === null && (
+        {tab === "plans" && canEdit && !creating && editingPlanId === null && (
           <button type="button" onClick={() => setCreating(true)} className="btn-primary btn-sm">
             <Plus className="h-4 w-4" />
             New Plan
           </button>
         )}
+      </div>
+
+      <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+              tab === t.key
+                ? "border-primary-600 text-primary-600"
+                : "border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+            }`}
+          >
+            <t.icon className="h-4 w-4" />
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {!canEdit && <ViewOnlyNotice />}
@@ -125,7 +169,11 @@ export default function AdminSubscriptionsPage() {
         </p>
       )}
 
-      {creating && (
+      {tab === "subscribers" && <SubscribersTab />}
+      {tab === "today" && <TodaysDeliveriesTab />}
+      {tab === "settings" && <SettingsTab canEdit={canEdit} />}
+
+      {tab === "plans" && creating && (
         <PlanMetaForm
           initial={{
             name: "",
@@ -145,7 +193,7 @@ export default function AdminSubscriptionsPage() {
         />
       )}
 
-      {!plans || !meals ? (
+      {tab === "plans" && (!plans || !meals ? (
         <div className="card p-6">
           <Skeleton className="h-6 w-40" />
           <Skeleton className="mt-4 h-32 w-full" />
@@ -214,9 +262,9 @@ export default function AdminSubscriptionsPage() {
             ),
           )}
         </div>
-      )}
+      ))}
 
-      {meta && meta.totalPages > 1 && (
+      {tab === "plans" && meta && meta.totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400">
           <span>
             Page {meta.page} of {meta.totalPages} · {meta.total} plans
@@ -615,5 +663,295 @@ function PlanEditor({
         )}
       </div>
     </div>
+  );
+}
+
+const SUBSCRIPTION_STATUS_STYLES: Record<AdminSubscription["status"], string> = {
+  PENDING_PAYMENT: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+  ACTIVE: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
+  EXPIRED: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500",
+  CANCELLED: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400",
+};
+
+function SubscribersTab() {
+  const [subs, setSubs] = useState<AdminSubscription[] | null>(null);
+  const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    listSubscriptionsAdmin({ page })
+      .then(({ data, meta }) => {
+        setSubs(data);
+        setMeta(meta ?? null);
+      })
+      .catch(() => setSubs([]));
+  }, [page]);
+
+  if (!subs) {
+    return (
+      <div className="card p-6">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="mt-4 h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (subs.length === 0) {
+    return <p className="text-sm text-zinc-500 dark:text-zinc-400">No customer subscriptions yet.</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="card overflow-x-auto p-0">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-zinc-100 text-left text-xs font-semibold text-zinc-500 uppercase dark:border-zinc-800 dark:text-zinc-400">
+              <th className="px-4 py-3">Customer</th>
+              <th className="px-4 py-3">Plan</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Coupon / Bonus</th>
+              <th className="px-4 py-3">Cycle</th>
+              <th className="px-4 py-3">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            {subs.map((sub) => (
+              <tr key={sub.id} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
+                <td className="px-4 py-3">
+                  <div className="text-zinc-900 dark:text-zinc-100">
+                    {sub.user.firstName} {sub.user.lastName ?? ""}
+                  </div>
+                  <div className="text-xs text-zinc-400">{sub.user.email}</div>
+                </td>
+                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{sub.planNameSnapshot}</td>
+                <td className="px-4 py-3">
+                  <span className={`badge ${SUBSCRIPTION_STATUS_STYLES[sub.status]}`}>
+                    {sub.status.replace("_", " ")}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                  {sub.couponCode ? <span className="font-mono">{sub.couponCode}</span> : "—"}
+                  {sub.bonusDaysGranted > 0 && (
+                    <span className="ml-1.5 badge bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400">
+                      +{sub.bonusDaysGranted}d
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                  {sub.startDate ? new Date(sub.startDate).toLocaleDateString() : "—"}
+                  {" – "}
+                  {sub.cycleEnd ? new Date(sub.cycleEnd).toLocaleDateString() : "—"}
+                </td>
+                <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">
+                  {formatPriceFromPaise(sub.priceInPaiseSnapshot)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {meta && meta.totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400">
+          <span>
+            Page {meta.page} of {meta.totalPages} · {meta.total} subscribers
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => p - 1)}
+              disabled={!meta.hasPrev}
+              className="btn-outline btn-sm"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!meta.hasNext}
+              className="btn-outline btn-sm"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TodaysDeliveriesTab() {
+  const [data, setData] = useState<TodaysDeliveries | null>(null);
+  const [view, setView] = useState<"prep" | "dispatch">("prep");
+
+  useEffect(() => {
+    getTodaysDeliveries()
+      .then(setData)
+      .catch(() => setData({ date: "", prepSheet: [], dispatch: [] }));
+  }, []);
+
+  if (!data) {
+    return (
+      <div className="card p-6">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="mt-4 h-32 w-full" />
+      </div>
+    );
+  }
+
+  const isEmpty = data.prepSheet.length === 0 && data.dispatch.length === 0;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          {data.date && new Date(data.date).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+        </p>
+        <div className="flex gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+          <button
+            type="button"
+            onClick={() => setView("prep")}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              view === "prep"
+                ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                : "text-zinc-500 dark:text-zinc-400"
+            }`}
+          >
+            Kitchen Prep Sheet
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("dispatch")}
+            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+              view === "dispatch"
+                ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                : "text-zinc-500 dark:text-zinc-400"
+            }`}
+          >
+            Dispatch List
+          </button>
+        </div>
+      </div>
+
+      {isEmpty ? (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          No subscription deliveries scheduled for today.
+        </p>
+      ) : view === "prep" ? (
+        <div className="card flex flex-col gap-2 p-6">
+          {data.prepSheet.map((item) => (
+            <div
+              key={item.mealName}
+              className="flex items-center justify-between border-b border-zinc-50 py-2 last:border-none dark:border-zinc-900"
+            >
+              <span className="text-sm text-zinc-700 dark:text-zinc-300">{item.mealName}</span>
+              <span className="font-display text-lg font-bold text-primary-600">×{item.quantity}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {data.dispatch.map((d) => (
+            <div key={d.orderId} className="card flex flex-col gap-1 p-4">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-zinc-900 dark:text-zinc-100">{d.customerName}</span>
+                <span className="badge bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
+                  {d.deliverySlotName} ({d.deliveryWindowStart}–{d.deliveryWindowEnd})
+                </span>
+              </div>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">{d.planName} · {d.address}</p>
+              <p className="text-xs text-zinc-400">{d.meals.join(", ")}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SettingsTab({ canEdit }: { canEdit: boolean }) {
+  const { showToast } = useToast();
+  const [settings, setSettings] = useState<SubscriptionSettings | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    getSubscriptionSettings().then(setSettings).catch(() => setSettings(null));
+  }, []);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!settings) return;
+    setSaving(true);
+    try {
+      const updated = await updateSubscriptionSettings(settings);
+      setSettings(updated);
+      showToast("Settings saved", "success");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't save settings.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!settings) {
+    return (
+      <div className="card p-6">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="mt-4 h-24 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSave} className="card flex max-w-lg flex-col gap-4 p-6">
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Accepting new subscriptions
+        </span>
+        <Toggle
+          checked={settings.isAcceptingNewSubscriptions}
+          onChange={(checked) => setSettings({ ...settings, isAcceptingNewSubscriptions: checked })}
+          disabled={!canEdit}
+        />
+      </label>
+      {!settings.isAcceptingNewSubscriptions && (
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Message shown to customers (optional)
+          </label>
+          <input
+            value={settings.closureReason ?? ""}
+            onChange={(e) => setSettings({ ...settings, closureReason: e.target.value })}
+            placeholder="Kitchen at capacity — back Monday"
+            disabled={!canEdit}
+            className="input"
+          />
+        </div>
+      )}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+          Minimum notice for changes (hours)
+        </label>
+        <input
+          type="number"
+          min={0}
+          max={240}
+          value={settings.noticeHoursBeforeDelivery}
+          onChange={(e) =>
+            setSettings({ ...settings, noticeHoursBeforeDelivery: Number(e.target.value) })
+          }
+          disabled={!canEdit}
+          className="input w-32"
+        />
+        <p className="text-xs text-zinc-400">
+          How far ahead a customer must skip/pause/change delivery for a day, and how far out a new
+          signup&apos;s first delivery is scheduled.
+        </p>
+      </div>
+      {canEdit && (
+        <button type="submit" disabled={saving} className="btn-primary btn-sm self-start">
+          {saving ? "Saving…" : "Save settings"}
+        </button>
+      )}
+    </form>
   );
 }

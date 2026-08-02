@@ -14,4 +14,12 @@ export class SubscribeDto {
   @IsOptional()
   @IsString()
   couponCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Default delivery slot for every day, unless overridden per-day',
+  })
+  @IsOptional()
+  @IsUUID()
+  deliverySlotId?: string;
 }

@@ -60,14 +60,39 @@ export interface PlanDayInput {
 
 export interface AdminSubscription {
   id: string;
+  planId: string;
   status: "PENDING_PAYMENT" | "ACTIVE" | "EXPIRED" | "CANCELLED";
   priceInPaiseSnapshot: number;
   planNameSnapshot: string;
+  couponCode: string | null;
+  bonusDaysGranted: number;
   startDate: string | null;
   cycleEnd: string | null;
   createdAt: string;
   plan: { name: string };
   user: { firstName: string; lastName: string | null; email: string };
+}
+
+export interface SubscriptionSettings {
+  isAcceptingNewSubscriptions: boolean;
+  closureReason: string | null;
+  noticeHoursBeforeDelivery: number;
+}
+
+export interface TodaysDeliveries {
+  date: string;
+  prepSheet: { mealName: string; quantity: number }[];
+  dispatch: {
+    orderId: string;
+    customerName: string;
+    customerEmail: string;
+    planName: string;
+    address: string;
+    deliverySlotName: string;
+    deliveryWindowStart: string;
+    deliveryWindowEnd: string;
+    meals: string[];
+  }[];
 }
 
 export function listPlansAdmin(params: { page?: number; limit?: number } = {}): Promise<{
@@ -123,4 +148,21 @@ export function listSubscriptionsAdmin(params: { page?: number; limit?: number }
   if (params.limit) search.set("limit", String(params.limit));
   const qs = search.toString();
   return proxyFetchPaginated<AdminSubscription[]>(`/subscriptions/admin${qs ? `?${qs}` : ""}`);
+}
+
+export function getSubscriptionSettings(): Promise<SubscriptionSettings> {
+  return proxyFetch<SubscriptionSettings>("/subscriptions/settings");
+}
+
+export function updateSubscriptionSettings(
+  input: Partial<SubscriptionSettings>,
+): Promise<SubscriptionSettings> {
+  return proxyFetch<SubscriptionSettings>("/subscriptions/settings", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getTodaysDeliveries(): Promise<TodaysDeliveries> {
+  return proxyFetch<TodaysDeliveries>("/subscriptions/admin/today");
 }

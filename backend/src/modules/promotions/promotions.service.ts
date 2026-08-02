@@ -443,10 +443,7 @@ export class PromotionsService {
     this.assertValidPromotionShape(dto);
     return this.promotionsRepo.createPromotion(tenantId, {
       ...dto,
-      // PLAN_BONUS_DAYS has no meaning for order checkout — always PLANS,
-      // never trusting a client-submitted appliesTo for this type.
-      appliesTo:
-        dto.type === 'PLAN_BONUS_DAYS' ? 'PLANS' : (dto.appliesTo ?? 'ORDERS'),
+      appliesTo: resolveAppliesTo(dto.type, dto.appliesTo),
     });
   }
 
@@ -461,7 +458,7 @@ export class PromotionsService {
     this.assertValidPromotionShape(merged);
     return this.promotionsRepo.updatePromotion(id, {
       ...dto,
-      appliesTo: merged.type === 'PLAN_BONUS_DAYS' ? 'PLANS' : merged.appliesTo,
+      appliesTo: resolveAppliesTo(merged.type, merged.appliesTo),
     });
   }
 
@@ -524,4 +521,18 @@ export class PromotionsService {
       }
     }
   }
+}
+
+/** Forces appliesTo based on type rather than trusting the client for the
+ * meal-scoped types — BOGO/FREE_ITEM_ON_MINIMUM have no meaning for a plan,
+ * PLAN_BONUS_DAYS has no meaning for order checkout. SCHEDULED_DISCOUNT is
+ * the one type that can legitimately be either, so it's the only one where
+ * the requested value is respected. */
+function resolveAppliesTo(
+  type: PromotionType,
+  requested: 'ORDERS' | 'PLANS' | 'BOTH' | undefined,
+): 'ORDERS' | 'PLANS' | 'BOTH' {
+  if (type === 'PLAN_BONUS_DAYS') return 'PLANS';
+  if (type === 'BOGO' || type === 'FREE_ITEM_ON_MINIMUM') return 'ORDERS';
+  return requested ?? 'ORDERS';
 }

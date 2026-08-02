@@ -10,7 +10,7 @@ import { DateUtil } from '../../common/utils/date.util';
  * fixed UTC cron computes each subscription's own tenant-local "today"
  * internally, rather than one cron per timezone.
  *
- * Two deliberate simplifications, both documented in the plan doc (§11):
+ * Three deliberate simplifications, all documented in the plan doc (§11):
  * - The template loops via modulo once its own day count is exhausted, so
  *   bonus/banked days beyond the plan's own length still deliver something
  *   real instead of going blank.
@@ -18,6 +18,9 @@ import { DateUtil } from '../../common/utils/date.util';
  *   skipped (no order) but still consumes a day count, exactly like a
  *   customer's own unfilled custom-plan selection — logged, not silently
  *   dropped, so it's discoverable without needing a customer complaint.
+ * - A subscription whose startDate hasn't arrived yet (tenant-local date
+ *   compare, not an instant race against this cron's own fixed run time)
+ *   is skipped entirely — Day 1 never fires early.
  */
 @Injectable()
 export class SubscriptionsMaterializationScheduler {
@@ -48,22 +51,29 @@ export class SubscriptionsMaterializationScheduler {
     tenantId: string;
     userId: string;
     addressId: string;
+    deliverySlotId: string | null;
     planId: string;
     planNameSnapshot: string;
     nextPlanDayNumber: number;
+    startDate: Date | null;
     cycleEnd: Date | null;
     plan: { durationDays: number };
     tenant: { businessProfile: { timezone: string } | null };
   }): Promise<void> {
-    if (!subscription.cycleEnd) return;
+    if (!subscription.cycleEnd || !subscription.startDate) return;
     const timezone =
       subscription.tenant.businessProfile?.timezone ?? 'Asia/Kolkata';
     const { dateStr: todayStr } = DateUtil.getTenantNow(timezone);
+    const startDateStr = DateUtil.toTenantDateStr(
+      subscription.startDate,
+      timezone,
+    );
     const cycleEndStr = DateUtil.toTenantDateStr(
       subscription.cycleEnd,
       timezone,
     );
 
+    if (todayStr < startDateStr) return; // Day 1 hasn't arrived yet
     if (todayStr > cycleEndStr) {
       await this.subscriptionsRepo.expireSubscription(subscription.id);
       return;
@@ -74,6 +84,23 @@ export class SubscriptionsMaterializationScheduler {
       todayStr,
     );
     if (skip) return; // banked — nextPlanDayNumber does not advance
+
+    // Resolve today's address/slot: a SubscriptionDayOverride wins if one
+    // exists for this exact date, otherwise fall back to the subscription's
+    // own defaults chosen at signup.
+    const override = await this.subscriptionsRepo.findDayOverride(
+      subscription.id,
+      todayStr,
+    );
+    const addressId = override?.addressId ?? subscription.addressId;
+    const resolvedSlotId =
+      override?.deliverySlotId ?? subscription.deliverySlotId ?? undefined;
+    const slot = resolvedSlotId
+      ? await this.subscriptionsRepo.findDeliverySlotById(
+          subscription.tenantId,
+          resolvedSlotId,
+        )
+      : null;
 
     const templateDayNumber =
       ((subscription.nextPlanDayNumber - 1) % subscription.plan.durationDays) +
@@ -96,9 +123,14 @@ export class SubscriptionsMaterializationScheduler {
       await this.subscriptionsRepo.createMaterializedOrder({
         tenantId: subscription.tenantId,
         userId: subscription.userId,
-        addressId: subscription.addressId,
+        subscriptionId: subscription.id,
+        addressId,
         orderNumber: generateSubscriptionOrderNumber(),
         notes: `Subscription: ${subscription.planNameSnapshot} — Day ${templateDayNumber}`,
+        deliverySlotId: slot?.id,
+        deliverySlotName: slot?.name ?? 'Subscription delivery',
+        deliveryWindowStart: slot?.startTime ?? '00:00',
+        deliveryWindowEnd: slot?.endTime ?? '23:59',
         items,
       });
     } else {

@@ -1,13 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import {
+  DeliverySlot,
   Order,
   OrderStatus,
   PaymentStatus,
   Prisma,
   Subscription,
+  SubscriptionDayOverride,
   SubscriptionInvoice,
   SubscriptionPlan,
+  SubscriptionSettings,
   SubscriptionSkip,
   SubscriptionStatus,
 } from '../../generated/prisma';
@@ -159,6 +162,15 @@ export class SubscriptionsRepository {
     });
   }
 
+  findInvoiceBySubscriptionId(
+    subscriptionId: string,
+  ): Promise<SubscriptionInvoice | null> {
+    return this.prisma.subscriptionInvoice.findFirst({
+      where: { subscriptionId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   markInvoicePaid(
     id: string,
     razorpayPaymentId: string,
@@ -190,6 +202,17 @@ export class SubscriptionsRepository {
     return this.prisma.subscription.findFirst({ where: { id, tenantId } });
   }
 
+  /** Only the invoice page needs the delivery address alongside the bare
+   * subscription row — kept separate from findSubscriptionById() so every
+   * other caller (ownership checks, cancel, day-override) doesn't pay for
+   * a join it never uses. */
+  findSubscriptionByIdWithAddress(tenantId: string, id: string) {
+    return this.prisma.subscription.findFirst({
+      where: { id, tenantId },
+      include: { address: true },
+    });
+  }
+
   findMySubscriptions(tenantId: string, userId: string) {
     return this.prisma.subscription.findMany({
       where: { tenantId, userId },
@@ -204,6 +227,9 @@ export class SubscriptionsRepository {
       include: {
         plan: { include: PLAN_WITH_DAYS_INCLUDE },
         skips: { orderBy: { dateFrom: 'asc' } },
+        dayOverrides: true,
+        address: true,
+        deliverySlot: true,
       },
     });
   }
@@ -255,6 +281,69 @@ export class SubscriptionsRepository {
     });
   }
 
+  /** Any ACTIVE subscription this user has for this plan — used at
+   * subscribe-time to warn about stacking a concurrent duplicate. */
+  findActiveSubscriptionForPlan(
+    tenantId: string,
+    userId: string,
+    planId: string,
+  ): Promise<Subscription | null> {
+    return this.prisma.subscription.findFirst({
+      where: { tenantId, userId, planId, status: SubscriptionStatus.ACTIVE },
+    });
+  }
+
+  // ─── Tenant subscription settings ────────────────────────
+
+  findSettings(tenantId: string): Promise<SubscriptionSettings | null> {
+    return this.prisma.subscriptionSettings.findUnique({ where: { tenantId } });
+  }
+
+  upsertSettings(
+    tenantId: string,
+    data: {
+      isAcceptingNewSubscriptions?: boolean;
+      closureReason?: string | null;
+      noticeHoursBeforeDelivery?: number;
+    },
+  ): Promise<SubscriptionSettings> {
+    return this.prisma.subscriptionSettings.upsert({
+      where: { tenantId },
+      update: data,
+      create: { tenantId, ...data },
+    });
+  }
+
+  // ─── Per-day delivery overrides ──────────────────────────
+
+  findDayOverride(
+    subscriptionId: string,
+    date: string,
+  ): Promise<SubscriptionDayOverride | null> {
+    return this.prisma.subscriptionDayOverride.findUnique({
+      where: { subscriptionId_date: { subscriptionId, date } },
+    });
+  }
+
+  upsertDayOverride(
+    subscriptionId: string,
+    date: string,
+    data: { addressId?: string | null; deliverySlotId?: string | null },
+  ): Promise<SubscriptionDayOverride> {
+    return this.prisma.subscriptionDayOverride.upsert({
+      where: { subscriptionId_date: { subscriptionId, date } },
+      update: data,
+      create: { subscriptionId, date, ...data },
+    });
+  }
+
+  findDeliverySlotById(
+    tenantId: string,
+    id: string,
+  ): Promise<DeliverySlot | null> {
+    return this.prisma.deliverySlot.findFirst({ where: { id, tenantId } });
+  }
+
   // ─── Nightly materialization (system) ────────────────────
 
   findActiveSubscriptionsForMaterialization() {
@@ -263,6 +352,7 @@ export class SubscriptionsRepository {
       include: {
         plan: true,
         address: true,
+        deliverySlot: true,
         tenant: { include: { businessProfile: true } },
       },
     });
@@ -291,9 +381,14 @@ export class SubscriptionsRepository {
   async createMaterializedOrder(input: {
     tenantId: string;
     userId: string;
+    subscriptionId: string;
     addressId: string;
     orderNumber: string;
     notes: string;
+    deliverySlotId?: string;
+    deliverySlotName: string;
+    deliveryWindowStart: string;
+    deliveryWindowEnd: string;
     items: {
       mealId: string;
       nameSnapshot: string;
@@ -310,6 +405,7 @@ export class SubscriptionsRepository {
       data: {
         tenantId: input.tenantId,
         userId: input.userId,
+        subscriptionId: input.subscriptionId,
         addressId: input.addressId,
         orderNumber: input.orderNumber,
         status: OrderStatus.CONFIRMED,
@@ -317,9 +413,10 @@ export class SubscriptionsRepository {
         subtotalInPaise,
         totalInPaise: subtotalInPaise,
         deliveryDate: today,
-        deliverySlotName: 'Subscription delivery',
-        deliveryWindowStart: '00:00',
-        deliveryWindowEnd: '23:59',
+        deliverySlotId: input.deliverySlotId,
+        deliverySlotName: input.deliverySlotName,
+        deliveryWindowStart: input.deliveryWindowStart,
+        deliveryWindowEnd: input.deliveryWindowEnd,
         notes: input.notes,
         items: { create: input.items },
       },
@@ -340,6 +437,32 @@ export class SubscriptionsRepository {
     return this.prisma.subscription.update({
       where: { id },
       data: { status: SubscriptionStatus.EXPIRED },
+    });
+  }
+
+  // ─── Admin: today's subscription deliveries ──────────────
+
+  /** Widened ±1 day at the DB level (same over-fetch-then-filter-exact
+   * principle as the overview chart's date bucketing) — the caller filters
+   * to the exact tenant-local date string. */
+  findSubscriptionOrdersInRange(
+    tenantId: string,
+    queryStart: Date,
+    queryEnd: Date,
+  ) {
+    return this.prisma.order.findMany({
+      where: {
+        tenantId,
+        subscriptionId: { not: null },
+        deliveryDate: { gte: queryStart, lte: queryEnd },
+      },
+      include: {
+        items: true,
+        address: true,
+        subscription: { select: { planNameSnapshot: true } },
+        user: { select: { firstName: true, lastName: true, email: true } },
+      },
+      orderBy: { createdAt: 'asc' },
     });
   }
 }

@@ -3,7 +3,12 @@ import { ApiError, proxyFetch } from "@/lib/api/client";
 export { ApiError };
 
 export type CouponDiscountType = "PERCENTAGE" | "FLAT";
-export type PromotionType = "BOGO" | "FREE_ITEM_ON_MINIMUM" | "SCHEDULED_DISCOUNT";
+export type PromotionType =
+  | "BOGO"
+  | "FREE_ITEM_ON_MINIMUM"
+  | "SCHEDULED_DISCOUNT"
+  | "PLAN_BONUS_DAYS";
+export type PromoAppliesTo = "ORDERS" | "PLANS" | "BOTH";
 
 export interface Coupon {
   id: string;
@@ -16,6 +21,7 @@ export interface Coupon {
   validFrom: string | null;
   validUntil: string | null;
   isActive: boolean;
+  appliesTo: PromoAppliesTo;
 }
 
 export interface CouponInput {
@@ -28,6 +34,7 @@ export interface CouponInput {
   validFrom?: string;
   validUntil?: string;
   isActive?: boolean;
+  appliesTo?: PromoAppliesTo;
 }
 
 export function listCoupons(): Promise<Coupon[]> {
@@ -54,6 +61,7 @@ export interface Promotion {
   type: PromotionType;
   name: string;
   isActive: boolean;
+  appliesTo: PromoAppliesTo;
   buyMealId: string | null;
   buyQuantity: number | null;
   getMealId: string | null;
@@ -67,12 +75,16 @@ export interface Promotion {
   mealIds: string[];
   categoryIds: string[];
   storewide: boolean;
+  planIds: string[];
+  minCycleDays: number | null;
+  bonusDays: number | null;
 }
 
 export interface PromotionInput {
   type: PromotionType;
   name: string;
   isActive?: boolean;
+  appliesTo?: PromoAppliesTo;
   buyMealId?: string;
   buyQuantity?: number;
   getMealId?: string;
@@ -86,6 +98,9 @@ export interface PromotionInput {
   mealIds?: string[];
   categoryIds?: string[];
   storewide?: boolean;
+  planIds?: string[];
+  minCycleDays?: number;
+  bonusDays?: number;
 }
 
 export function listPromotions(): Promise<Promotion[]> {

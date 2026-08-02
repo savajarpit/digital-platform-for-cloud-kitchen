@@ -23,6 +23,8 @@ import { SubscribeDto } from './dto/subscribe.dto';
 import { VerifyPlanPaymentDto } from './dto/verify-plan-payment.dto';
 import { SkipDayDto } from './dto/skip-day.dto';
 import { PauseDto } from './dto/pause.dto';
+import { SetDayOverrideDto } from './dto/set-day-override.dto';
+import { UpdateSubscriptionSettingsDto } from './dto/update-subscription-settings.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
@@ -193,6 +195,48 @@ export class SubscriptionsController {
     );
   }
 
+  @Get('settings')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Subscription settings retrieved successfully')
+  @ApiOperation({
+    summary: 'Admin: accept-new-subscriptions toggle + notice-hours window',
+  })
+  getSettings(@CurrentTenantId() tenantId: string) {
+    return this.subscriptionsService.getSettings(tenantId);
+  }
+
+  @Patch('settings')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Subscription settings updated successfully')
+  @ApiOperation({
+    summary: 'Admin: update the accept-toggle / notice-hours window',
+  })
+  updateSettings(
+    @CurrentTenantId() tenantId: string,
+    @Body() dto: UpdateSubscriptionSettingsDto,
+  ) {
+    return this.subscriptionsService.updateSettings(tenantId, dto);
+  }
+
+  @Get('admin/today')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage("Today's deliveries retrieved successfully")
+  @ApiOperation({
+    summary: "Admin: today's kitchen prep sheet + per-subscriber dispatch list",
+  })
+  getTodaysDeliveries(@CurrentTenantId() tenantId: string) {
+    return this.subscriptionsService.getTodaysDeliveries(tenantId);
+  }
+
   // ─── Customer ──────────────────────────────────────────────
 
   @Post()
@@ -250,6 +294,18 @@ export class SubscriptionsController {
     return this.subscriptionsService.findMySubscription(tenantId, userId, id);
   }
 
+  @Get('mine/:id/invoice')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Invoice retrieved successfully')
+  @ApiOperation({ summary: 'Get the payment invoice for a subscription' })
+  getInvoice(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.subscriptionsService.getInvoice(tenantId, userId, id);
+  }
+
   @Post('mine/:id/skip')
   @ApiBearerAuth('access-token')
   @ResponseMessage('Day skipped')
@@ -280,6 +336,21 @@ export class SubscriptionsController {
     @Body() dto: PauseDto,
   ) {
     return this.subscriptionsService.pause(tenantId, userId, id, dto);
+  }
+
+  @Post('mine/:id/day-override')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Delivery updated for that day')
+  @ApiOperation({
+    summary: 'Change the address and/or delivery slot for one specific day',
+  })
+  setDayOverride(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') userId: string,
+    @Param('id') id: string,
+    @Body() dto: SetDayOverrideDto,
+  ) {
+    return this.subscriptionsService.setDayOverride(tenantId, userId, id, dto);
   }
 
   @Post('mine/:id/cancel')

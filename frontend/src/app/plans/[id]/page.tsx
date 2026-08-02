@@ -4,10 +4,19 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CalendarClock, Clock, Tag } from "lucide-react";
-import { ApiError, getPlan, subscribe, verifySubscriptionPayment, type PlanDetail } from "@/lib/api/subscriptions";
+import {
+  ApiError,
+  getPlan,
+  listMySubscriptions,
+  subscribe,
+  verifySubscriptionPayment,
+  type PlanDetail,
+} from "@/lib/api/subscriptions";
 import { listAddresses, type Address } from "@/lib/api/addresses";
+import { getDeliverySlots, type DeliverySlot } from "@/lib/api/delivery-slots";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
@@ -21,13 +30,17 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const router = useRouter();
   const { showToast } = useToast();
+  const confirm = useConfirm();
 
   const [plan, setPlan] = useState<PlanDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [addresses, setAddresses] = useState<Address[] | null | undefined>(undefined);
   const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [deliverySlots, setDeliverySlots] = useState<DeliverySlot[]>([]);
+  const [selectedSlotId, setSelectedSlotId] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [isSubscribing, setIsSubscribing] = useState(false);
+  const [hasActiveForThisPlan, setHasActiveForThisPlan] = useState(false);
 
   useEffect(() => {
     getPlan(id)
@@ -42,9 +55,29 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
       .catch((err: unknown) => {
         setAddresses(err instanceof ApiError && err.status === 401 ? null : []);
       });
+    getDeliverySlots()
+      .then((config) => setDeliverySlots(config.slots))
+      .catch(() => setDeliverySlots([]));
+    listMySubscriptions()
+      .then((subs) => setHasActiveForThisPlan(subs.some((s) => s.planId === id && s.status === "ACTIVE")))
+      .catch(() => setHasActiveForThisPlan(false));
   }, [id]);
 
-  async function handleSubscribe() {
+  function handleSubscribeClick() {
+    if (hasActiveForThisPlan) {
+      confirm({
+        message:
+          "You already have an active subscription to this plan — continuing means two deliveries a day. Continue?",
+        confirmLabel: "Subscribe Anyway",
+        processingLabel: "Starting…",
+        onConfirm: () => doSubscribe(),
+      });
+      return;
+    }
+    doSubscribe();
+  }
+
+  async function doSubscribe() {
     if (!plan || !selectedAddressId) return;
     setIsSubscribing(true);
     try {
@@ -52,6 +85,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
         planId: plan.id,
         addressId: selectedAddressId,
         couponCode: couponCode || undefined,
+        deliverySlotId: selectedSlotId || undefined,
       });
 
       await loadRazorpayScript();
@@ -197,6 +231,25 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                   ))}
                 </select>
               </div>
+              {deliverySlots.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Delivery time (every day, unless changed later)
+                  </label>
+                  <select
+                    value={selectedSlotId}
+                    onChange={(e) => setSelectedSlotId(e.target.value)}
+                    className="input"
+                  >
+                    <option value="">No preference</option>
+                    {deliverySlots.map((slot) => (
+                      <option key={slot.id} value={slot.id}>
+                        {slot.name} ({slot.startTime}–{slot.endTime})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="flex flex-col gap-1">
                 <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300">
                   <Tag className="h-3.5 w-3.5" />
@@ -209,9 +262,14 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                   className="input"
                 />
               </div>
+              {hasActiveForThisPlan && (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                  You already have an active subscription to this plan.
+                </p>
+              )}
               <button
                 type="button"
-                onClick={handleSubscribe}
+                onClick={handleSubscribeClick}
                 disabled={isSubscribing || !selectedAddressId}
                 className="btn-primary w-full"
               >

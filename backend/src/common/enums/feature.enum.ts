@@ -29,6 +29,12 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
       'Owner-authored day-by-day meal plans (e.g. "7-Day Weight Loss Plan") customers subscribe to as-is',
   },
   {
+    key: 'subscription-self-cancel',
+    name: 'Self-Service Subscription Cancellation',
+    description:
+      'Lets a customer cancel their own subscription — no automatic refund, stops future deliveries only',
+  },
+  {
     key: 'delivery-management',
     name: 'Delivery Management',
     description: 'In-house delivery assignment and driver-scoped tracking',

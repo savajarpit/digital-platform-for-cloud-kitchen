@@ -1,4 +1,6 @@
 import { ApiError, proxyFetch } from "@/lib/api/client";
+import type { Address } from "@/lib/api/addresses";
+import type { DeliverySlot } from "@/lib/api/delivery-slots";
 
 export { ApiError };
 
@@ -29,14 +31,20 @@ export interface PlanDetail {
 export interface UpcomingPreviewDay {
   date: string;
   skipped: boolean;
-  meals: { slotType: MealSlotType; name: string | null }[];
+  meals: { slotType: MealSlotType; mealId: string | null; name: string | null; imageUrl: string | null }[];
+  addressId: string;
+  deliverySlotId: string | null;
+  isOverridden: boolean;
 }
 
 export interface SubscriptionSummary {
   id: string;
+  planId: string;
   status: "PENDING_PAYMENT" | "ACTIVE" | "EXPIRED" | "CANCELLED";
   priceInPaiseSnapshot: number;
   planNameSnapshot: string;
+  couponCode: string | null;
+  bonusDaysGranted: number;
   startDate: string | null;
   cycleEnd: string | null;
   bankedDays: number;
@@ -45,9 +53,32 @@ export interface SubscriptionSummary {
 
 export interface SubscriptionDetail extends SubscriptionSummary {
   addressId: string;
+  deliverySlotId: string | null;
   plan: SubscriptionSummary["plan"] & { durationDays: number; days: PlanDay[] };
   skips: { dateFrom: string; dateTo: string; bankedDays: number }[];
+  dayOverrides: { date: string; addressId: string | null; deliverySlotId: string | null }[];
+  address: Address;
+  deliverySlot: DeliverySlot | null;
   upcoming: UpcomingPreviewDay[];
+  addresses: Address[];
+  deliverySlots: DeliverySlot[];
+  canCancel: boolean;
+}
+
+export interface SubscriptionInvoice {
+  id: string;
+  razorpayOrderId: string;
+  razorpayPaymentId: string | null;
+  amountInPaise: number;
+  status: "PENDING" | "PAID" | "FAILED";
+  createdAt: string;
+}
+
+/** What GET /subscriptions/mine/:id/invoice actually returns for its
+ * `subscription` field — the bare row plus just the address, NOT the full
+ * SubscriptionDetail shape (no plan/skips/upcoming/addresses list/etc.). */
+export interface SubscriptionForInvoice extends SubscriptionSummary {
+  address: Address;
 }
 
 export function getPlan(id: string): Promise<PlanDetail> {
@@ -58,6 +89,7 @@ export function subscribe(input: {
   planId: string;
   addressId: string;
   couponCode?: string;
+  deliverySlotId?: string;
 }): Promise<{ subscriptionId: string; razorpayOrderId: string; razorpayKeyId: string; amountInPaise: number }> {
   return proxyFetch("/subscriptions", { method: "POST", body: JSON.stringify(input) });
 }
@@ -81,6 +113,12 @@ export function getMySubscription(id: string): Promise<SubscriptionDetail> {
   return proxyFetch<SubscriptionDetail>(`/subscriptions/mine/${id}`);
 }
 
+export function getSubscriptionInvoice(
+  id: string,
+): Promise<{ invoice: SubscriptionInvoice; subscription: SubscriptionForInvoice }> {
+  return proxyFetch(`/subscriptions/mine/${id}/invoice`);
+}
+
 export function skipDay(id: string, date: string): Promise<SubscriptionSummary> {
   return proxyFetch<SubscriptionSummary>(`/subscriptions/mine/${id}/skip`, {
     method: "POST",
@@ -92,6 +130,16 @@ export function pauseSubscription(id: string, dateFrom: string, dateTo: string):
   return proxyFetch<SubscriptionSummary>(`/subscriptions/mine/${id}/pause`, {
     method: "POST",
     body: JSON.stringify({ dateFrom, dateTo }),
+  });
+}
+
+export function setDayOverride(
+  id: string,
+  input: { date: string; addressId?: string; deliverySlotId?: string },
+): Promise<{ date: string; addressId: string | null; deliverySlotId: string | null }> {
+  return proxyFetch(`/subscriptions/mine/${id}/day-override`, {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 

@@ -6,6 +6,7 @@ import { SubscriptionsMaterializationScheduler } from './subscriptions-materiali
 import { AddressesModule } from '../addresses/addresses.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { SettingsModule } from '../settings/settings.module';
+import { FeaturesModule } from '../features/features.module';
 import { RazorpayClientModule } from '../../shared-modules/razorpay/razorpay-client.module';
 import { PaginationService } from '../../common/services/pagination.service';
 
@@ -14,6 +15,7 @@ import { PaginationService } from '../../common/services/pagination.service';
     AddressesModule,
     PromotionsModule,
     SettingsModule,
+    FeaturesModule,
     RazorpayClientModule,
   ],
   controllers: [SubscriptionsController],

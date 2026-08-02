@@ -178,6 +178,7 @@ model Tenant {
   subscriptionPlans        SubscriptionPlan[]
   subscriptions            Subscription[]
   subscriptionInvoices     SubscriptionInvoice[]
+  subscriptionSettings     SubscriptionSettings?
   staticPages              StaticPage[]
   platformTermsAcceptances PlatformTermsAcceptance[]
   platformSubscription     PlatformSubscription?
@@ -313,8 +314,10 @@ model DeliverySlot {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant Tenant  @relation(fields: [tenantId], references: [id])
-  orders Order[]
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
+  orders                   Order[]
+  subscriptions            Subscription[]
+  subscriptionDayOverrides SubscriptionDayOverride[]
 
   @@index([tenantId])
   @@map("delivery_slots")
@@ -525,10 +528,11 @@ model Address {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id])
-  user          User           @relation(fields: [userId], references: [id])
+  tenant        Tenant                    @relation(fields: [tenantId], references: [id])
+  user          User                      @relation(fields: [userId], references: [id])
   orders        Order[]
   subscriptions Subscription[]
+  dayOverrides  SubscriptionDayOverride[]
 
   @@index([tenantId])
   @@index([tenantId, userId])
@@ -566,6 +570,10 @@ model Order {
   razorpayOrderId     String?       @unique
   razorpayPaymentId   String?
   notes               String?
+  // Set only for a nightly-materialized subscription delivery — lets the
+  // admin "Today's Deliveries" view query real Order rows directly instead
+  // of pattern-matching the notes text.
+  subscriptionId      String?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
@@ -573,6 +581,7 @@ model Order {
   user             User              @relation(fields: [userId], references: [id])
   address          Address           @relation(fields: [addressId], references: [id])
   deliverySlot     DeliverySlot?     @relation(fields: [deliverySlotId], references: [id])
+  subscription     Subscription?     @relation(fields: [subscriptionId], references: [id])
   items            OrderItem[]
   notificationLogs NotificationLog[]
   couponRedemption CouponRedemption?
@@ -795,21 +804,31 @@ model SubscriptionPlanSlot {
 }
 
 model Subscription {
-  id        String             @id @default(uuid())
-  tenantId  String
-  userId    String
-  planId    String
+  id             String             @id @default(uuid())
+  tenantId       String
+  userId         String
+  planId         String
   // Mutable prospectively (changes only affect days not yet materialized);
   // each materialized day's Order.addressId snapshots and becomes
   // immutable from that point — same rule §1 documents for regular orders.
-  addressId String
-  status    SubscriptionStatus @default(PENDING_PAYMENT)
+  addressId      String
+  // The default slot used every day unless a SubscriptionDayOverride
+  // exists for that specific date. Nullable — a tenant with no delivery
+  // slots configured still materializes fine, just with no named window.
+  deliverySlotId String?
+  status         SubscriptionStatus @default(PENDING_PAYMENT)
 
   // Snapshotted at signup — a later plan price/duration/name edit never
-  // retroactively changes an existing subscriber's terms.
+  // retroactively changes an existing subscriber's terms. couponCode and
+  // bonusDaysGranted mirror Order.couponCode's own snapshot rule (a later
+  // coupon-code rename or promotion edit must never rewrite history), and
+  // let the admin subscriber list show what was actually applied without a
+  // live join that could drift.
   priceInPaiseSnapshot Int
   durationDaysSnapshot Int
   planNameSnapshot     String
+  couponCode           String?
+  bonusDaysGranted     Int     @default(0)
 
   startDate         DateTime?
   // The paid-through date — extended by bankedDays whenever a skip/pause
@@ -825,13 +844,16 @@ model Subscription {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant           Tenant                @relation(fields: [tenantId], references: [id])
-  user             User                  @relation(fields: [userId], references: [id])
-  plan             SubscriptionPlan      @relation(fields: [planId], references: [id])
-  address          Address               @relation(fields: [addressId], references: [id])
-  skips            SubscriptionSkip[]
-  invoices         SubscriptionInvoice[]
-  couponRedemption PlanCouponRedemption?
+  tenant             Tenant                    @relation(fields: [tenantId], references: [id])
+  user               User                      @relation(fields: [userId], references: [id])
+  plan               SubscriptionPlan          @relation(fields: [planId], references: [id])
+  address            Address                   @relation(fields: [addressId], references: [id])
+  deliverySlot       DeliverySlot?             @relation(fields: [deliverySlotId], references: [id])
+  skips              SubscriptionSkip[]
+  invoices           SubscriptionInvoice[]
+  couponRedemption   PlanCouponRedemption?
+  dayOverrides       SubscriptionDayOverride[]
+  materializedOrders Order[]
 
   @@index([tenantId])
   @@index([tenantId, userId])
@@ -854,6 +876,55 @@ model SubscriptionSkip {
 
   @@index([subscriptionId])
   @@map("subscription_skips")
+}
+
+/**
+ * A per-day exception to the subscription's own default address/slot —
+ * customer sets this within SubscriptionSettings.noticeHoursBeforeDelivery
+ * of that date; materialization checks here first, falls back to the
+ * subscription's own addressId/deliverySlotId when no row exists. Either
+ * field can be set independently (change just the address, just the time,
+ * or both for one day).
+ */
+model SubscriptionDayOverride {
+  id             String   @id @default(uuid())
+  subscriptionId String
+  date           String
+  addressId      String?
+  deliverySlotId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  subscription Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  address      Address?      @relation(fields: [addressId], references: [id])
+  deliverySlot DeliverySlot? @relation(fields: [deliverySlotId], references: [id])
+
+  @@unique([subscriptionId, date])
+  @@index([subscriptionId])
+  @@map("subscription_day_overrides")
+}
+
+/**
+ * One row per tenant — mirrors OrderAcceptanceSettings' "is this tenant
+ * open for business" shape, but deliberately separate: a tenant may want
+ * to pause new subscriptions without pausing regular one-off ordering, or
+ * vice versa. noticeHoursBeforeDelivery is the single lead-time rule used
+ * for three things: skip/pause, day-override edits, and how far out a
+ * brand-new subscription's Day 1 gets pushed at signup.
+ */
+model SubscriptionSettings {
+  id                          String   @id @default(uuid())
+  tenantId                    String   @unique
+  isAcceptingNewSubscriptions Boolean  @default(true)
+  closureReason               String?
+  noticeHoursBeforeDelivery   Int      @default(24)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("subscription_settings")
 }
 
 model SubscriptionInvoice {

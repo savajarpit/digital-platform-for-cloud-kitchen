@@ -19,6 +19,7 @@ import {
   type PromotionType,
 } from "@/lib/api/admin-promotions";
 import { listCategories, listMeals, type Category, type Meal } from "@/lib/api/admin-menu";
+import { listPlansAdmin, type Plan } from "@/lib/api/admin-subscriptions";
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
@@ -33,24 +34,43 @@ const paiseToRupees = (paise: number | null | undefined) =>
 const rupeesToPaise = (rupees: string): number | undefined =>
   rupees === "" ? undefined : Math.round(Number(rupees) * 100);
 
+const APPLIES_TO_LABELS: Record<"ORDERS" | "PLANS" | "BOTH", string> = {
+  ORDERS: "Orders",
+  PLANS: "Plans",
+  BOTH: "Orders + Plans",
+};
+const APPLIES_TO_STYLES: Record<"ORDERS" | "PLANS" | "BOTH", string> = {
+  ORDERS: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
+  PLANS: "bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400",
+  BOTH: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
+};
+
 export default function PromotionsPage() {
   const canEdit = usePermission(PERMISSIONS.PROMOTIONS_MANAGE);
   const [coupons, setCoupons] = useState<Coupon[] | null>(null);
   const [promotions, setPromotions] = useState<Promotion[] | null>(null);
   const [meals, setMeals] = useState<Meal[] | null>(null);
   const [categories, setCategories] = useState<Category[] | null>(null);
+  const [plans, setPlans] = useState<Plan[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // limit: 100 — this picker needs every meal (including unavailable ones,
-    // so a promo can still be configured for a temporarily-off item), not a
-    // browsable page; the admin Meals list is the one that paginates for real.
-    Promise.all([listCoupons(), listPromotions(), listMeals({ limit: 100 }), listCategories()])
-      .then(([c, p, m, cats]) => {
+    // limit: 100 — these pickers need every meal/plan (including
+    // unavailable/unpublished ones), not a browsable page; the admin
+    // Meals/Plans lists are the ones that paginate for real.
+    Promise.all([
+      listCoupons(),
+      listPromotions(),
+      listMeals({ limit: 100 }),
+      listCategories(),
+      listPlansAdmin({ limit: 100 }),
+    ])
+      .then(([c, p, m, cats, pl]) => {
         setCoupons(c);
         setPromotions(p);
         setMeals(m.data);
         setCategories(cats);
+        setPlans(pl.data);
       })
       .catch(() => setError("Couldn't load promotions."));
   }, []);
@@ -70,7 +90,7 @@ export default function PromotionsPage() {
         </p>
       )}
 
-      {!coupons || !promotions || !meals || !categories ? (
+      {!coupons || !promotions || !meals || !categories || !plans ? (
         <div className="card p-6">
           <Skeleton className="h-6 w-40" />
           <Skeleton className="mt-4 h-40 w-full" />
@@ -82,6 +102,7 @@ export default function PromotionsPage() {
             promotions={promotions}
             meals={meals}
             categories={categories}
+            plans={plans}
             canEdit={canEdit}
             onChange={setPromotions}
           />
@@ -194,6 +215,7 @@ function CouponsCard({
                 validFrom: coupon.validFrom ?? undefined,
                 validUntil: coupon.validUntil ?? undefined,
                 isActive: coupon.isActive,
+                appliesTo: coupon.appliesTo,
               }}
               onCancel={() => setEditingId(null)}
               onSave={async (input) => {
@@ -210,6 +232,9 @@ function CouponsCard({
               <div>
                 <span className="font-mono text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                   {coupon.code}
+                </span>
+                <span className={`badge ml-2 ${APPLIES_TO_STYLES[coupon.appliesTo]}`}>
+                  {APPLIES_TO_LABELS[coupon.appliesTo]}
                 </span>
                 <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
                   {describeDiscount(coupon)} · {describeUsage(coupon)}
@@ -350,6 +375,22 @@ function CouponForm({
           onChange={(v) => setForm({ ...form, validUntil: v || undefined })}
         />
       </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+          Applies to
+        </label>
+        <select
+          value={form.appliesTo ?? "ORDERS"}
+          onChange={(e) =>
+            setForm({ ...form, appliesTo: e.target.value as CouponInput["appliesTo"] })
+          }
+          className="input"
+        >
+          <option value="ORDERS">Order checkout only</option>
+          <option value="PLANS">Plan signup only</option>
+          <option value="BOTH">Both orders and plans</option>
+        </select>
+      </div>
       <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
         <input
           type="checkbox"
@@ -382,12 +423,14 @@ function PromotionsCard({
   promotions,
   meals,
   categories,
+  plans,
   canEdit,
   onChange,
 }: {
   promotions: Promotion[];
   meals: Meal[];
   categories: Category[];
+  plans: Plan[];
   canEdit: boolean;
   onChange: (p: Promotion[]) => void;
 }) {
@@ -425,12 +468,21 @@ function PromotionsCard({
     return meals.find((m) => m.id === id)?.name ?? "—";
   }
 
+  function planNames(ids: string[]) {
+    if (ids.length === 0) return "every plan";
+    return ids.map((id) => plans.find((p) => p.id === id)?.name ?? "—").join(", ");
+  }
+
   function describe(promo: Promotion) {
     if (promo.type === "BOGO") {
       return `Buy ${promo.buyQuantity} ${mealName(promo.buyMealId)} → get ${promo.getQuantity} ${mealName(promo.getMealId ?? promo.buyMealId)} free`;
     }
     if (promo.type === "FREE_ITEM_ON_MINIMUM") {
       return `Free ${mealName(promo.freeMealId)} on orders ≥ ${formatPriceFromPaise(promo.minOrderAmountInPaise ?? 0)}`;
+    }
+    if (promo.type === "PLAN_BONUS_DAYS") {
+      const threshold = promo.minCycleDays ? ` (${promo.minCycleDays}+ day plans)` : "";
+      return `+${promo.bonusDays} bonus day${promo.bonusDays === 1 ? "" : "s"} on ${planNames(promo.planIds)}${threshold}`;
     }
     const scope = promo.storewide
       ? "storewide"
@@ -454,6 +506,7 @@ function PromotionsCard({
         <PromotionForm
           meals={meals}
           categories={categories}
+          plans={plans}
           initial={emptyPromotionForm}
           onCancel={() => setEditingId(null)}
           onSave={async (input) => {
@@ -475,10 +528,12 @@ function PromotionsCard({
               key={promo.id}
               meals={meals}
               categories={categories}
+              plans={plans}
               initial={{
                 type: promo.type,
                 name: promo.name,
                 isActive: promo.isActive,
+                appliesTo: promo.appliesTo,
                 buyMealId: promo.buyMealId ?? undefined,
                 buyQuantity: promo.buyQuantity ?? undefined,
                 getMealId: promo.getMealId ?? undefined,
@@ -492,6 +547,9 @@ function PromotionsCard({
                 mealIds: promo.mealIds,
                 categoryIds: promo.categoryIds,
                 storewide: promo.storewide,
+                planIds: promo.planIds,
+                minCycleDays: promo.minCycleDays ?? undefined,
+                bonusDays: promo.bonusDays ?? undefined,
               }}
               onCancel={() => setEditingId(null)}
               onSave={async (input) => {
@@ -511,6 +569,9 @@ function PromotionsCard({
                 </span>
                 <span className="badge ml-2 bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
                   {promo.type.replace(/_/g, " ")}
+                </span>
+                <span className={`badge ml-1.5 ${APPLIES_TO_STYLES[promo.appliesTo]}`}>
+                  {APPLIES_TO_LABELS[promo.appliesTo]}
                 </span>
                 <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{describe(promo)}</p>
               </div>
@@ -550,12 +611,14 @@ function PromotionsCard({
 function PromotionForm({
   meals,
   categories,
+  plans,
   initial,
   onCancel,
   onSave,
 }: {
   meals: Meal[];
   categories: Category[];
+  plans: Plan[];
   initial: PromotionInput;
   onCancel: () => void;
   onSave: (input: PromotionInput) => Promise<void>;
@@ -577,13 +640,24 @@ function PromotionForm({
     }
   }
 
-  function toggleInArray(field: "mealIds" | "categoryIds", id: string) {
+  function toggleInArray(field: "mealIds" | "categoryIds" | "planIds", id: string) {
     const current = form[field] ?? [];
     setForm({
       ...form,
       [field]: current.includes(id) ? current.filter((x) => x !== id) : [...current, id],
     });
   }
+
+  // Mirrors the backend's own resolveAppliesTo() — BOGO/FREE_ITEM_ON_MINIMUM
+  // are always ORDERS, PLAN_BONUS_DAYS is always PLANS, only
+  // SCHEDULED_DISCOUNT is actually a free choice. Shown here so the admin
+  // never has to guess what the server will force.
+  const forcedAppliesTo =
+    form.type === "PLAN_BONUS_DAYS"
+      ? "PLANS"
+      : form.type === "SCHEDULED_DISCOUNT"
+        ? null
+        : "ORDERS";
 
   function toggleDay(day: number) {
     const current = form.daysOfWeek ?? [];
@@ -609,6 +683,7 @@ function PromotionForm({
             <option value="SCHEDULED_DISCOUNT">Scheduled discount</option>
             <option value="BOGO">Buy X get Y free</option>
             <option value="FREE_ITEM_ON_MINIMUM">Free item on minimum order</option>
+            <option value="PLAN_BONUS_DAYS">Plan bonus days (e.g. 7-day plan, +2 free)</option>
           </select>
         </div>
         <LabeledInput
@@ -618,6 +693,26 @@ function PromotionForm({
           placeholder="Happy Hour"
           required
         />
+      </div>
+
+      <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+        Applies to:
+        {forcedAppliesTo ? (
+          <span className={`badge ${APPLIES_TO_STYLES[forcedAppliesTo]}`}>
+            {APPLIES_TO_LABELS[forcedAppliesTo]} (fixed for this type)
+          </span>
+        ) : (
+          <select
+            value={form.appliesTo ?? "ORDERS"}
+            onChange={(e) =>
+              setForm({ ...form, appliesTo: e.target.value as PromotionInput["appliesTo"] })
+            }
+            className="input w-auto py-1"
+          >
+            <option value="ORDERS">Orders (meal discount)</option>
+            <option value="PLANS">Plans (plan-price discount)</option>
+          </select>
+        )}
       </div>
 
       {form.type === "BOGO" && (
@@ -664,6 +759,47 @@ function PromotionForm({
             value={form.freeMealId}
             onChange={(v) => setForm({ ...form, freeMealId: v })}
           />
+        </div>
+      )}
+
+      {form.type === "PLAN_BONUS_DAYS" && (
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <LabeledInput
+              label="Bonus days granted"
+              type="number"
+              value={form.bonusDays ?? 2}
+              onChange={(v) => setForm({ ...form, bonusDays: Number(v) })}
+            />
+            <LabeledInput
+              label="Minimum plan length to qualify (optional)"
+              type="number"
+              value={form.minCycleDays ?? ""}
+              onChange={(v) => setForm({ ...form, minCycleDays: v === "" ? undefined : Number(v) })}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              Plans (none selected = every plan)
+            </label>
+            <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
+              {plans.length === 0 ? (
+                <p className="text-xs text-zinc-400">No curated plans yet.</p>
+              ) : (
+                plans.map((plan) => (
+                  <label key={plan.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={(form.planIds ?? []).includes(plan.id)}
+                      onChange={() => toggleInArray("planIds", plan.id)}
+                      className="h-3.5 w-3.5 accent-primary-600"
+                    />
+                    {plan.name}
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       )}
 

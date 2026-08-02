@@ -162,6 +162,9 @@ export class PromotionsService {
     if (!coupon || !coupon.isActive) {
       throw new BadRequestException('Invalid coupon code');
     }
+    if (coupon.appliesTo === 'PLANS') {
+      throw new BadRequestException('Invalid coupon code');
+    }
     const now = new Date();
     if (coupon.validFrom && now < coupon.validFrom) {
       throw new BadRequestException('This coupon is not active yet');
@@ -202,6 +205,99 @@ export class PromotionsService {
         : Math.min(coupon.discountValue, subtotalInPaise);
 
     return { couponId: coupon.id, code: coupon.code, discountInPaise };
+  }
+
+  /**
+   * Plan-signup counterpart of validateCoupon — same rules (active window,
+   * min amount, usage limits), but checks appliesTo includes PLANS and
+   * counts usage against PlanCouponRedemption, not CouponRedemption. Kept
+   * as a separate method rather than a shared-with-context version of
+   * validateCoupon so an order-coupon's usage count is never combined with
+   * a plan-coupon's — a coupon set to appliesTo: BOTH gets two independent
+   * usage budgets, one per surface, not one shared pool.
+   */
+  async validatePlanCoupon(
+    tenantId: string,
+    code: string,
+    userId: string,
+    planPriceInPaise: number,
+  ): Promise<CouponValidationResult> {
+    const coupon = await this.promotionsRepo.findCouponByCode(tenantId, code);
+    if (!coupon || !coupon.isActive || coupon.appliesTo === 'ORDERS') {
+      throw new BadRequestException('Invalid coupon code');
+    }
+    const now = new Date();
+    if (coupon.validFrom && now < coupon.validFrom) {
+      throw new BadRequestException('This coupon is not active yet');
+    }
+    if (coupon.validUntil && now > coupon.validUntil) {
+      throw new BadRequestException('This coupon has expired');
+    }
+    if (planPriceInPaise < coupon.minOrderAmountInPaise) {
+      throw new BadRequestException(
+        `This coupon requires a minimum plan price of ₹${(coupon.minOrderAmountInPaise / 100).toFixed(0)}`,
+      );
+    }
+    if (coupon.maxUsesTotal != null) {
+      const totalUses = await this.promotionsRepo.countPlanCouponRedemptions(
+        tenantId,
+        coupon.id,
+      );
+      if (totalUses >= coupon.maxUsesTotal) {
+        throw new BadRequestException('This coupon has reached its usage limit');
+      }
+    }
+    if (coupon.maxUsesPerUser != null) {
+      const userUses = await this.promotionsRepo.countPlanCouponRedemptions(
+        tenantId,
+        coupon.id,
+        userId,
+      );
+      if (userUses >= coupon.maxUsesPerUser) {
+        throw new BadRequestException(
+          'You have already used this coupon the maximum number of times',
+        );
+      }
+    }
+
+    const discountInPaise =
+      coupon.discountType === 'PERCENTAGE'
+        ? Math.floor((planPriceInPaise * coupon.discountValue) / 100)
+        : Math.min(coupon.discountValue, planPriceInPaise);
+
+    return { couponId: coupon.id, code: coupon.code, discountInPaise };
+  }
+
+  recordPlanCouponRedemption(
+    tenantId: string,
+    couponId: string,
+    userId: string,
+    subscriptionId: string,
+  ) {
+    return this.promotionsRepo.createPlanCouponRedemption(
+      tenantId,
+      couponId,
+      userId,
+      subscriptionId,
+    );
+  }
+
+  /** Best-matching (highest) PLAN_BONUS_DAYS bonus for a plan of this
+   * duration — only the single best tier applies, same "no stacking"
+   * principle as computeCartPromotions' free-item-on-minimum tiers. */
+  async getApplicablePlanBonusDays(
+    tenantId: string,
+    planId: string,
+    durationDays: number,
+  ): Promise<number> {
+    const promotions = await this.promotionsRepo.findActivePlanBonusPromotions(
+      tenantId,
+      planId,
+    );
+    const qualifying = promotions.filter(
+      (p) => p.minCycleDays == null || durationDays >= p.minCycleDays,
+    );
+    return qualifying.reduce((max, p) => Math.max(max, p.bonusDays ?? 0), 0);
   }
 
   /** Active SCHEDULED_DISCOUNT promotion per meal, for the storefront badge. */
@@ -305,7 +401,12 @@ export class PromotionsService {
 
   createPromotion(tenantId: string, dto: CreatePromotionDto): Promise<Promotion> {
     this.assertValidPromotionShape(dto);
-    return this.promotionsRepo.createPromotion(tenantId, dto);
+    return this.promotionsRepo.createPromotion(tenantId, {
+      ...dto,
+      // PLAN_BONUS_DAYS has no meaning for order checkout — always PLANS,
+      // never trusting a client-submitted appliesTo for this type.
+      appliesTo: dto.type === 'PLAN_BONUS_DAYS' ? 'PLANS' : (dto.appliesTo ?? 'ORDERS'),
+    });
   }
 
   async updatePromotion(
@@ -315,8 +416,12 @@ export class PromotionsService {
   ): Promise<Promotion> {
     const existing = await this.promotionsRepo.findPromotionById(tenantId, id);
     if (!existing) throw new NotFoundException('Promotion not found');
-    this.assertValidPromotionShape({ ...existing, ...dto });
-    return this.promotionsRepo.updatePromotion(id, dto);
+    const merged = { ...existing, ...dto };
+    this.assertValidPromotionShape(merged);
+    return this.promotionsRepo.updatePromotion(id, {
+      ...dto,
+      appliesTo: merged.type === 'PLAN_BONUS_DAYS' ? 'PLANS' : merged.appliesTo,
+    });
   }
 
   async deletePromotion(tenantId: string, id: string): Promise<void> {
@@ -341,6 +446,7 @@ export class PromotionsService {
     storewide?: boolean | null;
     mealIds?: string[] | null;
     categoryIds?: string[] | null;
+    bonusDays?: number | null;
   }): void {
     if (dto.type === 'BOGO') {
       if (!dto.buyMealId || !dto.buyQuantity) {
@@ -367,6 +473,12 @@ export class PromotionsService {
       if (!hasScope) {
         throw new BadRequestException(
           'SCHEDULED_DISCOUNT promotions must be storewide or scoped to at least one meal/category',
+        );
+      }
+    } else if (dto.type === 'PLAN_BONUS_DAYS') {
+      if (!dto.bonusDays) {
+        throw new BadRequestException(
+          'PLAN_BONUS_DAYS promotions require bonusDays',
         );
       }
     }

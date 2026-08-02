@@ -76,6 +76,45 @@ enum PromotionType {
   BOGO
   FREE_ITEM_ON_MINIMUM
   SCHEDULED_DISCOUNT
+  // Subscription-plan equivalent of BOGO — grants bonusDays on the same
+  // plan/subscription rather than a free cart item (§11 of the plan doc:
+  // BOGO's "free item" has no meaning for a subscription).
+  PLAN_BONUS_DAYS
+}
+
+/**
+ * Which surface a Coupon/Promotion is redeemable on — order checkout, plan
+ * signup, or both. Default ORDERS everywhere so nothing existing changes
+ * behavior; PLANS/BOTH are opt-in per coupon/promotion.
+ */
+enum PromoAppliesTo {
+  ORDERS
+  PLANS
+  BOTH
+}
+
+enum SubscriptionPlanType {
+  CURATED
+  CUSTOM
+}
+
+enum MealSlotType {
+  BREAKFAST
+  LUNCH
+  DINNER
+}
+
+enum SubscriptionStatus {
+  PENDING_PAYMENT
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum SubscriptionInvoiceStatus {
+  PENDING
+  PAID
+  FAILED
 }
 
 enum BillingCycle {
@@ -123,7 +162,11 @@ model Tenant {
   notificationLogs         NotificationLog[]
   coupons                  Coupon[]
   couponRedemptions        CouponRedemption[]
+  planCouponRedemptions    PlanCouponRedemption[]
   promotions               Promotion[]
+  subscriptionPlans        SubscriptionPlan[]
+  subscriptions            Subscription[]
+  subscriptionInvoices     SubscriptionInvoice[]
   staticPages              StaticPage[]
   platformTermsAcceptances PlatformTermsAcceptance[]
   platformSubscription     PlatformSubscription?
@@ -156,6 +199,7 @@ model User {
   refreshTokens            RefreshToken[]
   addresses                Address[]
   orders                   Order[]
+  subscriptions            Subscription[]
   platformTermsAcceptances PlatformTermsAcceptance[]
 
   @@index([tenantId])
@@ -431,12 +475,13 @@ model Meal {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  tenant               Tenant      @relation(fields: [tenantId], references: [id])
-  category             Category?   @relation(fields: [categoryId], references: [id])
-  orderItems           OrderItem[]
-  promotionsAsBuyMeal  Promotion[] @relation("PromotionBuyMeal")
-  promotionsAsGetMeal  Promotion[] @relation("PromotionGetMeal")
-  promotionsAsFreeMeal Promotion[] @relation("PromotionFreeMeal")
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id])
+  category              Category?              @relation(fields: [categoryId], references: [id])
+  orderItems            OrderItem[]
+  promotionsAsBuyMeal   Promotion[]            @relation("PromotionBuyMeal")
+  promotionsAsGetMeal   Promotion[]            @relation("PromotionGetMeal")
+  promotionsAsFreeMeal  Promotion[]            @relation("PromotionFreeMeal")
+  subscriptionPlanSlots SubscriptionPlanSlot[]
 
   @@index([tenantId])
   @@index([tenantId, categoryId])
@@ -469,9 +514,10 @@ model Address {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant Tenant  @relation(fields: [tenantId], references: [id])
-  user   User    @relation(fields: [userId], references: [id])
-  orders Order[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  user          User           @relation(fields: [userId], references: [id])
+  orders        Order[]
+  subscriptions Subscription[]
 
   @@index([tenantId])
   @@index([tenantId, userId])
@@ -576,11 +622,16 @@ model Coupon {
   validFrom             DateTime?
   validUntil            DateTime?
   isActive              Boolean            @default(true)
+  // Whether this code is redeemable at order checkout, plan signup, or
+  // both — usage limits are tracked separately per surface (redemptions vs
+  // planRedemptions below), never combined.
+  appliesTo             PromoAppliesTo     @default(ORDERS)
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
-  tenant      Tenant             @relation(fields: [tenantId], references: [id])
-  redemptions CouponRedemption[]
+  tenant          Tenant                 @relation(fields: [tenantId], references: [id])
+  redemptions     CouponRedemption[]
+  planRedemptions PlanCouponRedemption[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
@@ -605,11 +656,15 @@ model CouponRedemption {
 }
 
 model Promotion {
-  id       String        @id @default(uuid())
-  tenantId String
-  type     PromotionType
-  name     String
-  isActive Boolean       @default(true)
+  id        String         @id @default(uuid())
+  tenantId  String
+  type      PromotionType
+  name      String
+  isActive  Boolean        @default(true)
+  // Whether this promotion applies to order checkout or plan signup —
+  // PLAN_BONUS_DAYS is always effectively PLANS; SCHEDULED_DISCOUNT can be
+  // either (a scheduled % off a plan's price, not just a meal's).
+  appliesTo PromoAppliesTo @default(ORDERS)
 
   // BOGO — buy `buyQuantity` of buyMealId, get `getQuantity` of getMealId
   // free (getMealId falls back to buyMealId, i.e. "buy 2 get 1 of the same").
@@ -635,6 +690,15 @@ model Promotion {
   categoryIds        String[] @default([])
   storewide          Boolean  @default(false)
 
+  // PLAN_BONUS_DAYS — grants bonusDays free on the same subscription once
+  // its plan qualifies. planIds empty = every plan (storewide-among-plans,
+  // same convention as mealIds/storewide above). minCycleDays is an
+  // optional qualifying threshold (e.g. only a 30-day+ plan unlocks it) —
+  // the plan-duration equivalent of FREE_ITEM_ON_MINIMUM's subtotal threshold.
+  planIds      String[] @default([])
+  minCycleDays Int?
+  bonusDays    Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -646,6 +710,164 @@ model Promotion {
   @@index([tenantId])
   @@index([tenantId, type, isActive])
   @@map("promotions")
+}
+
+// ─── Subscription plans (§11 — curated plans only for now, CUSTOM type
+// reserved for a later pass) ──────────────────────────────
+
+model SubscriptionPlan {
+  id           String               @id @default(uuid())
+  tenantId     String
+  type         SubscriptionPlanType @default(CURATED)
+  name         String
+  description  String?
+  durationDays Int
+  priceInPaise Int
+  isActive     Boolean              @default(true)
+  // A plan can be published while some SubscriptionPlanSlots are still TBD
+  // (mealId null) — lets an OWNER pre-sell before finishing later days.
+  isPublished  Boolean              @default(false)
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
+  tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  days          SubscriptionPlanDay[]
+  subscriptions Subscription[]
+
+  @@index([tenantId])
+  @@index([tenantId, isPublished])
+  @@map("subscription_plans")
+}
+
+model SubscriptionPlanDay {
+  id        String   @id @default(uuid())
+  planId    String
+  dayNumber Int
+  createdAt DateTime @default(now())
+
+  plan  SubscriptionPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  slots SubscriptionPlanSlot[]
+
+  @@unique([planId, dayNumber])
+  @@index([planId])
+  @@map("subscription_plan_days")
+}
+
+model SubscriptionPlanSlot {
+  id        String       @id @default(uuid())
+  planDayId String
+  slotType  MealSlotType
+  // Null = OWNER intends a meal here but hasn't decided yet — customer
+  // sees "Meal to be announced" instead of a blank/broken slot. A slot row
+  // simply not existing for a given day means that day doesn't have that
+  // meal at all (e.g. a 1-meal/day day only has a LUNCH row).
+  mealId    String?
+
+  planDay SubscriptionPlanDay @relation(fields: [planDayId], references: [id], onDelete: Cascade)
+  meal    Meal?               @relation(fields: [mealId], references: [id])
+
+  @@unique([planDayId, slotType])
+  @@index([planDayId])
+  @@map("subscription_plan_slots")
+}
+
+model Subscription {
+  id        String             @id @default(uuid())
+  tenantId  String
+  userId    String
+  planId    String
+  // Mutable prospectively (changes only affect days not yet materialized);
+  // each materialized day's Order.addressId snapshots and becomes
+  // immutable from that point — same rule §1 documents for regular orders.
+  addressId String
+  status    SubscriptionStatus @default(PENDING_PAYMENT)
+
+  // Snapshotted at signup — a later plan price/duration/name edit never
+  // retroactively changes an existing subscriber's terms.
+  priceInPaiseSnapshot Int
+  durationDaysSnapshot Int
+  planNameSnapshot     String
+
+  startDate         DateTime?
+  // The paid-through date — extended by bankedDays whenever a skip/pause
+  // is recorded, never shortened. Materialization only runs while
+  // today <= cycleEnd.
+  cycleEnd          DateTime?
+  // Counts actual materialized days, not calendar days since startDate —
+  // skips/pauses shift future template days later without ever repeating
+  // a meal. Points at SubscriptionPlanDay.dayNumber for the next delivery.
+  nextPlanDayNumber Int       @default(1)
+  bankedDays        Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant           Tenant                @relation(fields: [tenantId], references: [id])
+  user             User                  @relation(fields: [userId], references: [id])
+  plan             SubscriptionPlan      @relation(fields: [planId], references: [id])
+  address          Address               @relation(fields: [addressId], references: [id])
+  skips            SubscriptionSkip[]
+  invoices         SubscriptionInvoice[]
+  couponRedemption PlanCouponRedemption?
+
+  @@index([tenantId])
+  @@index([tenantId, userId])
+  @@index([tenantId, status])
+  @@map("subscriptions")
+}
+
+model SubscriptionSkip {
+  id             String   @id @default(uuid())
+  subscriptionId String
+  // YYYY-MM-DD, tenant-local — same "never round-trip a date range through
+  // a Date object" principle as the overview chart's bucket boundaries.
+  // dateFrom == dateTo for a single-day skip; a wider range is a pause.
+  dateFrom       String
+  dateTo         String
+  bankedDays     Int
+  createdAt      DateTime @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@map("subscription_skips")
+}
+
+model SubscriptionInvoice {
+  id                String                    @id @default(uuid())
+  tenantId          String
+  subscriptionId    String
+  razorpayOrderId   String                    @unique
+  razorpayPaymentId String?
+  amountInPaise     Int
+  status            SubscriptionInvoiceStatus @default(PENDING)
+  cycleStart        DateTime?
+  cycleEnd          DateTime?
+  createdAt         DateTime                  @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([tenantId])
+  @@index([subscriptionId])
+  @@map("subscription_invoices")
+}
+
+model PlanCouponRedemption {
+  id             String   @id @default(uuid())
+  tenantId       String
+  couponId       String
+  userId         String
+  subscriptionId String   @unique
+  createdAt      DateTime @default(now())
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  coupon       Coupon       @relation(fields: [couponId], references: [id])
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+
+  @@index([tenantId])
+  @@index([couponId, userId])
+  @@map("plan_coupon_redemptions")
 }
 
 // ─── Refresh Token ───────────────────────────────────────

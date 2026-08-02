@@ -86,6 +86,43 @@ export class PromotionsRepository {
     });
   }
 
+  countPlanCouponRedemptions(
+    tenantId: string,
+    couponId: string,
+    userId?: string,
+  ): Promise<number> {
+    return this.prisma.planCouponRedemption.count({
+      where: { tenantId, couponId, ...(userId ? { userId } : {}) },
+    });
+  }
+
+  createPlanCouponRedemption(
+    tenantId: string,
+    couponId: string,
+    userId: string,
+    subscriptionId: string,
+  ) {
+    return this.prisma.planCouponRedemption.create({
+      data: { tenantId, couponId, userId, subscriptionId },
+    });
+  }
+
+  /** Active PLAN_BONUS_DAYS promotions storewide-among-plans (empty planIds)
+   * or scoped to this specific plan. */
+  findActivePlanBonusPromotions(
+    tenantId: string,
+    planId: string,
+  ): Promise<Promotion[]> {
+    return this.prisma.promotion.findMany({
+      where: {
+        tenantId,
+        type: 'PLAN_BONUS_DAYS',
+        isActive: true,
+        OR: [{ planIds: { isEmpty: true } }, { planIds: { has: planId } }],
+      },
+    });
+  }
+
   /** Raw lookup for promotion buy/get/free meal targets — deliberately
    * bypasses MealsService to avoid a MenuModule <-> PromotionsModule cycle
    * (MenuModule needs PromotionsService for the storefront badge). */

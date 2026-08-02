@@ -13,7 +13,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PromotionType } from '../../../generated/prisma';
+import { PromoAppliesTo, PromotionType } from '../../../generated/prisma';
 
 export class CreatePromotionDto {
   @ApiProperty({ enum: PromotionType, example: PromotionType.SCHEDULED_DISCOUNT })
@@ -29,6 +29,15 @@ export class CreatePromotionDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    enum: PromoAppliesTo,
+    example: PromoAppliesTo.ORDERS,
+    description: 'ORDERS (meal-scoped types) or PLANS (PLAN_BONUS_DAYS, or a plan-scoped SCHEDULED_DISCOUNT) — defaults to ORDERS',
+  })
+  @IsOptional()
+  @IsEnum(PromoAppliesTo)
+  appliesTo?: PromoAppliesTo;
 
   // BOGO
   @ApiPropertyOptional({ description: 'BOGO: the meal the customer must buy' })
@@ -116,4 +125,28 @@ export class CreatePromotionDto {
   @IsOptional()
   @IsBoolean()
   storewide?: boolean;
+
+  // PLAN_BONUS_DAYS
+  @ApiPropertyOptional({
+    description: 'PLAN_BONUS_DAYS: plan ids this applies to — empty/omitted = every plan',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  planIds?: string[];
+
+  @ApiPropertyOptional({
+    example: 30,
+    description: 'PLAN_BONUS_DAYS: qualifying threshold — only a plan with durationDays >= this unlocks the bonus (omit for no threshold)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  minCycleDays?: number;
+
+  @ApiPropertyOptional({ example: 7, description: 'PLAN_BONUS_DAYS: bonus days granted on the subscription' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  bonusDays?: number;
 }

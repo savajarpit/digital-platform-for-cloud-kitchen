@@ -23,6 +23,12 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
     description: 'Customer-facing wizard to build a custom subscription plan',
   },
   {
+    key: 'subscription-curated-plans',
+    name: 'Curated Subscription Plans',
+    description:
+      'Owner-authored day-by-day meal plans (e.g. "7-Day Weight Loss Plan") customers subscribe to as-is',
+  },
+  {
     key: 'delivery-management',
     name: 'Delivery Management',
     description: 'In-house delivery assignment and driver-scoped tracking',

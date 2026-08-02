@@ -9,7 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CouponDiscountType } from '../../../generated/prisma';
+import { CouponDiscountType, PromoAppliesTo } from '../../../generated/prisma';
 
 export class CreateCouponDto {
   @ApiProperty({ example: 'WELCOME10' })
@@ -63,4 +63,13 @@ export class CreateCouponDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    enum: PromoAppliesTo,
+    example: PromoAppliesTo.ORDERS,
+    description: 'Redeemable at order checkout, plan signup, or both — defaults to ORDERS',
+  })
+  @IsOptional()
+  @IsEnum(PromoAppliesTo)
+  appliesTo?: PromoAppliesTo;
 }

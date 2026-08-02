@@ -98,6 +98,17 @@ enum SubscriptionPlanType {
   CUSTOM
 }
 
+/**
+ * Which of the tenant's own semantic theme ramps accents a plan card —
+ * never a raw hex, so a brand-color change in Settings reskins every plan
+ * card instantly, same rule as every other component in this frontend.
+ */
+enum PlanAccentColor {
+  PRIMARY
+  SECONDARY
+  ACCENT
+}
+
 enum MealSlotType {
   BREAKFAST
   LUNCH
@@ -727,6 +738,18 @@ model SubscriptionPlan {
   // A plan can be published while some SubscriptionPlanSlots are still TBD
   // (mealId null) — lets an OWNER pre-sell before finishing later days.
   isPublished  Boolean              @default(false)
+  // Storefront card display — bullet points (e.g. "Free delivery", "Skip or
+  // pause anytime"), a highlight badge, and which of the tenant's own
+  // semantic theme ramps (never a raw hex) accents the card. Ported from
+  // the Nutriwell demo's PlanCard design, adapted to stay theme-safe: the
+  // demo hardcoded a Tailwind gradient per plan (`from-emerald-400 ...`),
+  // which would break "changing brand colors reskins everything instantly"
+  // — accentColor is a ramp choice instead, resolved to real classes by a
+  // lookup map on the frontend so Tailwind's JIT scanner can still see them.
+  features     String[]             @default([])
+  badgeText    String?
+  isPopular    Boolean              @default(false)
+  accentColor  PlanAccentColor      @default(PRIMARY)
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
 

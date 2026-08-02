@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PromotionsRepository } from './promotions.repository';
 import { SettingsRepository } from '../settings/settings.repository';
 import { DateUtil } from '../../common/utils/date.util';
@@ -56,7 +60,10 @@ export class PromotionsService {
     rawSubtotalInPaise: number,
   ): Promise<CartPromotionsResult> {
     const [promotions, timezone] = await Promise.all([
-      this.promotionsRepo.findActivePromotionsByTypes(tenantId, AUTOMATIC_TYPES),
+      this.promotionsRepo.findActivePromotionsByTypes(
+        tenantId,
+        AUTOMATIC_TYPES,
+      ),
       this.getTenantTimezone(tenantId),
     ]);
 
@@ -65,7 +72,8 @@ export class PromotionsService {
     // Scheduled percentage discounts — reduce discountInPaise per matching
     // cart item, without touching its snapshot price.
     const scheduledPromos = promotions.filter(
-      (p) => p.type === 'SCHEDULED_DISCOUNT' && this.isWithinWindow(p, timezone),
+      (p) =>
+        p.type === 'SCHEDULED_DISCOUNT' && this.isWithinWindow(p, timezone),
     );
     if (scheduledPromos.length > 0) {
       for (const item of cartItems) {
@@ -85,7 +93,9 @@ export class PromotionsService {
     // Collect candidate buy/get/free meal ids not already known from the
     // cart, so BOGO/free-item promotions can be applied even when the free
     // meal isn't something the customer added themselves.
-    const bogoPromos = promotions.filter((p) => p.type === 'BOGO' && p.buyMealId);
+    const bogoPromos = promotions.filter(
+      (p) => p.type === 'BOGO' && p.buyMealId,
+    );
     const freeItemPromos = promotions.filter(
       (p) => p.type === 'FREE_ITEM_ON_MINIMUM' && p.freeMealId,
     );
@@ -98,7 +108,10 @@ export class PromotionsService {
       if (p.freeMealId) candidateIds.add(p.freeMealId);
     }
     const missingIds = [...candidateIds].filter((id) => !mealsById.has(id));
-    const fetchedMeals = await this.promotionsRepo.findMealsByIds(tenantId, missingIds);
+    const fetchedMeals = await this.promotionsRepo.findMealsByIds(
+      tenantId,
+      missingIds,
+    );
     const targetMealsById = new Map<string, CartMeal>([
       ...mealsById.entries(),
       ...fetchedMeals.map((m) => [m.id, m] as const),
@@ -117,7 +130,8 @@ export class PromotionsService {
       if (!getMeal || !getMeal.isAvailable) continue;
 
       const getQuantity = promo.getQuantity ?? buyQuantity;
-      const freeUnits = Math.floor(cartItem.quantity / buyQuantity) * getQuantity;
+      const freeUnits =
+        Math.floor(cartItem.quantity / buyQuantity) * getQuantity;
       if (freeUnits <= 0) continue;
 
       extraItems.push({
@@ -133,10 +147,17 @@ export class PromotionsService {
     // Only the single best-matching tier applies, to avoid stacking
     // multiple free-item tiers on one order.
     const bestFreeItemPromo = freeItemPromos
-      .filter((p) => rawSubtotalInPaise >= (p.minOrderAmountInPaise ?? Infinity))
-      .sort((a, b) => (b.minOrderAmountInPaise ?? 0) - (a.minOrderAmountInPaise ?? 0))[0];
+      .filter(
+        (p) => rawSubtotalInPaise >= (p.minOrderAmountInPaise ?? Infinity),
+      )
+      .sort(
+        (a, b) =>
+          (b.minOrderAmountInPaise ?? 0) - (a.minOrderAmountInPaise ?? 0),
+      )[0];
     if (bestFreeItemPromo) {
-      const freeMeal = targetMealsById.get(bestFreeItemPromo.freeMealId as string);
+      const freeMeal = targetMealsById.get(
+        bestFreeItemPromo.freeMealId as string,
+      );
       if (freeMeal?.isAvailable) {
         extraItems.push({
           mealId: freeMeal.id,
@@ -183,7 +204,9 @@ export class PromotionsService {
         coupon.id,
       );
       if (totalUses >= coupon.maxUsesTotal) {
-        throw new BadRequestException('This coupon has reached its usage limit');
+        throw new BadRequestException(
+          'This coupon has reached its usage limit',
+        );
       }
     }
     if (coupon.maxUsesPerUser != null) {
@@ -244,7 +267,9 @@ export class PromotionsService {
         coupon.id,
       );
       if (totalUses >= coupon.maxUsesTotal) {
-        throw new BadRequestException('This coupon has reached its usage limit');
+        throw new BadRequestException(
+          'This coupon has reached its usage limit',
+        );
       }
     }
     if (coupon.maxUsesPerUser != null) {
@@ -304,7 +329,9 @@ export class PromotionsService {
   async getActiveScheduledDiscountsForMeals(
     tenantId: string,
     meals: { id: string; categoryId: string | null }[],
-  ): Promise<Map<string, { promotionName: string; discountPercentage: number }>> {
+  ): Promise<
+    Map<string, { promotionName: string; discountPercentage: number }>
+  > {
     const [promotions, timezone] = await Promise.all([
       this.promotionsRepo.findActivePromotionsByTypes(
         tenantId,
@@ -312,13 +339,20 @@ export class PromotionsService {
       ),
       this.getTenantTimezone(tenantId),
     ]);
-    const activeNow = promotions.filter((p) => this.isWithinWindow(p, timezone));
+    const activeNow = promotions.filter((p) =>
+      this.isWithinWindow(p, timezone),
+    );
 
-    const result = new Map<string, { promotionName: string; discountPercentage: number }>();
+    const result = new Map<
+      string,
+      { promotionName: string; discountPercentage: number }
+    >();
     for (const meal of meals) {
       const best = activeNow
         .filter((p) => this.matchesScope(p, meal))
-        .sort((a, b) => (b.discountPercentage ?? 0) - (a.discountPercentage ?? 0))[0];
+        .sort(
+          (a, b) => (b.discountPercentage ?? 0) - (a.discountPercentage ?? 0),
+        )[0];
       if (best) {
         result.set(meal.id, {
           promotionName: best.name,
@@ -340,7 +374,8 @@ export class PromotionsService {
   ): boolean {
     if (promo.storewide) return true;
     if (promo.mealIds.includes(meal.id)) return true;
-    if (meal.categoryId && promo.categoryIds.includes(meal.categoryId)) return true;
+    if (meal.categoryId && promo.categoryIds.includes(meal.categoryId))
+      return true;
     return false;
   }
 
@@ -354,7 +389,9 @@ export class PromotionsService {
     const { minutesSinceMidnight } = DateUtil.getTenantNow(timezone);
     const startMinutes = DateUtil.hhmmToMinutes(promo.startTime);
     const endMinutes = DateUtil.hhmmToMinutes(promo.endTime);
-    return minutesSinceMidnight >= startMinutes && minutesSinceMidnight < endMinutes;
+    return (
+      minutesSinceMidnight >= startMinutes && minutesSinceMidnight < endMinutes
+    );
   }
 
   // ─── Coupon admin CRUD ──────────────────────────────────
@@ -399,13 +436,17 @@ export class PromotionsService {
     return this.promotionsRepo.findPromotions(tenantId);
   }
 
-  createPromotion(tenantId: string, dto: CreatePromotionDto): Promise<Promotion> {
+  createPromotion(
+    tenantId: string,
+    dto: CreatePromotionDto,
+  ): Promise<Promotion> {
     this.assertValidPromotionShape(dto);
     return this.promotionsRepo.createPromotion(tenantId, {
       ...dto,
       // PLAN_BONUS_DAYS has no meaning for order checkout — always PLANS,
       // never trusting a client-submitted appliesTo for this type.
-      appliesTo: dto.type === 'PLAN_BONUS_DAYS' ? 'PLANS' : (dto.appliesTo ?? 'ORDERS'),
+      appliesTo:
+        dto.type === 'PLAN_BONUS_DAYS' ? 'PLANS' : (dto.appliesTo ?? 'ORDERS'),
     });
   }
 

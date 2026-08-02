@@ -1,0 +1,619 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { CalendarClock, ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ApiError,
+  createPlan,
+  deletePlan,
+  getPlanAdmin,
+  listPlansAdmin,
+  publishPlan,
+  replacePlanDays,
+  updatePlan,
+  type MealSlotType,
+  type Plan,
+  type PlanAccentColor,
+  type PlanDayInput,
+  type PlanInput,
+} from "@/lib/api/admin-subscriptions";
+import { listMeals, type Meal } from "@/lib/api/admin-menu";
+import type { PaginationMeta } from "@/lib/api/response";
+import { usePermission } from "@/context/PermissionsContext";
+import { PERMISSIONS } from "@/lib/constants/permissions";
+import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
+import { Toggle } from "@/components/ui/Toggle";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
+import { formatPriceFromPaise } from "@/lib/format/currency";
+
+const SLOT_TYPES: MealSlotType[] = ["BREAKFAST", "LUNCH", "DINNER"];
+const SLOT_LABELS: Record<MealSlotType, string> = {
+  BREAKFAST: "Breakfast",
+  LUNCH: "Lunch",
+  DINNER: "Dinner",
+};
+
+const paiseToRupees = (paise: number) => String(paise / 100);
+const rupeesToPaise = (rupees: string): number => Math.round(Number(rupees) * 100);
+
+export default function AdminSubscriptionsPage() {
+  const canEdit = usePermission(PERMISSIONS.SUBSCRIPTIONS_MANAGE);
+  const { showToast } = useToast();
+  const confirm = useConfirm();
+  const [plans, setPlans] = useState<Plan[] | null>(null);
+  const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const [page, setPage] = useState(1);
+  const [meals, setMeals] = useState<Meal[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+
+  useEffect(() => {
+    listMeals({ limit: 100 })
+      .then(({ data }) => setMeals(data))
+      .catch(() => setError("Couldn't load meals."));
+  }, []);
+
+  useEffect(() => {
+    listPlansAdmin({ page })
+      .then(({ data, meta }) => {
+        setPlans(data);
+        setMeta(meta ?? null);
+      })
+      .catch(() => setError("Couldn't load plans."));
+  }, [page]);
+
+  function refetch() {
+    listPlansAdmin({ page })
+      .then(({ data, meta }) => {
+        setPlans(data);
+        setMeta(meta ?? null);
+      })
+      .catch(() => setError("Couldn't load plans."));
+  }
+
+  function handleDelete(plan: Plan) {
+    confirm({
+      message: `Delete "${plan.name}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      processingLabel: "Deleting…",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await deletePlan(plan.id);
+          refetch();
+          showToast("Plan deleted", "success");
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't delete plan.", "error");
+        }
+      },
+    });
+  }
+
+  async function handleTogglePublish(plan: Plan) {
+    try {
+      await publishPlan(plan.id, !plan.isPublished);
+      refetch();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't update plan.", "error");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-primary-600">
+          <CalendarClock className="h-5 w-5" />
+          <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+            Subscription Plans
+          </h2>
+        </div>
+        {canEdit && !creating && editingPlanId === null && (
+          <button type="button" onClick={() => setCreating(true)} className="btn-primary btn-sm">
+            <Plus className="h-4 w-4" />
+            New Plan
+          </button>
+        )}
+      </div>
+
+      {!canEdit && <ViewOnlyNotice />}
+      {error && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+          {error}
+        </p>
+      )}
+
+      {creating && (
+        <PlanMetaForm
+          initial={{
+            name: "",
+            durationDays: 7,
+            priceInPaise: 0,
+            features: [],
+            isPopular: false,
+            accentColor: "PRIMARY",
+          }}
+          onCancel={() => setCreating(false)}
+          onSave={async (input) => {
+            const created = await createPlan(input);
+            setCreating(false);
+            refetch();
+            setEditingPlanId(created.id);
+          }}
+        />
+      )}
+
+      {!plans || !meals ? (
+        <div className="card p-6">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="mt-4 h-32 w-full" />
+        </div>
+      ) : plans.length === 0 && !creating ? (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">No curated plans yet.</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {plans.map((plan) =>
+            editingPlanId === plan.id ? (
+              <PlanEditor
+                key={plan.id}
+                planId={plan.id}
+                meals={meals}
+                canEdit={canEdit}
+                onClose={() => {
+                  setEditingPlanId(null);
+                  refetch();
+                }}
+              />
+            ) : (
+              <div key={plan.id} className="card flex items-center justify-between gap-3 p-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-zinc-900 dark:text-zinc-100">{plan.name}</span>
+                    <span
+                      className={`badge ${
+                        plan.isPublished
+                          ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                          : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                      }`}
+                    >
+                      {plan.isPublished ? "Published" : "Draft"}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                    {plan.durationDays} days · {formatPriceFromPaise(plan.priceInPaise)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Toggle
+                    checked={plan.isPublished}
+                    onChange={() => handleTogglePublish(plan)}
+                    disabled={!canEdit}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setEditingPlanId(plan.id)}
+                    disabled={!canEdit}
+                    className="text-zinc-400 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label={`Edit ${plan.name}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(plan)}
+                    disabled={!canEdit}
+                    className="text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label={`Delete ${plan.name}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ),
+          )}
+        </div>
+      )}
+
+      {meta && meta.totalPages > 1 && (
+        <div className="flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400">
+          <span>
+            Page {meta.page} of {meta.totalPages} · {meta.total} plans
+          </span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => p - 1)}
+              disabled={!meta.hasPrev}
+              className="btn-outline btn-sm"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => p + 1)}
+              disabled={!meta.hasNext}
+              className="btn-outline btn-sm"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlanMetaForm({
+  initial,
+  onCancel,
+  onSave,
+}: {
+  initial: PlanInput;
+  onCancel: () => void;
+  onSave: (input: PlanInput) => Promise<void>;
+}) {
+  const { showToast } = useToast();
+  const [form, setForm] = useState(initial);
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await onSave(form);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't save plan.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="card flex flex-col gap-3 border-primary-200 bg-primary-50/50 p-4 dark:border-primary-900 dark:bg-primary-950/30"
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Name</label>
+          <input
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            placeholder="7-Day Weight Loss Plan"
+            className="input"
+            required
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Description (optional)
+          </label>
+          <input
+            value={form.description ?? ""}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            className="input"
+          />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Duration (days)</label>
+          <input
+            type="number"
+            min={1}
+            value={form.durationDays}
+            onChange={(e) => setForm({ ...form, durationDays: Number(e.target.value) })}
+            className="input"
+            required
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Full price (₹)</label>
+          <input
+            type="number"
+            min={1}
+            value={paiseToRupees(form.priceInPaise)}
+            onChange={(e) => setForm({ ...form, priceInPaise: rupeesToPaise(e.target.value) })}
+            className="input"
+            required
+          />
+        </div>
+      </div>
+
+      <div className="border-t border-primary-200 pt-3 dark:border-primary-900">
+        <p className="mb-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+          Storefront card
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              Badge text (optional)
+            </label>
+            <input
+              value={form.badgeText ?? ""}
+              onChange={(e) => setForm({ ...form, badgeText: e.target.value })}
+              placeholder="Most Popular"
+              className="input"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              Accent color
+            </label>
+            <select
+              value={form.accentColor ?? "PRIMARY"}
+              onChange={(e) =>
+                setForm({ ...form, accentColor: e.target.value as PlanAccentColor })
+              }
+              className="input"
+            >
+              <option value="PRIMARY">Primary</option>
+              <option value="SECONDARY">Secondary</option>
+              <option value="ACCENT">Accent</option>
+            </select>
+          </div>
+          <label className="flex items-center gap-2 self-end pb-2.5 text-sm text-zinc-700 dark:text-zinc-300">
+            <input
+              type="checkbox"
+              checked={form.isPopular ?? false}
+              onChange={(e) => setForm({ ...form, isPopular: e.target.checked })}
+              className="h-4 w-4 accent-primary-600"
+            />
+            Highlight as popular
+          </label>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Feature bullets (shown on the plan card)
+          </label>
+          <FeatureListEditor
+            features={form.features ?? []}
+            onChange={(features) => setForm({ ...form, features })}
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <button type="submit" disabled={saving} className="btn-primary btn-sm">
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button type="button" onClick={onCancel} className="btn-ghost btn-sm">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function FeatureListEditor({
+  features,
+  onChange,
+}: {
+  features: string[];
+  onChange: (features: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  function addFeature() {
+    const trimmed = draft.trim();
+    if (!trimmed) return;
+    onChange([...features, trimmed]);
+    setDraft("");
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {features.length > 0 && (
+        <ul className="flex flex-col gap-1.5">
+          {features.map((feature, i) => (
+            <li
+              key={i}
+              className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm dark:border-zinc-700"
+            >
+              <span className="text-zinc-700 dark:text-zinc-300">{feature}</span>
+              <button
+                type="button"
+                onClick={() => onChange(features.filter((_, idx) => idx !== i))}
+                className="text-xs font-medium text-red-600 hover:text-red-700"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addFeature();
+            }
+          }}
+          placeholder="Free delivery"
+          className="input"
+        />
+        <button type="button" onClick={addFeature} className="btn-outline btn-sm shrink-0">
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type SlotState = { included: boolean; mealId: string };
+type DayState = Record<MealSlotType, SlotState>;
+
+function emptyDayState(): DayState {
+  return {
+    BREAKFAST: { included: false, mealId: "" },
+    LUNCH: { included: false, mealId: "" },
+    DINNER: { included: false, mealId: "" },
+  };
+}
+
+function PlanEditor({
+  planId,
+  meals,
+  canEdit,
+  onClose,
+}: {
+  planId: string;
+  meals: Meal[];
+  canEdit: boolean;
+  onClose: () => void;
+}) {
+  const { showToast } = useToast();
+  const [plan, setPlan] = useState<Plan | null>(null);
+  const [days, setDays] = useState<DayState[] | null>(null);
+  const [savingDays, setSavingDays] = useState(false);
+
+  useEffect(() => {
+    getPlanAdmin(planId)
+      .then((p) => {
+        setPlan(p);
+        const initial: DayState[] = Array.from({ length: p.durationDays }, () => emptyDayState());
+        for (const day of p.days ?? []) {
+          if (day.dayNumber < 1 || day.dayNumber > p.durationDays) continue;
+          const dayState = initial[day.dayNumber - 1];
+          for (const slot of day.slots) {
+            dayState[slot.slotType] = { included: true, mealId: slot.mealId ?? "" };
+          }
+        }
+        setDays(initial);
+      })
+      .catch(() => showToast("Couldn't load plan.", "error"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planId]);
+
+  async function handleSaveMeta(input: PlanInput) {
+    const updated = await updatePlan(planId, input);
+    setPlan(updated);
+    showToast("Plan details saved", "success");
+  }
+
+  async function handleSaveDays() {
+    if (!plan || !days) return;
+    setSavingDays(true);
+    try {
+      const payload: PlanDayInput[] = days.map((day, i) => ({
+        dayNumber: i + 1,
+        slots: SLOT_TYPES.filter((slotType) => day[slotType].included).map((slotType) => ({
+          slotType,
+          mealId: day[slotType].mealId || undefined,
+        })),
+      }));
+      await replacePlanDays(planId, payload);
+      showToast("Meal plan saved", "success");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't save meal plan.", "error");
+    } finally {
+      setSavingDays(false);
+    }
+  }
+
+  function updateSlot(dayIndex: number, slotType: MealSlotType, patch: Partial<SlotState>) {
+    setDays((prev) => {
+      if (!prev) return prev;
+      const next = [...prev];
+      next[dayIndex] = { ...next[dayIndex], [slotType]: { ...next[dayIndex][slotType], ...patch } };
+      return next;
+    });
+  }
+
+  if (!plan || !days) {
+    return (
+      <div className="card p-6">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="mt-4 h-40 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="card flex flex-col gap-5 p-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          Editing: {plan.name}
+        </h3>
+        <button type="button" onClick={onClose} className="btn-ghost btn-sm">
+          Close
+        </button>
+      </div>
+
+      <PlanMetaForm
+        initial={{
+          name: plan.name,
+          description: plan.description ?? undefined,
+          durationDays: plan.durationDays,
+          priceInPaise: plan.priceInPaise,
+          features: plan.features,
+          badgeText: plan.badgeText ?? undefined,
+          isPopular: plan.isPopular,
+          accentColor: plan.accentColor,
+        }}
+        onCancel={onClose}
+        onSave={handleSaveMeta}
+      />
+
+      <div className="flex flex-col gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Meal plan</h4>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Tick a meal slot to give it a day; leave the meal as &ldquo;Meal to be announced&rdquo; if it&apos;s
+            not decided yet — customers will see that instead of a blank slot.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2">
+          {days.map((day, i) => (
+            <div
+              key={i}
+              className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-100 p-3 sm:grid-cols-[3rem_repeat(3,1fr)] sm:items-center dark:border-zinc-800"
+            >
+              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Day {i + 1}</span>
+              {SLOT_TYPES.map((slotType) => (
+                <div key={slotType} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={day[slotType].included}
+                    onChange={(e) => updateSlot(i, slotType, { included: e.target.checked })}
+                    disabled={!canEdit}
+                    className="h-3.5 w-3.5 accent-primary-600"
+                  />
+                  <select
+                    value={day[slotType].mealId}
+                    onChange={(e) => updateSlot(i, slotType, { mealId: e.target.value })}
+                    disabled={!canEdit || !day[slotType].included}
+                    className="input py-1.5 text-sm"
+                  >
+                    <option value="">{SLOT_LABELS[slotType]} — to be announced</option>
+                    {meals.map((meal) => (
+                      <option key={meal.id} value={meal.id}>
+                        {SLOT_LABELS[slotType]}: {meal.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        {canEdit && (
+          <button
+            type="button"
+            onClick={handleSaveDays}
+            disabled={savingDays}
+            className="btn-primary btn-sm self-start"
+          >
+            {savingDays ? "Saving…" : "Save meal plan"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}

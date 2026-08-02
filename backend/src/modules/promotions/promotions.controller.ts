@@ -39,7 +39,10 @@ export class PromotionsController {
   @Post('coupons')
   @ResponseMessage('Coupon created successfully')
   @ApiOperation({ summary: 'Create a coupon' })
-  createCoupon(@CurrentTenantId() tenantId: string, @Body() dto: CreateCouponDto) {
+  createCoupon(
+    @CurrentTenantId() tenantId: string,
+    @Body() dto: CreateCouponDto,
+  ) {
     return this.promotionsService.createCoupon(tenantId, dto);
   }
 
@@ -57,7 +60,10 @@ export class PromotionsController {
   @Delete('coupons/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a coupon' })
-  async deleteCoupon(@CurrentTenantId() tenantId: string, @Param('id') id: string) {
+  async deleteCoupon(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
     await this.promotionsService.deleteCoupon(tenantId, id);
   }
 
@@ -70,8 +76,13 @@ export class PromotionsController {
 
   @Post()
   @ResponseMessage('Promotion created successfully')
-  @ApiOperation({ summary: 'Create a promotion (BOGO / free-item / scheduled discount)' })
-  createPromotion(@CurrentTenantId() tenantId: string, @Body() dto: CreatePromotionDto) {
+  @ApiOperation({
+    summary: 'Create a promotion (BOGO / free-item / scheduled discount)',
+  })
+  createPromotion(
+    @CurrentTenantId() tenantId: string,
+    @Body() dto: CreatePromotionDto,
+  ) {
     return this.promotionsService.createPromotion(tenantId, dto);
   }
 
@@ -89,7 +100,10 @@ export class PromotionsController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a promotion' })
-  async deletePromotion(@CurrentTenantId() tenantId: string, @Param('id') id: string) {
+  async deletePromotion(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
     await this.promotionsService.deletePromotion(tenantId, id);
   }
 }

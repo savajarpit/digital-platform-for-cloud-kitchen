@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bell,
   Building2,
+  CalendarClock,
   Clock,
   CreditCard,
   FileText,
@@ -33,6 +34,7 @@ const OPERATIONS_NAV: NavItem[] = [
   { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed, permission: PERMISSIONS.MENU_MANAGE },
   { href: "/admin/orders", label: "Orders", icon: Package, permission: PERMISSIONS.ORDERS_MANAGE },
   { href: "/admin/promotions", label: "Promotions", icon: Tag, permission: PERMISSIONS.PROMOTIONS_MANAGE },
+  { href: "/admin/subscriptions", label: "Subscription Plans", icon: CalendarClock, permission: PERMISSIONS.SUBSCRIPTIONS_MANAGE },
   { href: "/admin/customers", label: "Customers", icon: Users, permission: PERMISSIONS.CUSTOMERS_VIEW },
 ];
 

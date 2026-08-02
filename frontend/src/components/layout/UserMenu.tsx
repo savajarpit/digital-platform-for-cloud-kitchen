@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { LayoutDashboard, LogOut, MapPin, Package, User as UserIcon } from "lucide-react";
+import { CalendarClock, LayoutDashboard, LogOut, MapPin, Package, User as UserIcon } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useToast } from "@/context/ToastContext";
 
@@ -48,6 +48,7 @@ export function UserMenu({ isAdmin }: { isAdmin?: boolean }) {
     { href: "/account/profile", label: t("profile"), icon: UserIcon },
     { href: "/orders", label: t("myOrders"), icon: Package },
     { href: "/account/addresses", label: t("myAddresses"), icon: MapPin },
+    { href: "/account/subscriptions", label: t("mySubscriptions"), icon: CalendarClock },
     ...(isAdmin ? [{ href: "/admin", label: t("admin"), icon: LayoutDashboard }] : []),
   ];
 

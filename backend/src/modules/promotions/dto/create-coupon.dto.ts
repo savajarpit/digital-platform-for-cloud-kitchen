@@ -19,19 +19,26 @@ export class CreateCouponDto {
   })
   code: string;
 
-  @ApiProperty({ enum: CouponDiscountType, example: CouponDiscountType.PERCENTAGE })
+  @ApiProperty({
+    enum: CouponDiscountType,
+    example: CouponDiscountType.PERCENTAGE,
+  })
   @IsEnum(CouponDiscountType)
   discountType: CouponDiscountType;
 
   @ApiProperty({
     example: 10,
-    description: 'Percentage (1-100) or flat amount in paise, depending on discountType',
+    description:
+      'Percentage (1-100) or flat amount in paise, depending on discountType',
   })
   @IsInt()
   @Min(1)
   discountValue: number;
 
-  @ApiPropertyOptional({ example: 0, description: 'Minimum order subtotal in paise' })
+  @ApiPropertyOptional({
+    example: 0,
+    description: 'Minimum order subtotal in paise',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -67,7 +74,8 @@ export class CreateCouponDto {
   @ApiPropertyOptional({
     enum: PromoAppliesTo,
     example: PromoAppliesTo.ORDERS,
-    description: 'Redeemable at order checkout, plan signup, or both — defaults to ORDERS',
+    description:
+      'Redeemable at order checkout, plan signup, or both — defaults to ORDERS',
   })
   @IsOptional()
   @IsEnum(PromoAppliesTo)

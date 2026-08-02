@@ -7,6 +7,7 @@ import {
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import * as Joi from 'joi';
 
 // Config
@@ -57,6 +58,7 @@ import { PlatformModule } from './modules/platform/platform.module';
 import { ContentModule } from './modules/content/content.module';
 import { PlatformTermsModule } from './modules/platform-terms/platform-terms.module';
 import { PlatformPagesModule } from './modules/platform-pages/platform-pages.module';
+import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -123,6 +125,7 @@ import { PlatformPagesModule } from './modules/platform-pages/platform-pages.mod
     TenantResolverModule,
     RedisModule,
     QueueModule,
+    ScheduleModule.forRoot(),
 
     // ── Feature Modules ──────────────────────────────────
     HealthModule,
@@ -139,6 +142,7 @@ import { PlatformPagesModule } from './modules/platform-pages/platform-pages.mod
     ContentModule,
     PlatformTermsModule,
     PlatformPagesModule,
+    SubscriptionsModule,
   ],
 
   providers: [

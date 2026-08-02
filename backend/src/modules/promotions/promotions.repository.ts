@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
-import { Coupon, Meal, Prisma, Promotion, PromotionType } from '../../generated/prisma';
+import {
+  Coupon,
+  Meal,
+  Prisma,
+  Promotion,
+  PromotionType,
+} from '../../generated/prisma';
 
 @Injectable()
 export class PromotionsRepository {
@@ -24,7 +30,10 @@ export class PromotionsRepository {
     return this.prisma.coupon.create({ data: { ...data, tenantId } });
   }
 
-  updateCoupon(id: string, data: Prisma.CouponUncheckedUpdateInput): Promise<Coupon> {
+  updateCoupon(
+    id: string,
+    data: Prisma.CouponUncheckedUpdateInput,
+  ): Promise<Coupon> {
     return this.prisma.coupon.update({ where: { id }, data });
   }
 
@@ -129,7 +138,9 @@ export class PromotionsRepository {
   findMealsByIds(
     tenantId: string,
     ids: string[],
-  ): Promise<Pick<Meal, 'id' | 'name' | 'priceInPaise' | 'isAvailable' | 'categoryId'>[]> {
+  ): Promise<
+    Pick<Meal, 'id' | 'name' | 'priceInPaise' | 'isAvailable' | 'categoryId'>[]
+  > {
     if (ids.length === 0) return Promise.resolve([]);
     return this.prisma.meal.findMany({
       where: { id: { in: ids }, tenantId, deletedAt: null },

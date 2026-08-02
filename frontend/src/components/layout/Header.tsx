@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Leaf, LayoutDashboard, LogOut, MapPin, Menu, Package, ShoppingCart, User as UserIcon, X } from "lucide-react";
+import { CalendarClock, Leaf, LayoutDashboard, LogOut, MapPin, Menu, Package, ShoppingCart, User as UserIcon, X } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useToast } from "@/context/ToastContext";
 import { useCartCount } from "@/lib/store/cart-store";
@@ -179,6 +179,14 @@ export function Header({
                 >
                   <MapPin className="h-4 w-4" />
                   {t("myAddresses")}
+                </Link>
+                <Link
+                  href="/account/subscriptions"
+                  className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <CalendarClock className="h-4 w-4" />
+                  {t("mySubscriptions")}
                 </Link>
                 {isAdmin && (
                   <Link

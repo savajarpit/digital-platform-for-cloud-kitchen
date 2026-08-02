@@ -16,7 +16,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PromoAppliesTo, PromotionType } from '../../../generated/prisma';
 
 export class CreatePromotionDto {
-  @ApiProperty({ enum: PromotionType, example: PromotionType.SCHEDULED_DISCOUNT })
+  @ApiProperty({
+    enum: PromotionType,
+    example: PromotionType.SCHEDULED_DISCOUNT,
+  })
   @IsEnum(PromotionType)
   type: PromotionType;
 
@@ -33,7 +36,8 @@ export class CreatePromotionDto {
   @ApiPropertyOptional({
     enum: PromoAppliesTo,
     example: PromoAppliesTo.ORDERS,
-    description: 'ORDERS (meal-scoped types) or PLANS (PLAN_BONUS_DAYS, or a plan-scoped SCHEDULED_DISCOUNT) — defaults to ORDERS',
+    description:
+      'ORDERS (meal-scoped types) or PLANS (PLAN_BONUS_DAYS, or a plan-scoped SCHEDULED_DISCOUNT) — defaults to ORDERS',
   })
   @IsOptional()
   @IsEnum(PromoAppliesTo)
@@ -45,7 +49,10 @@ export class CreatePromotionDto {
   @IsUUID()
   buyMealId?: string;
 
-  @ApiPropertyOptional({ example: 2, description: 'BOGO: quantity of buyMealId required' })
+  @ApiPropertyOptional({
+    example: 2,
+    description: 'BOGO: quantity of buyMealId required',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -67,20 +74,26 @@ export class CreatePromotionDto {
   // FREE_ITEM_ON_MINIMUM
   @ApiPropertyOptional({
     example: 50000,
-    description: 'FREE_ITEM_ON_MINIMUM: cart subtotal (paise) that unlocks the free item',
+    description:
+      'FREE_ITEM_ON_MINIMUM: cart subtotal (paise) that unlocks the free item',
   })
   @IsOptional()
   @IsInt()
   @Min(0)
   minOrderAmountInPaise?: number;
 
-  @ApiPropertyOptional({ description: 'FREE_ITEM_ON_MINIMUM: the meal given free' })
+  @ApiPropertyOptional({
+    description: 'FREE_ITEM_ON_MINIMUM: the meal given free',
+  })
   @IsOptional()
   @IsUUID()
   freeMealId?: string;
 
   // SCHEDULED_DISCOUNT
-  @ApiPropertyOptional({ example: 15, description: 'SCHEDULED_DISCOUNT: percentage off, 1-100' })
+  @ApiPropertyOptional({
+    example: 15,
+    description: 'SCHEDULED_DISCOUNT: percentage off, 1-100',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -109,26 +122,34 @@ export class CreatePromotionDto {
   @Matches(/^\d{2}:\d{2}$/, { message: 'endTime must be in HH:mm format' })
   endTime?: string;
 
-  @ApiPropertyOptional({ description: 'SCHEDULED_DISCOUNT: meal ids to scope the discount to' })
+  @ApiPropertyOptional({
+    description: 'SCHEDULED_DISCOUNT: meal ids to scope the discount to',
+  })
   @IsOptional()
   @IsArray()
   @IsUUID('4', { each: true })
   mealIds?: string[];
 
-  @ApiPropertyOptional({ description: 'SCHEDULED_DISCOUNT: category ids to scope the discount to' })
+  @ApiPropertyOptional({
+    description: 'SCHEDULED_DISCOUNT: category ids to scope the discount to',
+  })
   @IsOptional()
   @IsArray()
   @IsUUID('4', { each: true })
   categoryIds?: string[];
 
-  @ApiPropertyOptional({ example: false, description: 'SCHEDULED_DISCOUNT: apply storewide' })
+  @ApiPropertyOptional({
+    example: false,
+    description: 'SCHEDULED_DISCOUNT: apply storewide',
+  })
   @IsOptional()
   @IsBoolean()
   storewide?: boolean;
 
   // PLAN_BONUS_DAYS
   @ApiPropertyOptional({
-    description: 'PLAN_BONUS_DAYS: plan ids this applies to — empty/omitted = every plan',
+    description:
+      'PLAN_BONUS_DAYS: plan ids this applies to — empty/omitted = every plan',
   })
   @IsOptional()
   @IsArray()
@@ -137,14 +158,18 @@ export class CreatePromotionDto {
 
   @ApiPropertyOptional({
     example: 30,
-    description: 'PLAN_BONUS_DAYS: qualifying threshold — only a plan with durationDays >= this unlocks the bonus (omit for no threshold)',
+    description:
+      'PLAN_BONUS_DAYS: qualifying threshold — only a plan with durationDays >= this unlocks the bonus (omit for no threshold)',
   })
   @IsOptional()
   @IsInt()
   @Min(1)
   minCycleDays?: number;
 
-  @ApiPropertyOptional({ example: 7, description: 'PLAN_BONUS_DAYS: bonus days granted on the subscription' })
+  @ApiPropertyOptional({
+    example: 7,
+    description: 'PLAN_BONUS_DAYS: bonus days granted on the subscription',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)

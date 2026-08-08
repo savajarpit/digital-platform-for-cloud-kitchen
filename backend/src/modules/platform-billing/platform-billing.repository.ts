@@ -46,6 +46,72 @@ export class PlatformBillingRepository {
     });
   }
 
+  findSubscriptionWithPlanByTenantId(tenantId: string) {
+    return this.prisma.platformSubscription.findUnique({
+      where: { tenantId },
+      include: { plan: true, scheduledPlan: true },
+    });
+  }
+
+  /** An upgrade — applied immediately, the new plan's fields become current right away, clearing any stale scheduled downgrade from a prior switch. */
+  applyImmediatePlanChange(
+    tenantId: string,
+    params: {
+      planId: string;
+      planCode: string;
+      amountInPaise: number;
+      billingCycle: BillingCycle;
+    },
+  ): Promise<PlatformSubscription> {
+    return this.prisma.platformSubscription.update({
+      where: { tenantId },
+      data: {
+        planId: params.planId,
+        planCode: params.planCode,
+        amountInPaise: params.amountInPaise,
+        billingCycle: params.billingCycle,
+        scheduledPlanId: null,
+        scheduledPlanChangeAt: null,
+      },
+    });
+  }
+
+  /** A downgrade — recorded but not applied; TenantLimits/plan fields stay on the current (higher) plan until the next `subscription.charged` webhook confirms the new cycle actually started (see finalizeScheduledPlanChange). */
+  scheduleDowngrade(
+    tenantId: string,
+    params: { scheduledPlanId: string; scheduledPlanChangeAt: Date | null },
+  ): Promise<PlatformSubscription> {
+    return this.prisma.platformSubscription.update({
+      where: { tenantId },
+      data: {
+        scheduledPlanId: params.scheduledPlanId,
+        scheduledPlanChangeAt: params.scheduledPlanChangeAt,
+      },
+    });
+  }
+
+  finalizeScheduledPlanChange(
+    tenantId: string,
+    params: {
+      planId: string;
+      planCode: string;
+      amountInPaise: number;
+      billingCycle: BillingCycle;
+    },
+  ): Promise<PlatformSubscription> {
+    return this.prisma.platformSubscription.update({
+      where: { tenantId },
+      data: {
+        planId: params.planId,
+        planCode: params.planCode,
+        amountInPaise: params.amountInPaise,
+        billingCycle: params.billingCycle,
+        scheduledPlanId: null,
+        scheduledPlanChangeAt: null,
+      },
+    });
+  }
+
   async createSubscriptionAndInvite(params: {
     tenantId: string;
     planCode: string;

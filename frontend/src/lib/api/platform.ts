@@ -233,3 +233,36 @@ export interface PlatformInvoice {
 export function listTenantInvoices(tenantId: string): Promise<PlatformInvoice[]> {
   return proxyFetch<PlatformInvoice[]>(`/platform/tenants/${tenantId}/invoices`);
 }
+
+// ── Tenant usage limits ────────────────────────────────────────────
+
+export interface TenantLimits {
+  maxOrdersOverride: number | null;
+  maxSubscribersOverride: number | null;
+  signupLimitEnabled: boolean;
+  maxSignupsPerMonth: number | null;
+  blockedOrderAttempts: number;
+  blockedSubscriberAttempts: number;
+  blockedSignupAttempts: number;
+}
+
+export interface UpdateTenantLimitsInput {
+  maxOrdersOverride?: number | null;
+  maxSubscribersOverride?: number | null;
+  signupLimitEnabled?: boolean;
+  maxSignupsPerMonth?: number | null;
+}
+
+export function getTenantLimits(tenantId: string): Promise<TenantLimits> {
+  return proxyFetch<TenantLimits>(`/platform/tenants/${tenantId}/limits`);
+}
+
+export function updateTenantLimits(
+  tenantId: string,
+  input: UpdateTenantLimitsInput,
+): Promise<TenantLimits> {
+  return proxyFetch<TenantLimits>(`/platform/tenants/${tenantId}/limits`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}

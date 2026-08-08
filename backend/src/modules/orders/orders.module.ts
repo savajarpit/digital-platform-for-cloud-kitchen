@@ -9,6 +9,7 @@ import { PromotionsModule } from '../promotions/promotions.module';
 import { UsersModule } from '../users/users.module';
 import { RazorpayClientModule } from '../../shared-modules/razorpay/razorpay-client.module';
 import { PaginationService } from '../../common/services/pagination.service';
+import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { PaginationService } from '../../common/services/pagination.service';
     PromotionsModule,
     UsersModule,
     RazorpayClientModule,
+    TenantLimitsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService, OrdersRepository, PaginationService],

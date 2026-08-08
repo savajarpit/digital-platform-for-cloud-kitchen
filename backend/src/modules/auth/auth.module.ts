@@ -10,6 +10,7 @@ import { UsersModule } from '../users/users.module';
 import { SettingsModule } from '../settings/settings.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ContentModule } from '../content/content.module';
+import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ContentModule } from '../content/content.module';
     SettingsModule,
     NotificationsModule,
     ContentModule,
+    TenantLimitsModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtRefreshStrategy],

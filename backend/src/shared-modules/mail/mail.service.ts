@@ -21,6 +21,14 @@ import {
   platformPaymentFailedTemplate,
   PlatformPaymentFailedTemplateData,
 } from './templates/platform-payment-failed.template';
+import {
+  platformLimitAlertTemplate,
+  PlatformLimitAlertTemplateData,
+} from './templates/platform-limit-alert.template';
+import {
+  platformLeadNotificationTemplate,
+  PlatformLeadNotificationTemplateData,
+} from './templates/platform-lead-notification.template';
 
 @Injectable()
 export class MailService {
@@ -94,6 +102,22 @@ export class MailService {
     data: PlatformPaymentFailedTemplateData,
   ): Promise<void> {
     const { subject, html } = platformPaymentFailedTemplate(data);
+    await this.send(to, subject, html);
+  }
+
+  async sendPlatformLimitAlert(
+    to: string,
+    data: PlatformLimitAlertTemplateData,
+  ): Promise<void> {
+    const { subject, html } = platformLimitAlertTemplate(data);
+    await this.send(to, subject, html);
+  }
+
+  async sendPlatformLeadNotification(
+    to: string,
+    data: PlatformLeadNotificationTemplateData,
+  ): Promise<void> {
+    const { subject, html } = platformLeadNotificationTemplate(data);
     await this.send(to, subject, html);
   }
 }

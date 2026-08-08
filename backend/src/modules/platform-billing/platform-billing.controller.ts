@@ -12,12 +12,20 @@ import {
   type RawBodyRequest,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiExcludeEndpoint,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import { PlatformBillingService } from './platform-billing.service';
 import { VerifyActivationDto } from './dto/verify-activation.dto';
 import { Public } from '../../common/decorators/public.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentTenantId } from '../../common/decorators/current-tenant-id.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
+import { Role } from '../../common/enums/role.enum';
 
 @ApiTags('platform-billing')
 @Controller({ path: 'platform', version: '1' })
@@ -46,6 +54,18 @@ export class PlatformBillingController {
   })
   verify(@Param('token') token: string, @Body() dto: VerifyActivationDto) {
     return this.platformBillingService.verifyAndActivate(token, dto);
+  }
+
+  @Post('plans/:id/switch')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Plan switch processed')
+  @ApiOperation({
+    summary:
+      'Self-serve: switch to a higher/lower plan — an upgrade is prorated and applied immediately, a downgrade is scheduled for the end of the current billing cycle',
+  })
+  switchPlan(@CurrentTenantId() tenantId: string, @Param('id') id: string) {
+    return this.platformBillingService.switchPlan(tenantId, id);
   }
 
   @Public()

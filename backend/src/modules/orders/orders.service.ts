@@ -25,6 +25,7 @@ import { UsersRepository } from '../users/users.repository';
 import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-client.service';
 import { PaginationService } from '../../common/services/pagination.service';
 import { DateUtil } from '../../common/utils/date.util';
+import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 
 export interface CreatedOrder {
   order: OrderWithDetails;
@@ -59,6 +60,7 @@ export class OrdersService {
     private readonly usersRepo: UsersRepository,
     private readonly razorpayClient: RazorpayClientService,
     private readonly pagination: PaginationService,
+    private readonly tenantLimits: TenantLimitsService,
   ) {}
 
   /**
@@ -226,6 +228,10 @@ export class OrdersService {
     const timezone = profile?.timezone ?? 'Asia/Kolkata';
     const { dateStr: todayStr, minutesSinceMidnight: nowMinutes } =
       DateUtil.getTenantNow(timezone);
+
+    // Platform plan's monthly order cap — checked before the Razorpay order
+    // is created, same "block early" principle as assertAcceptingOrders.
+    await this.tenantLimits.assertOrderAllowed(tenantId, timezone);
 
     let deliveryDate: Date;
     let deliverySlotId: string | null;

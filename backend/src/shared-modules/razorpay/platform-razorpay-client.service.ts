@@ -137,6 +137,49 @@ export class PlatformRazorpayClientService {
   }
 
   /**
+   * Self-serve plan switch (confirmed 2026-08-03) — updates the SAME
+   * subscription's plan in place via Razorpay's native subscription-update
+   * API, rather than cancelling and recreating: an upgrade
+   * (`scheduleChangeAt: 'now'`) is prorated and charged against the
+   * existing mandate immediately, no new Checkout round-trip needed; a
+   * downgrade (`scheduleChangeAt: 'cycle_end'`) is scheduled for the next
+   * billing cycle, no immediate charge. Creates a fresh Razorpay `plan` for
+   * the target tier first, same as {@link createPlanAndSubscription} —
+   * Razorpay plans are immutable, so a tier change always needs a new one.
+   */
+  async changePlan(params: {
+    razorpaySubscriptionId: string;
+    planCode: string;
+    billingCycle: BillingCycle;
+    amountInPaise: number;
+    scheduleChangeAt: 'now' | 'cycle_end';
+  }): Promise<void> {
+    const client = this.getClient();
+    try {
+      const plan = await client.plans.create({
+        period: PERIOD_BY_CYCLE[params.billingCycle],
+        interval: 1,
+        item: {
+          name: `Platform subscription — ${params.planCode}`,
+          amount: params.amountInPaise,
+          currency: 'INR',
+        },
+      });
+
+      await client.subscriptions.update(params.razorpaySubscriptionId, {
+        plan_id: plan.id,
+        schedule_change_at: params.scheduleChangeAt,
+        customer_notify: 1,
+      });
+    } catch (error) {
+      this.logError('change platform subscription plan', error);
+      throw new InternalServerErrorException(
+        'Could not switch plans right now — please try again in a moment.',
+      );
+    }
+  }
+
+  /**
    * Undoes a cancellation scheduled via {@link cancelAtCycleEnd}, as long as
    * the current billing cycle hasn't ended yet (Razorpay's generic
    * "scheduled changes" mechanism — `has_scheduled_changes` — covers both

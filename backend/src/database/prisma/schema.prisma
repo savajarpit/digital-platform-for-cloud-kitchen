@@ -185,6 +185,8 @@ model Tenant {
   platformSubscription     PlatformSubscription?
   activationInvites        TenantActivationInvite[]
   platformInvoices         PlatformInvoice[]
+  tenantLimits             TenantLimits?
+  platformLeads            PlatformLead[]
 
   @@map("tenants")
 }
@@ -1088,6 +1090,12 @@ model PlatformPage {
 model PlatformSubscription {
   id                     String                     @id @default(uuid())
   tenantId               String                     @unique
+  // Nullable — a comped/custom one-off deal (SUPER_ADMIN typed a free-text
+  // planCode/amount at invite-creation time instead of picking a catalog
+  // row) has no PlatformPlan at all. When set, TenantLimits resolves its
+  // effective order/subscriber caps from this plan's defaults unless a
+  // per-tenant override is set.
+  planId                 String?
   planCode               String
   billingCycle           BillingCycle
   amountInPaise          Int
@@ -1100,14 +1108,132 @@ model PlatformSubscription {
   // `subscription.cancelled` webhook flips status to CANCELLED. Resumable
   // (set back to false) any time before that webhook fires.
   cancelAtPeriodEnd      Boolean                    @default(false)
+  // Self-serve plan switch (confirmed 2026-08-03): an upgrade is prorated
+  // and applied immediately via Razorpay's subscription-update API
+  // (schedule_change_at=now), so planId/planCode/amountInPaise flip right
+  // away. A downgrade is scheduled for the end of the current billing
+  // interval instead (schedule_change_at=cycle_end) — recorded here and
+  // only committed to planId/amountInPaise once the next
+  // `subscription.charged` webhook confirms the new (lower) cycle actually
+  // started, never optimistically.
+  scheduledPlanId        String?
+  scheduledPlanChangeAt  DateTime?
   createdAt              DateTime                   @default(now())
   updatedAt              DateTime                   @updatedAt
 
-  tenant   Tenant            @relation(fields: [tenantId], references: [id])
-  invoices PlatformInvoice[]
+  tenant        Tenant            @relation(fields: [tenantId], references: [id])
+  plan          PlatformPlan?     @relation(fields: [planId], references: [id])
+  scheduledPlan PlatformPlan?     @relation("ScheduledPlanChange", fields: [scheduledPlanId], references: [id])
+  invoices      PlatformInvoice[]
 
   @@index([tenantId])
+  @@index([planId])
   @@map("platform_subscriptions")
+}
+
+// The catalog of SaaS pricing tiers Arpit shows on his marketing site —
+// deliberately separate from PlatformSubscription (which is per-tenant,
+// billing-state-focused). defaultMax* are what a plan grants out of the
+// box; TenantLimits.max*Override lets SUPER_ADMIN adjust a specific
+// tenant's actual caps without changing which named tier they're on
+// (confirmed 2026-08-02: "this is not fix, I can adjust from super admin").
+model PlatformPlan {
+  id                       String       @id @default(uuid())
+  name                     String
+  priceInPaise             Int
+  billingCycle             BillingCycle
+  defaultMaxOrdersPerMonth Int
+  defaultMaxSubscribers    Int
+  // Shown on the (separate, not-yet-built) public marketing site when true.
+  isPublished              Boolean      @default(false)
+  sortOrder                Int          @default(0)
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+
+  subscriptions             PlatformSubscription[]
+  scheduledForSubscriptions PlatformSubscription[] @relation("ScheduledPlanChange")
+  leads                     PlatformLead[]
+
+  @@map("platform_plans")
+}
+
+// One row per tenant — usage caps + the counters/dedupe flags backing the
+// near-limit nudge and blocked-attempt visibility. Deliberately NOT part of
+// PlatformSubscription: signup-limiting in particular is an off-by-default
+// defensive lever unrelated to plan tier (confirmed 2026-08-02), and a
+// comped tenant with no PlatformSubscription at all can still have limits.
+model TenantLimits {
+  id       String @id @default(uuid())
+  tenantId String @unique
+
+  // Null = fall back to the tenant's PlatformSubscription.plan default; if
+  // there's no plan either, the cap is unenforced (unlimited) — a brand-new
+  // or comped tenant is never silently blocked by a feature they never knew
+  // existed.
+  maxOrdersOverride      Int?
+  maxSubscribersOverride Int?
+
+  // Monthly counters — "YYYY-MM" tags let a plain increment self-reset each
+  // month without a cron job: a stale month tag is treated as zero.
+  blockedOrderAttempts       Int     @default(0)
+  blockedOrderAttemptsMonth  String?
+  nearOrderLimitAlertedMonth String?
+  orderLimitHitAlertedMonth  String?
+
+  // Concurrent cap (not monthly) — reset explicitly whenever SUPER_ADMIN
+  // raises the effective limit (see TenantLimitsService.updateLimits), the
+  // natural "problem solved" signal for a cap that has no periodic reset.
+  blockedSubscriberAttempts  Int     @default(0)
+  nearSubscriberLimitAlerted Boolean @default(false)
+  subscriberLimitHitAlerted  Boolean @default(false)
+
+  // Signup limiting — off by default for every tenant, forever, until
+  // SUPER_ADMIN explicitly flips it on for one (e.g. a spam/abuse spike),
+  // then off again once resolved. Never plan-tier-based.
+  signupLimitEnabled         Boolean @default(false)
+  maxSignupsPerMonth         Int?
+  blockedSignupAttempts      Int     @default(0)
+  blockedSignupAttemptsMonth String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("tenant_limits")
+}
+
+enum PlatformLeadStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  DISMISSED
+}
+
+// A cold "contact us" submission from the (separate, not-yet-built) public
+// marketing site, OR a self-service "request a higher plan" ask from an
+// already-active tenant's own OWNER — tenantId tells the two apart.
+// Deliberately not an automated purchase: confirmed 2026-08-02, Arpit wants
+// every platform-plan sale to go through a manual review + a real invite he
+// sends himself, never an unattended signup-and-pay flow.
+model PlatformLead {
+  id           String             @id @default(uuid())
+  businessName String
+  contactEmail String
+  contactPhone String?
+  planId       String?
+  message      String?
+  tenantId     String?
+  status       PlatformLeadStatus @default(NEW)
+  createdAt    DateTime           @default(now())
+
+  plan   PlatformPlan? @relation(fields: [planId], references: [id])
+  tenant Tenant?       @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("platform_leads")
 }
 
 // Opaque, high-entropy token backing a public, unauthenticated activation

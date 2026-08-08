@@ -29,6 +29,7 @@ import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { TenantLimitsCard } from "@/components/admin/TenantLimitsCard";
 
 const ROLES = ["OWNER", "STAFF"] as const;
 
@@ -79,6 +80,7 @@ export default function TenantDetailPage({ params }: { params: Promise<{ id: str
           <PaymentCredentialsCard tenant={tenant} onSaved={setTenant} />
           <PermissionGridCard tenantId={id} />
           <FeatureGridCard tenantId={id} />
+          <TenantLimitsCard tenantId={id} />
         </>
       )}
     </div>
@@ -870,3 +872,4 @@ function FeatureGridCard({ tenantId }: { tenantId: string }) {
     </div>
   );
 }
+

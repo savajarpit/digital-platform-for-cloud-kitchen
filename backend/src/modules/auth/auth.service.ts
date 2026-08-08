@@ -32,6 +32,7 @@ import {
   ResetPasswordEmailJob,
   WelcomeEmailJob,
 } from '../../shared-modules/queue/processors/mail.processor';
+import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 
 const OTP_TTL_SECONDS = 600; // 10 minutes
 const OTP_MAX_ATTEMPTS = 5;
@@ -50,6 +51,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     @InjectQueue('mail') private readonly mailQueue: Queue,
+    private readonly tenantLimits: TenantLimitsService,
   ) {}
 
   async register(
@@ -59,6 +61,14 @@ export class AuthService {
     if (!tenantId) {
       throw new NotFoundException('No tenant context for this request');
     }
+
+    // Off by default for every tenant — only enforced once SUPER_ADMIN
+    // explicitly flips it on (a defensive lever, not plan-tier-based).
+    const profile = await this.settingsRepo.findBusinessProfile(tenantId);
+    await this.tenantLimits.assertSignupAllowed(
+      tenantId,
+      profile?.timezone ?? 'Asia/Kolkata',
+    );
 
     const existing = await this.usersRepo.findByEmail(dto.email);
     if (existing) throw new ConflictException('Email already in use');

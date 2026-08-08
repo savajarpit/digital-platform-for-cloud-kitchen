@@ -9,6 +9,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { FeaturesModule } from '../features/features.module';
 import { RazorpayClientModule } from '../../shared-modules/razorpay/razorpay-client.module';
 import { PaginationService } from '../../common/services/pagination.service';
+import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PaginationService } from '../../common/services/pagination.service';
     SettingsModule,
     FeaturesModule,
     RazorpayClientModule,
+    TenantLimitsModule,
   ],
   controllers: [SubscriptionsController],
   providers: [

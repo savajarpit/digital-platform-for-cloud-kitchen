@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PlatformService } from './platform.service';
 import { PlatformBillingService } from '../platform-billing/platform-billing.service';
+import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
@@ -11,6 +12,7 @@ import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { UpdateNotificationSettingsDto } from '../settings/dto/update-notification-settings.dto';
 import { UpdatePaymentSettingsDto } from '../settings/dto/update-payment-settings.dto';
 import { CreateSubscriptionInviteDto } from '../platform-billing/dto/create-subscription-invite.dto';
+import { UpdateTenantLimitsDto } from '../tenant-limits/dto/update-tenant-limits.dto';
 
 @ApiTags('platform')
 @ApiBearerAuth('access-token')
@@ -20,6 +22,7 @@ export class PlatformController {
   constructor(
     private readonly platformService: PlatformService,
     private readonly platformBillingService: PlatformBillingService,
+    private readonly tenantLimitsService: TenantLimitsService,
   ) {}
 
   @Post('tenants')
@@ -132,5 +135,28 @@ export class PlatformController {
   })
   async resumeSubscription(@Param('id') id: string) {
     await this.platformBillingService.resumeSubscription(id);
+  }
+
+  @Get('tenants/:id/limits')
+  @ResponseMessage('Tenant limits retrieved successfully')
+  @ApiOperation({
+    summary:
+      "SUPER_ADMIN-only: this tenant's order/subscriber/signup caps — overrides + blocked-attempt counters",
+  })
+  getTenantLimits(@Param('id') id: string) {
+    return this.tenantLimitsService.getTenantLimits(id);
+  }
+
+  @Patch('tenants/:id/limits')
+  @ResponseMessage('Tenant limits updated successfully')
+  @ApiOperation({
+    summary:
+      'SUPER_ADMIN-only: set extra order/subscriber caps on top of the plan default, or toggle the (off-by-default) signup limiter',
+  })
+  updateTenantLimits(
+    @Param('id') id: string,
+    @Body() dto: UpdateTenantLimitsDto,
+  ) {
+    return this.tenantLimitsService.updateTenantLimits(id, dto);
   }
 }

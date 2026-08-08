@@ -11,6 +11,8 @@ import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { PlatformBillingRepository } from './platform-billing.repository';
 import { PlatformRazorpayClientService } from '../../shared-modules/razorpay/platform-razorpay-client.service';
+import { PlatformPlansRepository } from '../platform-plans/platform-plans.repository';
+import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 import { CreateSubscriptionInviteDto } from './dto/create-subscription-invite.dto';
 import { VerifyActivationDto } from './dto/verify-activation.dto';
 import { CryptoUtil } from '../../common/utils/crypto.util';
@@ -19,7 +21,10 @@ import {
   PlatformInvoiceEmailJob,
   PlatformPaymentFailedEmailJob,
 } from '../../shared-modules/queue/processors/mail.processor';
-import { PlatformInvoiceStatus } from '../../generated/prisma';
+import {
+  PlatformInvoiceStatus,
+  PlatformSubscriptionStatus,
+} from '../../generated/prisma';
 
 const INVITE_TTL_DAYS = 7;
 
@@ -54,9 +59,72 @@ export class PlatformBillingService {
   constructor(
     private readonly billingRepo: PlatformBillingRepository,
     private readonly razorpayClient: PlatformRazorpayClientService,
+    private readonly plansRepo: PlatformPlansRepository,
+    private readonly tenantLimits: TenantLimitsService,
     private readonly config: ConfigService,
     @InjectQueue('mail') private readonly mailQueue: Queue,
   ) {}
+
+  /** Self-serve plan switch (confirmed 2026-08-03) — only for an already
+   * ACTIVE tenant, never part of first-time onboarding. An upgrade is
+   * prorated and applied immediately against the existing Razorpay mandate
+   * (no new Checkout round-trip needed); a downgrade is scheduled for the
+   * end of the current billing cycle and only committed locally once the
+   * next `subscription.charged` webhook confirms it actually took effect
+   * (see processEvent below) — never optimistically. */
+  async switchPlan(
+    tenantId: string,
+    targetPlanId: string,
+  ): Promise<{ scheduled: boolean }> {
+    const [subscription, targetPlan] = await Promise.all([
+      this.billingRepo.findSubscriptionWithPlanByTenantId(tenantId),
+      this.plansRepo.findById(targetPlanId),
+    ]);
+    if (
+      !subscription ||
+      subscription.status !== PlatformSubscriptionStatus.ACTIVE
+    ) {
+      throw new BadRequestException(
+        'Plan switching is only available once your current plan is active.',
+      );
+    }
+    if (!subscription.razorpaySubscriptionId) {
+      throw new BadRequestException(
+        'This subscription has no active Razorpay mandate yet — contact support.',
+      );
+    }
+    if (!targetPlan) throw new NotFoundException('Plan not found');
+    if (targetPlan.id === subscription.planId) {
+      throw new ConflictException('Already on this plan');
+    }
+
+    const isUpgrade = targetPlan.priceInPaise > subscription.amountInPaise;
+
+    await this.razorpayClient.changePlan({
+      razorpaySubscriptionId: subscription.razorpaySubscriptionId,
+      planCode: targetPlan.name,
+      billingCycle: targetPlan.billingCycle,
+      amountInPaise: targetPlan.priceInPaise,
+      scheduleChangeAt: isUpgrade ? 'now' : 'cycle_end',
+    });
+
+    if (isUpgrade) {
+      await this.billingRepo.applyImmediatePlanChange(tenantId, {
+        planId: targetPlan.id,
+        planCode: targetPlan.name,
+        amountInPaise: targetPlan.priceInPaise,
+        billingCycle: targetPlan.billingCycle,
+      });
+      await this.tenantLimits.resetForPlanChange(tenantId);
+    } else {
+      await this.billingRepo.scheduleDowngrade(tenantId, {
+        scheduledPlanId: targetPlan.id,
+        scheduledPlanChangeAt: subscription.currentPeriodEnd,
+      });
+    }
+
+    return { scheduled: !isUpgrade };
+  }
 
   async createInvite(
     tenantId: string,
@@ -320,6 +388,27 @@ export class PlatformBillingService {
           ? new Date(subscriptionEntity.current_end * 1000)
           : subscription.currentPeriodEnd,
       );
+
+      // A scheduled downgrade (switchPlan, cycle_end) finally taking
+      // effect — this charge is for the new cycle, so commit the plan
+      // change locally now rather than optimistically at request time.
+      if (subscription.scheduledPlanId) {
+        const scheduledPlan = await this.plansRepo.findById(
+          subscription.scheduledPlanId,
+        );
+        if (scheduledPlan) {
+          await this.billingRepo.finalizeScheduledPlanChange(
+            subscription.tenantId,
+            {
+              planId: scheduledPlan.id,
+              planCode: scheduledPlan.name,
+              amountInPaise: scheduledPlan.priceInPaise,
+              billingCycle: scheduledPlan.billingCycle,
+            },
+          );
+          await this.tenantLimits.resetForPlanChange(subscription.tenantId);
+        }
+      }
 
       const owner = await this.billingRepo.findOwnerEmail(
         subscription.tenantId,

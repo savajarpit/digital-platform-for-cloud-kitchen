@@ -10,11 +10,13 @@ import {
   Clock,
   CreditCard,
   FileText,
+  Gauge,
   Lock,
   MapPin,
   Package,
   Store,
   Tag,
+  UserPlus,
   Users,
   UtensilsCrossed,
   type LucideIcon,
@@ -26,7 +28,10 @@ interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  permission: string;
+  /** Omit for a page with no fine-grained permission of its own (e.g. a
+   * self-serve action every admin role can use) — it always renders
+   * editable, never shows the view-only lock icon. */
+  permission?: string;
 }
 
 const OPERATIONS_NAV: NavItem[] = [
@@ -45,6 +50,7 @@ const SETTINGS_NAV: NavItem[] = [
   { href: "/admin/settings/notifications", label: "Notifications", icon: Bell, permission: PERMISSIONS.NOTIFICATIONS_EDIT },
   { href: "/admin/settings/payment", label: "Payment", icon: CreditCard, permission: PERMISSIONS.PAYMENT_EDIT },
   { href: "/admin/settings/content", label: "Legal Pages", icon: FileText, permission: PERMISSIONS.CONTENT_EDIT },
+  { href: "/admin/settings/plan", label: "My Plan", icon: Gauge },
 ];
 
 export function AdminSidebar() {
@@ -53,7 +59,7 @@ export function AdminSidebar() {
 
   function renderLink(item: NavItem) {
     const isActive = pathname.startsWith(item.href);
-    const editable = loading || can(item.permission);
+    const editable = !item.permission || loading || can(item.permission);
     return (
       <Link
         key={item.href}
@@ -107,6 +113,28 @@ export function AdminSidebar() {
           >
             <FileText className="h-4 w-4 shrink-0" />
             <span className="flex-1">Platform Pages</span>
+          </Link>
+          <Link
+            href="/admin/platform/plans"
+            className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
+              pathname.startsWith("/admin/platform/plans")
+                ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <Gauge className="h-4 w-4 shrink-0" />
+            <span className="flex-1">Platform Plans</span>
+          </Link>
+          <Link
+            href="/admin/platform/leads"
+            className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
+              pathname.startsWith("/admin/platform/leads")
+                ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <UserPlus className="h-4 w-4 shrink-0" />
+            <span className="flex-1">Leads</span>
           </Link>
           <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
         </>

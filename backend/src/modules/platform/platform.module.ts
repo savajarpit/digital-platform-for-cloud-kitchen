@@ -5,9 +5,15 @@ import { PlatformRepository } from './platform.repository';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { SettingsModule } from '../settings/settings.module';
 import { PlatformBillingModule } from '../platform-billing/platform-billing.module';
+import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
 
 @Module({
-  imports: [PermissionsModule, SettingsModule, PlatformBillingModule],
+  imports: [
+    PermissionsModule,
+    SettingsModule,
+    PlatformBillingModule,
+    TenantLimitsModule,
+  ],
   controllers: [PlatformController],
   providers: [PlatformService, PlatformRepository],
 })

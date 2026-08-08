@@ -59,6 +59,9 @@ import { ContentModule } from './modules/content/content.module';
 import { PlatformTermsModule } from './modules/platform-terms/platform-terms.module';
 import { PlatformPagesModule } from './modules/platform-pages/platform-pages.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { TenantLimitsModule } from './modules/tenant-limits/tenant-limits.module';
+import { PlatformPlansModule } from './modules/platform-plans/platform-plans.module';
+import { PlatformLeadsModule } from './modules/platform-leads/platform-leads.module';
 
 @Module({
   imports: [
@@ -143,6 +146,9 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     PlatformTermsModule,
     PlatformPagesModule,
     SubscriptionsModule,
+    TenantLimitsModule,
+    PlatformPlansModule,
+    PlatformLeadsModule,
   ],
 
   providers: [

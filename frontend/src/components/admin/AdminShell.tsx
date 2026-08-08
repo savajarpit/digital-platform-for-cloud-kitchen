@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { PermissionsProvider, usePermissions } from "@/context/PermissionsContext";
 import { AdminSidebar } from "./AdminSidebar";
+import { UsageLimitBanner } from "./UsageLimitBanner";
 
 function RoleBadge() {
   const { role, isSuperAdmin, loading } = usePermissions();
@@ -41,7 +42,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
         <div className="container-app flex flex-col gap-6 py-8 sm:flex-row">
           <AdminSidebar />
-          <div className="min-w-0 flex-1">{children}</div>
+          <div className="flex min-w-0 flex-1 flex-col gap-6">
+            <UsageLimitBanner />
+            {children}
+          </div>
         </div>
       </div>
     </PermissionsProvider>

@@ -23,6 +23,7 @@ import { SkipDayDto } from './dto/skip-day.dto';
 import { PauseDto } from './dto/pause.dto';
 import { SetDayOverrideDto } from './dto/set-day-override.dto';
 import { UpdateSubscriptionSettingsDto } from './dto/update-subscription-settings.dto';
+import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 
 const PREVIEW_DAYS_AHEAD = 14;
 const CANCEL_FEATURE_KEY = 'subscription-self-cancel';
@@ -42,6 +43,7 @@ export class SubscriptionsService {
     private readonly featuresService: FeaturesService,
     private readonly razorpayClient: RazorpayClientService,
     private readonly pagination: PaginationService,
+    private readonly tenantLimits: TenantLimitsService,
   ) {}
 
   // ─── Admin plan CRUD ─────────────────────────────────────
@@ -240,6 +242,9 @@ export class SubscriptionsService {
           'This business is not accepting new subscriptions right now.',
       );
     }
+
+    // Platform plan's concurrent active-subscriber cap.
+    await this.tenantLimits.assertSubscriberAllowed(tenantId);
 
     const plan = await this.subscriptionsRepo.findPlanForSubscribe(
       tenantId,

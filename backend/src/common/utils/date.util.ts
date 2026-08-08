@@ -93,6 +93,25 @@ export class DateUtil {
     return `${map.year}-${map.month}-${map.day}`;
   }
 
+  /** The current calendar month in the tenant's timezone as a "YYYY-MM" tag
+   * (self-resetting monthly counters compare against this instead of using
+   * a cron job — a stored tag from a prior month is simply stale) plus the
+   * actual [monthStart, monthEnd) UTC instant range for a real DB query. */
+  static getTenantCurrentMonth(timezone: string): {
+    monthStr: string;
+    monthStart: Date;
+    monthEnd: Date;
+  } {
+    const { dateStr } = DateUtil.getTenantNow(timezone);
+    const monthStr = dateStr.slice(0, 7);
+    const [y, m] = monthStr.split('-').map(Number);
+    return {
+      monthStr,
+      monthStart: new Date(Date.UTC(y, m - 1, 1)),
+      monthEnd: new Date(Date.UTC(y, m, 1)),
+    };
+  }
+
   /** Day of week in the tenant's timezone, 0=Sun..6=Sat (matches Date#getDay()). */
   static getTenantDayOfWeek(timezone: string): number {
     const weekday = new Intl.DateTimeFormat('en-US', {

@@ -36,6 +36,23 @@ export interface PlatformPaymentFailedEmailJob {
   isOwnerRecipient: boolean;
 }
 
+export interface PlatformLimitAlertEmailJob {
+  email: string;
+  businessName: string;
+  type: 'order' | 'subscriber';
+  state: 'near' | 'hit';
+}
+
+export interface PlatformLeadNotificationEmailJob {
+  email: string;
+  businessName: string;
+  contactEmail: string;
+  contactPhone: string | null;
+  planName: string | null;
+  message: string | null;
+  isUpgradeRequest: boolean;
+}
+
 @Processor('mail')
 export class MailProcessor {
   private readonly logger = new Logger(MailProcessor.name);
@@ -84,6 +101,29 @@ export class MailProcessor {
       businessName: job.data.businessName,
       amountInPaise: job.data.amountInPaise,
       isOwnerRecipient: job.data.isOwnerRecipient,
+    });
+  }
+
+  @Process('send-platform-limit-alert')
+  async sendPlatformLimitAlert(job: Job<PlatformLimitAlertEmailJob>) {
+    await this.mailService.sendPlatformLimitAlert(job.data.email, {
+      businessName: job.data.businessName,
+      type: job.data.type,
+      state: job.data.state,
+    });
+  }
+
+  @Process('send-platform-lead-notification')
+  async sendPlatformLeadNotification(
+    job: Job<PlatformLeadNotificationEmailJob>,
+  ) {
+    await this.mailService.sendPlatformLeadNotification(job.data.email, {
+      businessName: job.data.businessName,
+      contactEmail: job.data.contactEmail,
+      contactPhone: job.data.contactPhone,
+      planName: job.data.planName,
+      message: job.data.message,
+      isUpgradeRequest: job.data.isUpgradeRequest,
     });
   }
 

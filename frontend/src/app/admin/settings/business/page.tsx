@@ -13,7 +13,9 @@ import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Toggle } from "@/components/ui/Toggle";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
+import { ImageUploadInput } from "@/components/admin/ImageUploadInput";
 
 type FormState = UpdateBusinessProfileInput;
 
@@ -50,6 +52,7 @@ export default function BusinessProfilePage() {
           gstNumber: p.gstNumber ?? undefined,
           defaultLocale: p.defaultLocale,
           themeConfig: p.themeConfig,
+          showReviewsOnHomepage: p.showReviewsOnHomepage,
         });
       })
       .catch(() => setError("Couldn't load business profile."));
@@ -134,39 +137,24 @@ export default function BusinessProfilePage() {
             />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Logo URL
-              </label>
-              <input
-                type="url"
-                value={form.logoUrl ?? ""}
-                onChange={(e) => field("logoUrl", e.target.value)}
-                className="input w-full"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Favicon URL
-              </label>
-              <input
-                type="url"
-                value={form.faviconUrl ?? ""}
-                onChange={(e) => field("faviconUrl", e.target.value)}
-                className="input w-full"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Hero image URL
-              </label>
-              <input
-                type="url"
-                value={form.heroImageUrl ?? ""}
-                onChange={(e) => field("heroImageUrl", e.target.value)}
-                className="input w-full"
-              />
-            </div>
+            <ImageUploadInput
+              label="Logo"
+              value={form.logoUrl ?? undefined}
+              onChange={(url) => field("logoUrl", url ?? "")}
+              previewClassName="h-16 w-16 rounded-lg"
+            />
+            <ImageUploadInput
+              label="Favicon"
+              value={form.faviconUrl ?? undefined}
+              onChange={(url) => field("faviconUrl", url ?? "")}
+              previewClassName="h-16 w-16 rounded-lg"
+            />
+            <ImageUploadInput
+              label="Hero image"
+              value={form.heroImageUrl ?? undefined}
+              onChange={(url) => field("heroImageUrl", url ?? "")}
+              previewClassName="h-16 w-16 rounded-lg"
+            />
           </div>
         </div>
 
@@ -357,6 +345,22 @@ export default function BusinessProfilePage() {
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="card flex flex-col gap-4 p-6">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Home page</h3>
+          <label className="flex items-center justify-between gap-3">
+            <span className="text-sm text-zinc-700 dark:text-zinc-300">
+              Show customer reviews on the home page
+              <span className="block text-xs text-zinc-400">
+                Only appears once you&apos;ve added at least one review below in Reviews.
+              </span>
+            </span>
+            <Toggle
+              checked={form.showReviewsOnHomepage ?? false}
+              onChange={(checked) => field("showReviewsOnHomepage", checked)}
+            />
+          </label>
         </div>
 
         <button type="submit" disabled={saving} className="btn-primary w-fit">

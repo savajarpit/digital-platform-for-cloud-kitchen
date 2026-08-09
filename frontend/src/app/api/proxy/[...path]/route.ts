@@ -29,13 +29,23 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
   const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
 
   const targetUrl = `${API_URL}/${path.join("/")}${req.nextUrl.search}`;
-  const body = req.method === "GET" || req.method === "HEAD" ? undefined : await req.text();
+  // Multipart uploads (see lib/api/uploads.ts) must be forwarded byte-for-byte
+  // with their real boundary-bearing Content-Type — reading as text or
+  // hardcoding "application/json" would corrupt the file body.
+  const incomingContentType = req.headers.get("content-type") ?? "application/json";
+  const isMultipart = incomingContentType.startsWith("multipart/form-data");
+  const body =
+    req.method === "GET" || req.method === "HEAD"
+      ? undefined
+      : isMultipart
+        ? await req.arrayBuffer()
+        : await req.text();
 
   const doFetch = (token?: string) =>
     fetch(targetUrl, {
       method: req.method,
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": incomingContentType,
         "X-Tenant-Domain": tenantDomain,
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },

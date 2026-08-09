@@ -187,6 +187,8 @@ model Tenant {
   platformInvoices         PlatformInvoice[]
   tenantLimits             TenantLimits?
   platformLeads            PlatformLead[]
+  homeSections             HomeSection[]
+  reviews                  Review[]
 
   @@map("tenants")
 }
@@ -262,6 +264,9 @@ model BusinessProfile {
   // 2 = today/tomorrow/day-after). Checkout's day dropdown is bounded by
   // this, enforced again server-side in OrdersService.
   maxAdvanceOrderDays     Int      @default(2)
+  // Home page testimonials block — only rendered if true AND at least one
+  // published Review exists.
+  showReviewsOnHomepage   Boolean  @default(false)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
@@ -504,6 +509,10 @@ model Meal {
   nutrition          Json      @default("{}")
   isVegetarian       Boolean   @default(true)
   isAvailable        Boolean   @default(true)
+  // Admin-curated "Popular" flag — mirrors SubscriptionPlan.isPopular. Drives
+  // a storefront badge and the menu page's Popular filter; not computed from
+  // real order analytics.
+  isPopular          Boolean   @default(false)
   dailyQuantityLimit Int?
   sortOrder          Int       @default(0)
   deletedAt          DateTime?
@@ -517,12 +526,70 @@ model Meal {
   promotionsAsGetMeal   Promotion[]            @relation("PromotionGetMeal")
   promotionsAsFreeMeal  Promotion[]            @relation("PromotionFreeMeal")
   subscriptionPlanSlots SubscriptionPlanSlot[]
+  homeSectionItems      HomeSectionItem[]
 
   @@index([tenantId])
   @@index([tenantId, categoryId])
   @@index([tenantId, isAvailable])
   @@index([deletedAt])
   @@map("meals")
+}
+
+// Admin-curated storefront home page sections (e.g. "Today's Special",
+// "Best Sellers") — custom-named, manually populated with products. A meal
+// may appear in multiple sections at once (normal merchandising); deleting
+// a section cascades to its items.
+model HomeSection {
+  id          String   @id @default(uuid())
+  tenantId    String
+  title       String
+  description String?
+  sortOrder   Int      @default(0)
+  isEnabled   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant            @relation(fields: [tenantId], references: [id])
+  items  HomeSectionItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, isEnabled])
+  @@map("home_sections")
+}
+
+model HomeSectionItem {
+  id        String   @id @default(uuid())
+  sectionId String
+  mealId    String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  section HomeSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  meal    Meal        @relation(fields: [mealId], references: [id])
+
+  @@unique([sectionId, mealId])
+  @@index([sectionId])
+  @@map("home_section_items")
+}
+
+// Admin-curated testimonials — not customer-submitted (confirmed with
+// Arpit: simplest path since the platform has few organic reviews yet).
+model Review {
+  id          String   @id @default(uuid())
+  tenantId    String
+  authorName  String
+  rating      Int
+  comment     String?
+  isPublished Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, isPublished])
+  @@map("reviews")
 }
 
 // ─── Addresses & Commerce ─────────────────────────────────
@@ -944,6 +1011,9 @@ model SubscriptionSettings {
   isAcceptingNewSubscriptions Boolean  @default(true)
   closureReason               String?
   noticeHoursBeforeDelivery   Int      @default(24)
+  // Home page plans block — only rendered if true AND at least one
+  // published SubscriptionPlan exists.
+  showOnHomepage              Boolean  @default(true)
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 

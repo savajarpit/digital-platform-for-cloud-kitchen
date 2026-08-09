@@ -38,6 +38,7 @@ export interface BusinessProfile {
   minOrderAmount: number | null;
   freeDeliveryAboveAmount: number | null;
   maxAdvanceOrderDays: number;
+  showReviewsOnHomepage: boolean;
 }
 
 export type UpdateBusinessProfileInput = Partial<
@@ -61,6 +62,7 @@ export type UpdateBusinessProfileInput = Partial<
     | "currency"
     | "gstNumber"
     | "defaultLocale"
+    | "showReviewsOnHomepage"
   >
 > & { themeConfig?: ThemeConfig };
 

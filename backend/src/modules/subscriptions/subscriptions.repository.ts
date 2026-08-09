@@ -113,9 +113,17 @@ export class SubscriptionsRepository {
 
   // ─── Storefront (public) ─────────────────────────────────
 
-  findPublishedPlans(tenantId: string): Promise<SubscriptionPlan[]> {
+  findPublishedPlans(
+    tenantId: string,
+    search?: string,
+  ): Promise<SubscriptionPlan[]> {
     return this.prisma.subscriptionPlan.findMany({
-      where: { tenantId, isPublished: true, isActive: true },
+      where: {
+        tenantId,
+        isPublished: true,
+        isActive: true,
+        ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -305,6 +313,7 @@ export class SubscriptionsRepository {
       isAcceptingNewSubscriptions?: boolean;
       closureReason?: string | null;
       noticeHoursBeforeDelivery?: number;
+      showOnHomepage?: boolean;
     },
   ): Promise<SubscriptionSettings> {
     return this.prisma.subscriptionSettings.upsert({

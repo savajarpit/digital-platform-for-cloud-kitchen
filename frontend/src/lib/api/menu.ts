@@ -24,6 +24,7 @@ export interface Meal {
   nutrition: Record<string, unknown>;
   isVegetarian: boolean;
   isAvailable: boolean;
+  isPopular: boolean;
   dailyQuantityLimit: number | null;
   sortOrder: number;
   category: MenuCategory | null;

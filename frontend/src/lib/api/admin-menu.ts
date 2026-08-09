@@ -54,6 +54,7 @@ export interface Meal {
   nutrition: MealNutrition | null;
   isVegetarian: boolean;
   isAvailable: boolean;
+  isPopular: boolean;
   dailyQuantityLimit: number | null;
   sortOrder: number;
 }
@@ -67,6 +68,7 @@ export interface MealInput {
   nutrition?: MealNutrition;
   isVegetarian?: boolean;
   isAvailable?: boolean;
+  isPopular?: boolean;
   dailyQuantityLimit?: number;
   sortOrder?: number;
 }
@@ -76,12 +78,16 @@ export function listMeals(params: {
   limit?: number;
   categoryId?: string;
   search?: string;
+  isVegetarian?: boolean;
+  isPopular?: boolean;
 } = {}): Promise<{ data: Meal[]; meta?: PaginationMeta }> {
   const search = new URLSearchParams();
   if (params.page) search.set("page", String(params.page));
   if (params.limit) search.set("limit", String(params.limit));
   if (params.categoryId) search.set("categoryId", params.categoryId);
   if (params.search) search.set("search", params.search);
+  if (params.isVegetarian !== undefined) search.set("isVegetarian", String(params.isVegetarian));
+  if (params.isPopular !== undefined) search.set("isPopular", String(params.isPopular));
   const qs = search.toString();
   return proxyFetchPaginated<Meal[]>(`/menu/meals/admin${qs ? `?${qs}` : ""}`);
 }

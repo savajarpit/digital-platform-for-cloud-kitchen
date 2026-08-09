@@ -1,5 +1,7 @@
-import { getTranslations } from "next-intl/server";
-import { ImageOff } from "lucide-react";
+"use client";
+
+import { useTranslations } from "next-intl";
+import { ImageOff, Star } from "lucide-react";
 import type { Meal } from "@/lib/api/menu";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { AddToCartButton } from "./AddToCartButton";
@@ -18,7 +20,7 @@ function macroValue(nutrition: Record<string, unknown>, key: string): string | n
   return null;
 }
 
-export async function MealCard({
+export function MealCard({
   meal,
   currency,
   index = 0,
@@ -27,7 +29,7 @@ export async function MealCard({
   currency: string;
   index?: number;
 }) {
-  const t = await getTranslations("menu");
+  const t = useTranslations("menu");
   const macros = MACRO_KEYS.map((key) => ({
     key,
     label: MACRO_LABELS[key],
@@ -75,6 +77,12 @@ export async function MealCard({
         {discountPercentage > 0 && (
           <span className="badge absolute bottom-3 left-3 bg-red-600 text-white">
             {t("discountOff", { percent: discountPercentage })}
+          </span>
+        )}
+        {meal.isPopular && (
+          <span className="badge absolute bottom-3 right-3 bg-amber-400 text-amber-950">
+            <Star className="h-3 w-3 fill-amber-950" />
+            Popular
           </span>
         )}
         {!meal.isAvailable && (

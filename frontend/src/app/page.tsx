@@ -2,19 +2,26 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { ArrowRight, Clock, Leaf, ShieldCheck, Truck } from "lucide-react";
 import { getPublicConfig } from "@/lib/api/settings";
-import { getMeals } from "@/lib/api/menu";
-import { MealCard } from "@/components/menu/MealCard";
-
-const SPECIALS_COUNT = 4;
+import { getPublicHomeSections } from "@/lib/api/home-sections";
+import { getPublishedPlans, getShowPlansOnHomepage } from "@/lib/api/plans";
+import { getPublicReviews } from "@/lib/api/reviews";
+import { HomeSectionsBlock } from "@/components/home/HomeSectionsBlock";
+import { PlansHomeBlock } from "@/components/home/PlansHomeBlock";
+import { ReviewsBlock } from "@/components/home/ReviewsBlock";
+import { HomeSearchBar } from "@/components/home/HomeSearchBar";
 
 export default async function Home() {
-  const [config, t, meals] = await Promise.all([
+  const [config, t, sections, plans, showPlans, reviews] = await Promise.all([
     getPublicConfig(),
     getTranslations("home"),
-    getMeals(),
+    getPublicHomeSections(),
+    getPublishedPlans(),
+    getShowPlansOnHomepage(),
+    getPublicReviews(),
   ]);
-  const specials = meals.slice(0, SPECIALS_COUNT);
   const hasHeroImage = Boolean(config.heroImageUrl);
+  const showPlansBlock = showPlans && plans.length > 0;
+  const showReviewsBlock = config.showReviewsOnHomepage && reviews.length > 0;
 
   return (
     <main className="flex flex-1 flex-col">
@@ -77,16 +84,14 @@ export default async function Home() {
         </div>
       </section>
 
-      {specials.length > 0 && (
-        <section className="container-app py-16 sm:py-20">
-          <h2 className="section-title text-zinc-900 dark:text-zinc-100">{t("todaysSpecial")}</h2>
-          <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {specials.map((meal, index) => (
-              <MealCard key={meal.id} meal={meal} currency={config.currency} index={index} />
-            ))}
-          </div>
-        </section>
+      {sections.length > 0 && (
+        <div className="container-app flex justify-center pt-10">
+          <HomeSearchBar />
+        </div>
       )}
+      <HomeSectionsBlock sections={sections} currency={config.currency} />
+      {showPlansBlock && <PlansHomeBlock plans={plans} />}
+      {showReviewsBlock && <ReviewsBlock reviews={reviews} />}
     </main>
   );
 }

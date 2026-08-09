@@ -41,6 +41,7 @@ import { TenantContextMiddleware } from './common/middleware/tenant-context.midd
 // Shared modules
 import { QueueModule } from './shared-modules/queue/queue.module';
 import { RedisModule } from './shared-modules/cache/redis.module';
+import { StorageModule } from './shared-modules/storage/storage.module';
 import { TenantResolverModule } from './common/tenant-resolver.module';
 
 // Modules
@@ -62,6 +63,9 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 import { TenantLimitsModule } from './modules/tenant-limits/tenant-limits.module';
 import { PlatformPlansModule } from './modules/platform-plans/platform-plans.module';
 import { PlatformLeadsModule } from './modules/platform-leads/platform-leads.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
+import { HomeSectionsModule } from './modules/home-sections/home-sections.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 
 @Module({
   imports: [
@@ -128,6 +132,7 @@ import { PlatformLeadsModule } from './modules/platform-leads/platform-leads.mod
     TenantResolverModule,
     RedisModule,
     QueueModule,
+    StorageModule,
     ScheduleModule.forRoot(),
 
     // ── Feature Modules ──────────────────────────────────
@@ -149,6 +154,9 @@ import { PlatformLeadsModule } from './modules/platform-leads/platform-leads.mod
     TenantLimitsModule,
     PlatformPlansModule,
     PlatformLeadsModule,
+    UploadsModule,
+    HomeSectionsModule,
+    ReviewsModule,
   ],
 
   providers: [

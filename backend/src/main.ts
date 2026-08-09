@@ -5,12 +5,14 @@ import {
   ClassSerializerInterceptor,
   Logger,
 } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import compression from 'compression';
 
 import { AppModule } from './app.module';
+import { UPLOADS_ROOT } from './shared-modules/storage/storage.service';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -20,10 +22,16 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
     rawBody: true, // required for Stripe webhooks
   });
+
+  // Serve locally-uploaded images (see shared-modules/storage) — bypasses
+  // the /api prefix/versioning, so a stored URL like
+  // `${publicUrl}/uploads/<tenantId>/images/<uuid>.jpg` stays stable even if
+  // the API version changes.
+  app.useStaticAssets(UPLOADS_ROOT, { prefix: '/uploads' });
 
   const config = app.get(ConfigService);
   const port = config.get<number>('app.port') ?? 3000;

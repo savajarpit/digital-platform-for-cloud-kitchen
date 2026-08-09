@@ -123,12 +123,21 @@ export class SubscriptionsService {
         isAcceptingNewSubscriptions: true,
         closureReason: null,
         noticeHoursBeforeDelivery: 24,
+        showOnHomepage: true,
       }
     );
   }
 
   updateSettings(tenantId: string, dto: UpdateSubscriptionSettingsDto) {
     return this.subscriptionsRepo.upsertSettings(tenantId, dto);
+  }
+
+  /** Public: just the one flag the storefront home page needs. */
+  async getPublicSettings(
+    tenantId: string,
+  ): Promise<{ showOnHomepage: boolean }> {
+    const settings = await this.subscriptionsRepo.findSettings(tenantId);
+    return { showOnHomepage: settings?.showOnHomepage ?? true };
   }
 
   // ─── Admin: today's deliveries ───────────────────────────
@@ -183,8 +192,8 @@ export class SubscriptionsService {
 
   // ─── Storefront (public) ─────────────────────────────────
 
-  findPublishedPlans(tenantId: string) {
-    return this.subscriptionsRepo.findPublishedPlans(tenantId);
+  findPublishedPlans(tenantId: string, search?: string) {
+    return this.subscriptionsRepo.findPublishedPlans(tenantId, search);
   }
 
   async findPublishedPlan(tenantId: string, id: string) {

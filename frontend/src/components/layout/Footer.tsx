@@ -29,9 +29,14 @@ export async function Footer({
         <div className={`grid grid-cols-1 gap-8 sm:gap-10 ${gridColsClass[columnCount]}`}>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600">
-                <Leaf className="h-5 w-5 text-white" />
-              </div>
+              {config.logoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={config.logoUrl} alt={config.displayName} className="h-9 w-auto" />
+              ) : (
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600">
+                  <Leaf className="h-5 w-5 text-white" />
+                </div>
+              )}
               <span className="font-display text-lg font-bold text-white">{config.displayName}</span>
             </div>
             <p className="max-w-xs text-sm leading-relaxed text-zinc-400">

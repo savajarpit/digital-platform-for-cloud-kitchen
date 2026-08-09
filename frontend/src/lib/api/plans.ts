@@ -26,3 +26,15 @@ export async function getPublishedPlans(): Promise<PublicPlan[]> {
     return [];
   }
 }
+
+/** Server-side only — whether the home page's plans block is turned on. */
+export async function getShowPlansOnHomepage(): Promise<boolean> {
+  try {
+    const res = await serverFetch("/subscriptions/settings/public");
+    if (!res.ok) return true;
+    const body = (await res.json()) as ApiResponse<{ showOnHomepage: boolean }>;
+    return body.data?.showOnHomepage ?? true;
+  } catch {
+    return true;
+  }
+}

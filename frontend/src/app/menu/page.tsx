@@ -2,14 +2,14 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { getPublicConfig } from "@/lib/api/settings";
 import { getCategories, getMeals } from "@/lib/api/menu";
-import { MealCard } from "@/components/menu/MealCard";
+import { MenuBrowser } from "@/components/menu/MenuBrowser";
 
 export default async function MenuPage({
   searchParams,
 }: {
-  searchParams: Promise<{ category?: string }>;
+  searchParams: Promise<{ category?: string; search?: string }>;
 }) {
-  const { category: activeSlug } = await searchParams;
+  const { category: activeSlug, search } = await searchParams;
 
   const [config, t, categories] = await Promise.all([
     getPublicConfig(),
@@ -20,9 +20,10 @@ export default async function MenuPage({
   const activeCategory = activeSlug
     ? categories.find((c) => c.slug === activeSlug)
     : undefined;
-  const meals = await getMeals(
-    activeCategory ? { categoryId: activeCategory.id } : undefined,
-  );
+  const meals = await getMeals({
+    categoryId: activeCategory?.id,
+    search: search || undefined,
+  });
 
   return (
     <main className="container-app flex-1 py-10">
@@ -56,16 +57,17 @@ export default async function MenuPage({
         </nav>
       )}
 
-      {meals.length === 0 ? (
+      {meals.length === 0 && !search ? (
         <p className="mt-16 text-center text-sm text-zinc-500 dark:text-zinc-400">
           No meals available right now — check back soon.
         </p>
       ) : (
-        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {meals.map((meal, index) => (
-            <MealCard key={meal.id} meal={meal} currency={config.currency} index={index} />
-          ))}
-        </div>
+        <MenuBrowser
+          initialMeals={meals}
+          currency={config.currency}
+          categoryId={activeCategory?.id}
+          initialSearch={search ?? ""}
+        />
       )}
     </main>
   );

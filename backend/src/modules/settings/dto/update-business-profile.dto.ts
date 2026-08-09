@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEmail,
   IsHexColor,
   IsOptional,
@@ -137,4 +138,13 @@ export class UpdateBusinessProfileDto {
   @ValidateNested()
   @Type(() => ThemeConfigInputDto)
   themeConfig?: ThemeConfigInputDto;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'Show the testimonials block on the home page (only if published reviews also exist)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  showReviewsOnHomepage?: boolean;
 }

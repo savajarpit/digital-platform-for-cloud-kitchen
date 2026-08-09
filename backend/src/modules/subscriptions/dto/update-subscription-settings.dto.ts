@@ -31,4 +31,13 @@ export class UpdateSubscriptionSettingsDto {
   @Min(0)
   @Max(240)
   noticeHoursBeforeDelivery?: number;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'Show the plans block on the home page (only if a published plan also exists)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  showOnHomepage?: boolean;
 }

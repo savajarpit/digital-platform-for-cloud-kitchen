@@ -64,6 +64,10 @@ export class PublicConfigResponseDto {
   @Expose()
   maxAdvanceOrderDays: number;
 
+  @ApiProperty({ example: false })
+  @Expose()
+  showReviewsOnHomepage: boolean;
+
   constructor(partial: Partial<PublicConfigResponseDto>) {
     Object.assign(this, partial);
   }

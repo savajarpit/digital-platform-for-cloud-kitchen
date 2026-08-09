@@ -11,6 +11,7 @@ import {
   CreditCard,
   FileText,
   Gauge,
+  LayoutGrid,
   Lock,
   MapPin,
   Package,
@@ -36,6 +37,7 @@ interface NavItem {
 
 const OPERATIONS_NAV: NavItem[] = [
   { href: "/admin/overview", label: "Overview", icon: BarChart3, permission: PERMISSIONS.ORDERS_MANAGE },
+  { href: "/admin/home", label: "Home Page", icon: LayoutGrid, permission: PERMISSIONS.MENU_MANAGE },
   { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed, permission: PERMISSIONS.MENU_MANAGE },
   { href: "/admin/orders", label: "Orders", icon: Package, permission: PERMISSIONS.ORDERS_MANAGE },
   { href: "/admin/promotions", label: "Promotions", icon: Tag, permission: PERMISSIONS.PROMOTIONS_MANAGE },

@@ -77,6 +77,7 @@ export interface SubscriptionSettings {
   isAcceptingNewSubscriptions: boolean;
   closureReason: string | null;
   noticeHoursBeforeDelivery: number;
+  showOnHomepage: boolean;
 }
 
 export interface TodaysDeliveries {

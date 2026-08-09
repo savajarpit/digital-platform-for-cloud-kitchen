@@ -928,6 +928,19 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
           disabled={!canEdit}
         />
       </label>
+      <label className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Show plans on home page
+          <span className="block text-xs font-normal text-zinc-400">
+            Only appears if at least one plan is also published.
+          </span>
+        </span>
+        <Toggle
+          checked={settings.showOnHomepage}
+          onChange={(checked) => setSettings({ ...settings, showOnHomepage: checked })}
+          disabled={!canEdit}
+        />
+      </label>
       {!settings.isAcceptingNewSubscriptions && (
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">

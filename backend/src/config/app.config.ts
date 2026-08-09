@@ -16,4 +16,10 @@ export default registerAs('app', () => ({
   // (password reset). Not the tenant's own domain: those are resolved from
   // the request that triggers the email, not needed for a server-side link.
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
+  // This API's own public base URL — used to build absolute URLs for
+  // locally-stored uploads (see shared-modules/storage). Swap to a real S3/R2
+  // bucket URL later; StorageService is the only place that needs to change.
+  publicUrl:
+    process.env.PUBLIC_API_URL ||
+    `http://localhost:${parseInt(process.env.PORT ?? '3000', 10) || 3000}`,
 }));

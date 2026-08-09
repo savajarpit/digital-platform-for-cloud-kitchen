@@ -19,6 +19,7 @@ export interface PublicConfig {
   supportPhone?: string;
   addressLine1?: string;
   maxAdvanceOrderDays: number;
+  showReviewsOnHomepage: boolean;
 }
 
 export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
@@ -31,6 +32,7 @@ export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   defaultLocale: "en",
   currency: "INR",
   maxAdvanceOrderDays: 2,
+  showReviewsOnHomepage: false,
 };
 
 /**

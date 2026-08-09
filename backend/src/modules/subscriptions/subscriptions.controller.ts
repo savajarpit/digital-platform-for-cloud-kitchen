@@ -63,10 +63,25 @@ export class SubscriptionsController {
   @Get('plans')
   @ResponseMessage('Plans retrieved successfully')
   @ApiOperation({ summary: 'List published curated plans for the storefront' })
-  findPublishedPlans(@CurrentTenant('id') tenantId: string | undefined) {
+  findPublishedPlans(
+    @CurrentTenant('id') tenantId: string | undefined,
+    @Query('search') search?: string,
+  ) {
     if (!tenantId)
       throw new NotFoundException('No tenant context for this request');
-    return this.subscriptionsService.findPublishedPlans(tenantId);
+    return this.subscriptionsService.findPublishedPlans(tenantId, search);
+  }
+
+  @Public()
+  @Get('settings/public')
+  @ResponseMessage('Subscription homepage settings retrieved successfully')
+  @ApiOperation({
+    summary: 'Public: whether the home page should show the plans block',
+  })
+  getPublicSettings(@CurrentTenant('id') tenantId: string | undefined) {
+    if (!tenantId)
+      throw new NotFoundException('No tenant context for this request');
+    return this.subscriptionsService.getPublicSettings(tenantId);
   }
 
   @Public()

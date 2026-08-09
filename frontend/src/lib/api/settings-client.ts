@@ -18,6 +18,7 @@ const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   defaultLocale: "en",
   currency: "INR",
   maxAdvanceOrderDays: 2,
+  showReviewsOnHomepage: false,
 };
 
 /**

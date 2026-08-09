@@ -28,6 +28,8 @@ export class MealsService {
         categoryId: query.categoryId,
         search: query.search,
         onlyAvailable: false,
+        isVegetarian: query.isVegetarian,
+        isPopular: query.isPopular,
       },
       skip,
       query.limit,

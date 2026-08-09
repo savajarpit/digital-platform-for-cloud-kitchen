@@ -6,6 +6,18 @@ export interface MealFilter {
   categoryId?: string;
   search?: string;
   onlyAvailable: boolean;
+  isVegetarian?: boolean;
+  isPopular?: boolean;
+  sortBy?: 'price_asc' | 'price_desc';
+}
+
+function mealOrderBy(
+  sortBy?: 'price_asc' | 'price_desc',
+): Prisma.MealOrderByWithRelationInput[] {
+  if (sortBy === 'price_asc') return [{ priceInPaise: 'asc' }, { name: 'asc' }];
+  if (sortBy === 'price_desc')
+    return [{ priceInPaise: 'desc' }, { name: 'asc' }];
+  return [{ sortOrder: 'asc' }, { name: 'asc' }];
 }
 
 @Injectable()
@@ -50,7 +62,7 @@ export class MenuRepository {
   findMeals(tenantId: string, filter: MealFilter): Promise<Meal[]> {
     return this.prisma.meal.findMany({
       where: mealWhere(tenantId, filter),
-      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      orderBy: mealOrderBy(filter.sortBy),
       include: { category: true },
     });
   }
@@ -118,5 +130,9 @@ function mealWhere(
     ...(filter.search
       ? { name: { contains: filter.search, mode: 'insensitive' } }
       : {}),
+    ...(filter.isVegetarian !== undefined
+      ? { isVegetarian: filter.isVegetarian }
+      : {}),
+    ...(filter.isPopular !== undefined ? { isPopular: filter.isPopular } : {}),
   };
 }

@@ -64,6 +64,7 @@ export class SettingsService {
       supportPhone: profile.supportPhone ?? undefined,
       addressLine1: profile.addressLine1 ?? undefined,
       maxAdvanceOrderDays: profile.maxAdvanceOrderDays,
+      showReviewsOnHomepage: profile.showReviewsOnHomepage,
     });
   }
 

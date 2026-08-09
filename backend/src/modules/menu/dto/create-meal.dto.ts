@@ -56,6 +56,11 @@ export class CreateMealDto {
   @IsBoolean()
   isAvailable?: boolean;
 
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  isPopular?: boolean;
+
   @ApiPropertyOptional({ example: 50 })
   @IsOptional()
   @IsInt()

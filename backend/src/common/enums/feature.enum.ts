@@ -51,4 +51,10 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
     description:
       'Coupon codes, BOGO/free-item offers, and scheduled menu discounts',
   },
+  {
+    key: 'home-plans-customization',
+    name: 'Home & Plans Page Customization',
+    description:
+      'Lets OWNER/STAFF edit the home page hero/CTA/reviews-section copy and the Plans page header + Why-subscribe/FAQ/contact sections. Without this, the storefront uses sensible defaults and the admin editors are hidden entirely.',
+  },
 ];

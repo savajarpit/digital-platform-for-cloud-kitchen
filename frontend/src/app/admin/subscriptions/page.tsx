@@ -39,6 +39,7 @@ import {
 import { listMeals, type Meal } from "@/lib/api/admin-menu";
 import type { PaginationMeta } from "@/lib/api/response";
 import { usePermission } from "@/context/PermissionsContext";
+import { useFeature } from "@/context/FeaturesContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
@@ -74,6 +75,7 @@ const rupeesToPaise = (rupees: string): number => Math.round(Number(rupees) * 10
 
 export default function AdminSubscriptionsPage() {
   const canEdit = usePermission(PERMISSIONS.SUBSCRIPTIONS_MANAGE);
+  const hasCustomization = useFeature("home-plans-customization");
   const { showToast } = useToast();
   const confirm = useConfirm();
   const [tab, setTab] = useState<Tab>("plans");
@@ -204,9 +206,13 @@ export default function AdminSubscriptionsPage() {
       {tab === "settings" && (
         <div className="flex flex-col gap-6">
           <SettingsTab canEdit={canEdit} />
-          <PlansPageSettingsCard canEdit={canEdit} />
-          <PlanFeaturesManager canEdit={canEdit} />
-          <PlanFaqManager canEdit={canEdit} />
+          {hasCustomization && (
+            <>
+              <PlansPageSettingsCard canEdit={canEdit} />
+              <PlanFeaturesManager canEdit={canEdit} />
+              <PlanFaqManager canEdit={canEdit} />
+            </>
+          )}
         </div>
       )}
 

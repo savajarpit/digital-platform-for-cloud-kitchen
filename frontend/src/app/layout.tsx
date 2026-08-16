@@ -9,7 +9,6 @@ import { getPublicSocialLinks } from "@/lib/api/social-links";
 import { buildThemeStyle } from "@/lib/theme/build-theme-style";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
-import { AdminBackground } from "@/components/layout/AdminBackground";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/session-cookies";
 import { decodeJwtRole } from "@/lib/auth/decode-role";
 import { ToastProvider } from "@/context/ToastContext";
@@ -70,7 +69,6 @@ export default async function RootLayout({
         <NextIntlClientProvider>
           <ToastProvider>
             <ConfirmProvider>
-              <AdminBackground />
               <Header
                 displayName={config.displayName}
                 logoUrl={config.logoUrl}

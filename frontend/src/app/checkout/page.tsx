@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { CheckCircle2, Clock, MapPin, Plus, Zap } from "lucide-react";
 import { useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
+import { useCartAvailability } from "@/lib/hooks/useCartAvailability";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { ApiError, listAddresses, checkServiceability, type Address, type ServiceabilityResult } from "@/lib/api/addresses";
 import { createOrder, previewOrder } from "@/lib/api/orders";
@@ -32,6 +33,8 @@ export default function CheckoutPage() {
   const items = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clear);
   const subtotal = useCartSubtotal();
+  const { unavailableMealIds, loading: checkingAvailability } = useCartAvailability(items);
+  const hasUnavailableItems = unavailableMealIds.size > 0;
 
   const [addresses, setAddresses] = useState<Address[] | null>(null);
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -109,6 +112,17 @@ export default function CheckoutPage() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A meal already in the cart can go unavailable (admin disables/deletes
+  // it) between add-to-cart time and checkout — send the customer back to
+  // the cart to resolve it rather than letting them attempt payment for an
+  // item the backend will reject anyway.
+  useEffect(() => {
+    if (checkingAvailability || !hasUnavailableItems) return;
+    showToast("Some items in your cart are no longer available.", "error");
+    router.replace("/cart");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkingAvailability, hasUnavailableItems]);
 
   useEffect(() => {
     // No address selected yet — nothing to fetch. Leaves any prior
@@ -548,7 +562,9 @@ export default function CheckoutPage() {
               !agreedToTerms ||
               Boolean(windowClosed) ||
               belowMinOrder ||
-              serviceability?.serviceable === false
+              serviceability?.serviceable === false ||
+              checkingAvailability ||
+              hasUnavailableItems
             }
             className="btn-primary mt-6 w-full"
           >

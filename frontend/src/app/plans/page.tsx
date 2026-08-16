@@ -23,20 +23,22 @@ export default async function PlansPage() {
 
   if (plans.length === 0) {
     return (
-      <main className="container-app flex-1 py-16 text-center">
-        <span className="badge mx-auto bg-primary-100 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
-          <CalendarClock className="h-3.5 w-3.5" />
-          Coming soon
-        </span>
-        <h1 className="section-title mt-4 text-zinc-900 dark:text-zinc-100">
-          {pageSettings.plansPageTitle}
-        </h1>
-        <p className="mx-auto mt-4 max-w-xl text-base text-zinc-600 dark:text-zinc-400">
-          Weekly meal plans from {config.displayName} are on the way.
-        </p>
-        <Link href="/menu" className="btn-primary mt-10">
-          Browse the full menu
-        </Link>
+      <main className="flex-1 bg-linear-to-br from-primary-50 to-white py-16 text-center dark:from-primary-950 dark:to-zinc-950">
+        <div className="container-app">
+          <span className="badge mx-auto bg-primary-100 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
+            <CalendarClock className="h-3.5 w-3.5" />
+            Coming soon
+          </span>
+          <h1 className="section-title mt-4 text-zinc-900 dark:text-zinc-100">
+            {pageSettings.plansPageTitle}
+          </h1>
+          <p className="mx-auto mt-4 max-w-xl text-base text-zinc-600 dark:text-zinc-400">
+            Weekly meal plans from {config.displayName} are on the way.
+          </p>
+          <Link href="/menu" className="btn-primary mt-10">
+            Browse the full menu
+          </Link>
+        </div>
       </main>
     );
   }
@@ -47,8 +49,8 @@ export default async function PlansPage() {
 
   return (
     <main className="flex-1">
-      <div className="container-app py-12">
-        <div className="text-center">
+      <div className="bg-linear-to-br from-primary-50 to-white py-12 dark:from-primary-950 dark:to-zinc-950">
+        <div className="container-app text-center">
           <h1 className="section-title text-zinc-900 dark:text-zinc-100">
             {pageSettings.plansPageTitle}
           </h1>
@@ -56,23 +58,23 @@ export default async function PlansPage() {
             {pageSettings.plansPageSubtitle}
           </p>
         </div>
-
-        <PlansBrowser initialPlans={plans} />
       </div>
 
-      {(showWhySubscribe || showFaq || pageSettings.contactCtaEnabled) && (
-        <div className="bg-zinc-50 dark:bg-zinc-950">
-          {showWhySubscribe && <WhySubscribeSection features={features} />}
-          {showFaq && <PlanFaqSection faqs={faqs} />}
-          {pageSettings.contactCtaEnabled && (
-            <StillHaveQuestionsSection
-              title={pageSettings.contactCtaTitle}
-              description={pageSettings.contactCtaDescription}
-              email={contactEmail}
-            />
-          )}
+      <div className="bg-zinc-50 dark:bg-zinc-950">
+        <div className="container-app py-12">
+          <PlansBrowser initialPlans={plans} />
         </div>
-      )}
+
+        {showWhySubscribe && <WhySubscribeSection features={features} />}
+        {showFaq && <PlanFaqSection faqs={faqs} />}
+        {pageSettings.contactCtaEnabled && (
+          <StillHaveQuestionsSection
+            title={pageSettings.contactCtaTitle}
+            description={pageSettings.contactCtaDescription}
+            email={contactEmail}
+          />
+        )}
+      </div>
     </main>
   );
 }

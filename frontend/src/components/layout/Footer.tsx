@@ -28,8 +28,8 @@ export async function Footer({
   };
 
   return (
-    <footer className="mt-20 bg-zinc-900 text-zinc-300 print:hidden dark:bg-black">
-      <div className="container-app py-12 sm:py-16">
+    <footer className="bg-zinc-900 text-zinc-300 print:hidden dark:bg-black">
+      <div className="container-app pt-20 pb-12 sm:pb-16">
         <div className={`grid grid-cols-1 gap-8 sm:gap-10 ${gridColsClass[columnCount]}`}>
           <div className="space-y-4">
             <div className="flex items-center gap-2">

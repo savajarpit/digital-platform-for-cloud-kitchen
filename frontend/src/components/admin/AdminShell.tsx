@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { PermissionsProvider, usePermissions } from "@/context/PermissionsContext";
+import { FeaturesProvider } from "@/context/FeaturesContext";
 import { AdminSidebar } from "./AdminSidebar";
 import { UsageLimitBanner } from "./UsageLimitBanner";
 
@@ -21,37 +22,39 @@ function RoleBadge() {
 export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <PermissionsProvider>
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 print:bg-white">
-        <header className="border-b border-zinc-200 bg-white print:hidden dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="container-app flex h-16 items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link
-                href="/"
-                className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 hover:text-primary-600 dark:text-zinc-400"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to storefront
-              </Link>
+      <FeaturesProvider>
+        <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 print:bg-white">
+          <header className="border-b border-zinc-200 bg-white print:hidden dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="container-app flex h-16 items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Link
+                  href="/"
+                  className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 hover:text-primary-600 dark:text-zinc-400"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to storefront
+                </Link>
+              </div>
+              <h1 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                Admin Settings
+              </h1>
+              <RoleBadge />
             </div>
-            <h1 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
-              Admin Settings
-            </h1>
-            <RoleBadge />
-          </div>
-        </header>
+          </header>
 
-        <div className="container-app flex flex-col gap-6 py-8 sm:flex-row print:block print:gap-0 print:p-0">
-          <div className="print:hidden">
-            <AdminSidebar />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-6 print:block">
+          <div className="container-app flex flex-col gap-6 py-8 sm:flex-row print:block print:gap-0 print:p-0">
             <div className="print:hidden">
-              <UsageLimitBanner />
+              <AdminSidebar />
             </div>
-            {children}
+            <div className="flex min-w-0 flex-1 flex-col gap-6 print:block">
+              <div className="print:hidden">
+                <UsageLimitBanner />
+              </div>
+              {children}
+            </div>
           </div>
         </div>
-      </div>
+      </FeaturesProvider>
     </PermissionsProvider>
   );
 }

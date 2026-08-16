@@ -8,9 +8,9 @@ export function WhySubscribeSection({ features }: { features: PublicPlanFeature[
       <h2 className="section-title text-center text-zinc-900 dark:text-zinc-100">
         Why subscribe?
       </h2>
-      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-3">
+      <div className="mt-8 flex flex-wrap justify-center gap-6">
         {features.map((feature) => (
-          <div key={feature.id} className="card p-6 text-center">
+          <div key={feature.id} className="card w-full max-w-xs p-6 text-center sm:w-72">
             <div className="text-4xl">{feature.icon}</div>
             <h3 className="mt-3 font-bold text-zinc-900 dark:text-zinc-100">{feature.title}</h3>
             {feature.description && (

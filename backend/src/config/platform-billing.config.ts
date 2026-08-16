@@ -11,7 +11,8 @@ export default registerAs('platformBilling', () => ({
   razorpayKeyId: process.env.PLATFORM_RAZORPAY_KEY_ID,
   razorpayKeySecret: process.env.PLATFORM_RAZORPAY_KEY_SECRET,
   razorpayWebhookSecret: process.env.PLATFORM_RAZORPAY_WEBHOOK_SECRET,
-  // Notified alongside the tenant on subscription.payment.failed — revenue
-  // at risk is Arpit's own concern, not just the tenant's.
+  // Notified alongside the tenant on subscription.pending (a recurring
+  // charge attempt failed, Razorpay is retrying) — revenue at risk is
+  // Arpit's own concern, not just the tenant's.
   alertEmail: process.env.PLATFORM_ALERT_EMAIL,
 }));

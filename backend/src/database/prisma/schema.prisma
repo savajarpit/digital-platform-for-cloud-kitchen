@@ -1451,7 +1451,7 @@ model TenantActivationInvite {
 }
 
 // One row per subscription charge attempt (success or failure), written
-// from the `subscription.charged`/`subscription.payment.failed` webhook
+// from the `subscription.charged`/`subscription.pending` webhook
 // handlers — backs the admin billing dashboard's per-tenant payment
 // history. We never render our own platform invoice: `invoiceUrl` is
 // Razorpay's own generated invoice link, just stored and linked to.

@@ -452,7 +452,7 @@ export class PlatformBillingService {
           invoiceUrl: invoiceEntity?.short_url ?? null,
         });
       }
-    } else if (payload.event === 'subscription.payment.failed') {
+    } else if (payload.event === 'subscription.pending') {
       await this.billingRepo.createInvoice({
         tenantId: subscription.tenantId,
         platformSubscriptionId: subscription.id,

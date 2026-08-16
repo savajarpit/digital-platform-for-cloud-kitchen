@@ -16,14 +16,24 @@ interface TenantRazorpayCredentials {
   webhookSecret?: string;
 }
 
-/** The Razorpay SDK rejects with a plain object, not an Error instance. */
+/** The Razorpay SDK rejects with a plain object, not an Error instance —
+ * but only for a *formatted* API error; an auth/network-level failure (e.g.
+ * "Subscriptions not enabled for this account") comes back shaped like
+ * `{ statusCode: 401, error: "Unauthorized" }`, a plain string, not this
+ * `{code, description}` object. Check the nested shape too, not just that
+ * an `error` key exists, or a real message silently becomes "[undefined]
+ * undefined" in the log. */
 interface RazorpaySdkError {
   statusCode: string | number;
   error: { code: string; description: string };
 }
 
 function isRazorpaySdkError(error: unknown): error is RazorpaySdkError {
-  return typeof error === 'object' && error !== null && 'error' in error;
+  if (typeof error !== 'object' || error === null || !('error' in error)) {
+    return false;
+  }
+  const inner = (error as { error: unknown }).error;
+  return typeof inner === 'object' && inner !== null && 'code' in inner;
 }
 
 /**
@@ -70,7 +80,7 @@ export class RazorpayClientService {
       } else {
         this.logger.error(
           `Razorpay order creation failed for tenant ${tenantId}`,
-          error instanceof Error ? error.stack : String(error),
+          error instanceof Error ? error.stack : JSON.stringify(error),
         );
       }
       throw new InternalServerErrorException(

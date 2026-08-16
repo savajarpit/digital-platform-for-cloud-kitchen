@@ -442,6 +442,18 @@ export class SubscriptionsService {
     };
   }
 
+  async findSubscriptionForAdmin(tenantId: string, id: string) {
+    const subscription = await this.subscriptionsRepo.findByIdForTenantAdmin(
+      tenantId,
+      id,
+    );
+    if (!subscription) throw new NotFoundException('Subscription not found');
+    const invoice = await this.subscriptionsRepo.findInvoiceBySubscriptionId(
+      subscription.id,
+    );
+    return { ...subscription, invoice };
+  }
+
   async getInvoice(tenantId: string, userId: string, id: string) {
     const subscription =
       await this.subscriptionsRepo.findSubscriptionByIdWithAddress(

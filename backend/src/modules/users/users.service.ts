@@ -68,6 +68,17 @@ export class UsersService {
     return user;
   }
 
+  async findCustomerDetail(id: string, tenantId: string) {
+    const customer = await this.usersRepo.findCustomerDetail(tenantId, id);
+    if (!customer) throw new NotFoundException('Customer not found');
+    // Manual strip, not a DTO — nested addresses/orders/subscriptions vary in
+    // shape per include, so a class-transformer allow-list would just
+    // duplicate this same list of fields to drop.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _passwordHash, ...safe } = customer;
+    return safe;
+  }
+
   async update(
     id: string,
     tenantId: string,

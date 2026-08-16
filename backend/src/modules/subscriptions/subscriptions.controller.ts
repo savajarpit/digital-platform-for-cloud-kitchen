@@ -274,6 +274,25 @@ export class SubscriptionsController {
     );
   }
 
+  // Must come after every other literal `admin/...` route above — otherwise
+  // this `:id` wildcard would shadow them (e.g. "today" parsed as an id).
+  @Get('admin/:id')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Subscription retrieved successfully')
+  @ApiOperation({
+    summary:
+      "Admin: a single subscriber's full detail — plan/days, address, skips/overrides, latest invoice",
+  })
+  findSubscriptionForAdmin(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.subscriptionsService.findSubscriptionForAdmin(tenantId, id);
+  }
+
   // ─── Customer ──────────────────────────────────────────────
 
   @Post()

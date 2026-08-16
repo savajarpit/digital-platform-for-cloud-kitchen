@@ -37,6 +37,17 @@ export interface AdminOrder {
   user: { firstName: string; lastName: string | null; email: string };
 }
 
+export interface AdminOrderDetail extends AdminOrder {
+  discountInPaise: number;
+  couponCode: string | null;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
+  notes: string | null;
+  isInstant: boolean;
+  subscriptionId: string | null;
+  userId: string;
+}
+
 export type AdminOrdersMeta = PaginationMeta;
 
 export const ADMIN_SETTABLE_STATUSES = [
@@ -57,6 +68,10 @@ export function listAdminOrders(params: {
   if (params.status) search.set("status", params.status);
   const qs = search.toString();
   return proxyFetchPaginated<AdminOrder[]>(`/orders/admin${qs ? `?${qs}` : ""}`);
+}
+
+export function getAdminOrder(id: string): Promise<AdminOrderDetail> {
+  return proxyFetch<AdminOrderDetail>(`/orders/admin/${id}`);
 }
 
 export function updateOrderStatus(id: string, status: string): Promise<AdminOrder> {

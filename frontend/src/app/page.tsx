@@ -8,7 +8,6 @@ import { getPublicReviews } from "@/lib/api/reviews";
 import { HomeSectionsBlock } from "@/components/home/HomeSectionsBlock";
 import { PlansHomeBlock } from "@/components/home/PlansHomeBlock";
 import { ReviewsBlock } from "@/components/home/ReviewsBlock";
-import { HomeSearchBar } from "@/components/home/HomeSearchBar";
 
 export default async function Home() {
   const [config, t, sections, plans, showPlans, reviews] = await Promise.all([
@@ -84,11 +83,6 @@ export default async function Home() {
         </div>
       </section>
 
-      {sections.length > 0 && (
-        <div className="container-app flex justify-center pt-10">
-          <HomeSearchBar />
-        </div>
-      )}
       <HomeSectionsBlock sections={sections} currency={config.currency} />
       {showPlansBlock && <PlansHomeBlock plans={plans} />}
       {showReviewsBlock && <ReviewsBlock reviews={reviews} />}

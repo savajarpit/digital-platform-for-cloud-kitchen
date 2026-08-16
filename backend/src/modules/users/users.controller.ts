@@ -109,7 +109,9 @@ export class UsersController {
   @Get('customers')
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
   @RequirePermission('customers.view')
-  @ApiOperation({ summary: 'List this tenant\'s customers (paginated, searchable)' })
+  @ApiOperation({
+    summary: "List this tenant's customers (paginated, searchable)",
+  })
   async findCustomers(
     @Query() query: QueryCustomersDto,
     @CurrentUser('tenantId') tenantId: string,
@@ -119,6 +121,22 @@ export class UsersController {
       tenantId,
     );
     return { data: data.map((c) => new CustomerResponseDto(c)), meta };
+  }
+
+  // Must come after 'customers' above — otherwise this `:id` wildcard's
+  // 1-segment sibling wouldn't matter, but keep it grouped with its list.
+  @Get('customers/:id')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('customers.view')
+  @ApiOperation({
+    summary:
+      "Admin: a customer's full detail — profile, addresses, recent orders, subscriptions",
+  })
+  findCustomerDetail(
+    @Param('id') id: string,
+    @CurrentUser('tenantId') tenantId: string,
+  ) {
+    return this.usersService.findCustomerDetail(id, tenantId);
   }
 
   @Get(':id')

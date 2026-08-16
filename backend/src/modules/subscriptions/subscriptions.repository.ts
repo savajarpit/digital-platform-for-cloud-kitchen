@@ -242,14 +242,19 @@ export class SubscriptionsRepository {
     });
   }
 
+  /** Excludes PENDING_PAYMENT — an abandoned plan checkout, not a real subscriber. */
   findAllForTenantAdmin(
     tenantId: string,
     skip: number,
     take: number,
   ): Promise<[Subscription[], number]> {
+    const where = {
+      tenantId,
+      status: { not: SubscriptionStatus.PENDING_PAYMENT },
+    };
     return this.prisma.$transaction([
       this.prisma.subscription.findMany({
-        where: { tenantId },
+        where,
         include: {
           plan: { select: { name: true } },
           user: { select: { firstName: true, lastName: true, email: true } },
@@ -258,8 +263,24 @@ export class SubscriptionsRepository {
         skip,
         take,
       }),
-      this.prisma.subscription.count({ where: { tenantId } }),
+      this.prisma.subscription.count({ where }),
     ]);
+  }
+
+  findByIdForTenantAdmin(tenantId: string, id: string) {
+    return this.prisma.subscription.findFirst({
+      where: { id, tenantId },
+      include: {
+        plan: { include: PLAN_WITH_DAYS_INCLUDE },
+        skips: { orderBy: { dateFrom: 'asc' } },
+        dayOverrides: true,
+        address: true,
+        deliverySlot: true,
+        user: {
+          select: { firstName: true, lastName: true, email: true, phone: true },
+        },
+      },
+    });
   }
 
   createSkip(

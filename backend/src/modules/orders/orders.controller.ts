@@ -71,6 +71,23 @@ export class OrdersController {
     return this.ordersService.findAllForAdmin(tenantId, query);
   }
 
+  // Must come after 'admin/overview' and 'admin' above — otherwise this
+  // `:id` wildcard would shadow them.
+  @Get('admin/:id')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('orders.manage')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Order retrieved successfully')
+  @ApiOperation({
+    summary: 'Admin: get a single order for this tenant, any customer',
+  })
+  findOneForAdmin(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.ordersService.findOneForAdmin(tenantId, id);
+  }
+
   @Get(':id')
   @ApiBearerAuth('access-token')
   @ResponseMessage('Order retrieved successfully')

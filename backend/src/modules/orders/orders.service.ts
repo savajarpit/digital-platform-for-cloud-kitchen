@@ -357,6 +357,15 @@ export class OrdersService {
     return order;
   }
 
+  async findOneForAdmin(
+    tenantId: string,
+    id: string,
+  ): Promise<OrderWithAdminDetails> {
+    const order = await this.ordersRepo.findByIdForTenant(tenantId, id);
+    if (!order) throw new NotFoundException('Order not found');
+    return order;
+  }
+
   async findAllForAdmin(tenantId: string, query: QueryAdminOrdersDto) {
     const skip = this.pagination.getOffsetSkip(query.page, query.limit);
     const [data, total] = await this.ordersRepo.findAllForTenant(

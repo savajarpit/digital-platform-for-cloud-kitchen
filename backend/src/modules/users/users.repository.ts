@@ -93,6 +93,28 @@ export class UsersRepository {
     ]);
   }
 
+  /** Admin customer detail — profile + addresses + recent paid orders +
+   * subscriptions, one query. Orders exclude PENDING_PAYMENT for the same
+   * "abandoned checkout" reason as everywhere else this filter appears. */
+  findCustomerDetail(tenantId: string, id: string) {
+    return this.prisma.user.findFirst({
+      where: { id, tenantId, role: Role.CUSTOMER, deletedAt: null },
+      include: {
+        addresses: { orderBy: { createdAt: 'desc' } },
+        orders: {
+          where: { status: { not: 'PENDING_PAYMENT' } },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          include: { items: true },
+        },
+        subscriptions: {
+          orderBy: { createdAt: 'desc' },
+          include: { plan: { select: { name: true } } },
+        },
+      },
+    });
+  }
+
   async create(data: Prisma.UserCreateInput): Promise<User> {
     return this.prisma.user.create({ data });
   }

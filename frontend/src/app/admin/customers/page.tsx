@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { ChevronLeft, ChevronRight, Search, Users } from "lucide-react";
 import { listCustomers, type Customer } from "@/lib/api/admin-customers";
 import type { PaginationMeta } from "@/lib/api/response";
@@ -110,8 +111,13 @@ function CustomersTable({
         <tbody>
           {customers.map((customer) => (
             <tr key={customer.id} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
-              <td className="px-5 py-3 font-medium text-zinc-900 dark:text-zinc-100">
-                {customer.firstName} {customer.lastName ?? ""}
+              <td className="px-5 py-3 font-medium">
+                <Link
+                  href={`/admin/customers/${customer.id}`}
+                  className="text-zinc-900 hover:text-primary-600 hover:underline dark:text-zinc-100"
+                >
+                  {customer.firstName} {customer.lastName ?? ""}
+                </Link>
               </td>
               <td className="px-5 py-3 text-zinc-600 dark:text-zinc-400">
                 <p>{customer.email}</p>

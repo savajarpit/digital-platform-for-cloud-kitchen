@@ -58,6 +58,51 @@ export interface PlanDayInput {
   slots: PlanSlotInput[];
 }
 
+export interface SubscriptionSkip {
+  id: string;
+  dateFrom: string;
+  dateTo: string;
+  bankedDays: number;
+}
+
+export interface SubscriptionDayOverride {
+  id: string;
+  date: string;
+  addressId: string | null;
+  deliverySlotId: string | null;
+}
+
+export interface SubscriptionInvoice {
+  id: string;
+  razorpayOrderId: string;
+  razorpayPaymentId: string | null;
+  amountInPaise: number;
+  status: string;
+  createdAt: string;
+}
+
+export interface AdminSubscriptionDetail {
+  id: string;
+  status: "PENDING_PAYMENT" | "ACTIVE" | "EXPIRED" | "CANCELLED";
+  priceInPaiseSnapshot: number;
+  durationDaysSnapshot: number;
+  planNameSnapshot: string;
+  couponCode: string | null;
+  bonusDaysGranted: number;
+  startDate: string | null;
+  cycleEnd: string | null;
+  nextPlanDayNumber: number;
+  bankedDays: number;
+  createdAt: string;
+  plan: Plan;
+  skips: SubscriptionSkip[];
+  dayOverrides: SubscriptionDayOverride[];
+  address: { line1: string; line2: string | null; city: string; state: string; pincode: string; contactPhone: string } | null;
+  deliverySlot: { name: string; startTime: string; endTime: string } | null;
+  user: { firstName: string; lastName: string | null; email: string; phone: string | null };
+  invoice: SubscriptionInvoice | null;
+}
+
 export interface AdminSubscription {
   id: string;
   planId: string;
@@ -149,6 +194,10 @@ export function listSubscriptionsAdmin(params: { page?: number; limit?: number }
   if (params.limit) search.set("limit", String(params.limit));
   const qs = search.toString();
   return proxyFetchPaginated<AdminSubscription[]>(`/subscriptions/admin${qs ? `?${qs}` : ""}`);
+}
+
+export function getAdminSubscription(id: string): Promise<AdminSubscriptionDetail> {
+  return proxyFetch<AdminSubscriptionDetail>(`/subscriptions/admin/${id}`);
 }
 
 export function getSubscriptionSettings(): Promise<SubscriptionSettings> {

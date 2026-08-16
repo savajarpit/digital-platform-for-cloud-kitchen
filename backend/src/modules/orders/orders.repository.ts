@@ -201,13 +201,21 @@ export class OrdersRepository {
     });
   }
 
+  /**
+   * Excludes PENDING_PAYMENT by default — same "abandoned checkout" reasoning
+   * as findAllForUser, but here it's unconditional: admin never opts back
+   * into seeing them, since ADMIN_SETTABLE_STATUSES doesn't include it either.
+   */
   async findAllForTenant(
     tenantId: string,
     skip: number,
     take: number,
     status?: OrderStatus,
   ): Promise<[OrderWithAdminDetails[], number]> {
-    const where = { tenantId, ...(status ? { status } : {}) };
+    const where = {
+      tenantId,
+      status: status ?? { not: OrderStatus.PENDING_PAYMENT },
+    };
     return this.prisma.$transaction([
       this.prisma.order.findMany({
         where,

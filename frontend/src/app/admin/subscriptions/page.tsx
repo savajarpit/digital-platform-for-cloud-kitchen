@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   CalendarClock,
   ChevronLeft,
@@ -220,7 +221,12 @@ export default function AdminSubscriptionsPage() {
               <div key={plan.id} className="card flex items-center justify-between gap-3 p-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-zinc-900 dark:text-zinc-100">{plan.name}</span>
+                    <Link
+                      href={`/admin/subscriptions/plans/${plan.id}`}
+                      className="font-medium text-zinc-900 hover:text-primary-600 hover:underline dark:text-zinc-100"
+                    >
+                      {plan.name}
+                    </Link>
                     <span
                       className={`badge ${
                         plan.isPublished
@@ -720,9 +726,12 @@ function SubscribersTab() {
             {subs.map((sub) => (
               <tr key={sub.id} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
                 <td className="px-4 py-3">
-                  <div className="text-zinc-900 dark:text-zinc-100">
+                  <Link
+                    href={`/admin/subscriptions/${sub.id}`}
+                    className="text-zinc-900 hover:text-primary-600 hover:underline dark:text-zinc-100"
+                  >
                     {sub.user.firstName} {sub.user.lastName ?? ""}
-                  </div>
+                  </Link>
                   <div className="text-xs text-zinc-400">{sub.user.email}</div>
                 </td>
                 <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{sub.planNameSnapshot}</td>

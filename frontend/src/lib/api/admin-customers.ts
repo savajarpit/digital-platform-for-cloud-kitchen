@@ -1,4 +1,4 @@
-import { proxyFetchPaginated } from "@/lib/api/client";
+import { proxyFetch, proxyFetchPaginated } from "@/lib/api/client";
 import type { PaginationMeta } from "@/lib/api/response";
 
 export interface Customer {
@@ -12,6 +12,52 @@ export interface Customer {
   orderCount: number;
 }
 
+export interface CustomerAddress {
+  id: string;
+  label: string | null;
+  contactPhone: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  pincode: string;
+  isDefault: boolean;
+}
+
+export interface CustomerOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  paymentStatus: string;
+  totalInPaise: number;
+  createdAt: string;
+}
+
+export interface CustomerSubscription {
+  id: string;
+  status: string;
+  planNameSnapshot: string;
+  priceInPaiseSnapshot: number;
+  startDate: string | null;
+  cycleEnd: string | null;
+  createdAt: string;
+  plan: { name: string };
+}
+
+export interface CustomerDetail {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string | null;
+  phone: string | null;
+  isActive: boolean;
+  verifiedAt: string | null;
+  createdAt: string;
+  addresses: CustomerAddress[];
+  orders: CustomerOrder[];
+  subscriptions: CustomerSubscription[];
+}
+
 export function listCustomers(params: {
   page?: number;
   limit?: number;
@@ -23,4 +69,8 @@ export function listCustomers(params: {
   if (params.search) search.set("search", params.search);
   const qs = search.toString();
   return proxyFetchPaginated<Customer[]>(`/users/customers${qs ? `?${qs}` : ""}`);
+}
+
+export function getCustomer(id: string): Promise<CustomerDetail> {
+  return proxyFetch<CustomerDetail>(`/users/customers/${id}`);
 }

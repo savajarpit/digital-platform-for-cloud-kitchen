@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { ChevronLeft, ChevronRight, Package } from "lucide-react";
 import {
   ADMIN_SETTABLE_STATUSES,
@@ -18,7 +19,6 @@ import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
 const ALL_STATUSES = [
-  "PENDING_PAYMENT",
   "CONFIRMED",
   "PREPARING",
   "OUT_FOR_DELIVERY",
@@ -157,9 +157,12 @@ function OrdersTable({
             return (
               <tr key={order.id} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
                 <td className="px-5 py-3">
-                  <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                  <Link
+                    href={`/admin/orders/${order.id}`}
+                    className="font-mono text-xs text-primary-600 hover:underline dark:text-primary-400"
+                  >
                     {order.orderNumber}
-                  </p>
+                  </Link>
                   <p className="mt-0.5 text-xs text-zinc-400">
                     {new Date(order.createdAt).toLocaleDateString()}
                   </p>

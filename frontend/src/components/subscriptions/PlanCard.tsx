@@ -10,6 +10,12 @@ import {
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
 export function PlanCard({ plan, index }: { plan: PublicPlan; index: number }) {
+  const discountPercentage = plan.activePromotion?.discountPercentage ?? 0;
+  const discountedPriceInPaise =
+    discountPercentage > 0
+      ? plan.priceInPaise - Math.floor((plan.priceInPaise * discountPercentage) / 100)
+      : plan.priceInPaise;
+
   return (
     <Link
       href={`/plans/${plan.id}`}
@@ -28,6 +34,11 @@ export function PlanCard({ plan, index }: { plan: PublicPlan; index: number }) {
           {plan.badgeText}
         </div>
       )}
+      {discountPercentage > 0 && (
+        <div className="badge absolute -top-3 right-6 bg-red-600 text-white shadow-sm">
+          {discountPercentage}% off
+        </div>
+      )}
 
       <div className={`mb-5 h-2 rounded-full bg-gradient-to-r ${PLAN_ACCENT_GRADIENT[plan.accentColor]}`} />
 
@@ -37,9 +48,16 @@ export function PlanCard({ plan, index }: { plan: PublicPlan; index: number }) {
       )}
 
       <div className="mb-5">
-        <span className="font-display text-4xl font-bold text-zinc-900 dark:text-zinc-100">
-          {formatPriceFromPaise(plan.priceInPaise)}
-        </span>
+        <div className="flex items-baseline gap-2">
+          {discountPercentage > 0 && (
+            <span className="text-base text-zinc-400 line-through dark:text-zinc-500">
+              {formatPriceFromPaise(plan.priceInPaise)}
+            </span>
+          )}
+          <span className="font-display text-4xl font-bold text-zinc-900 dark:text-zinc-100">
+            {formatPriceFromPaise(discountedPriceInPaise)}
+          </span>
+        </div>
         <p className="mt-1 flex items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400">
           <Clock className="h-3.5 w-3.5" />
           {plan.durationDays} days

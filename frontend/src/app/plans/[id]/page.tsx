@@ -212,9 +212,28 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div className="card sticky top-24 flex h-fit flex-col gap-4 p-6">
-          <p className="font-display text-3xl font-bold text-primary-600">
-            {formatPriceFromPaise(plan.priceInPaise)}
-          </p>
+          {(() => {
+            const discountPercentage = plan.activePromotion?.discountPercentage ?? 0;
+            const discountedPriceInPaise =
+              discountPercentage > 0
+                ? plan.priceInPaise - Math.floor((plan.priceInPaise * discountPercentage) / 100)
+                : plan.priceInPaise;
+            return (
+              <div className="flex items-baseline gap-2">
+                {discountPercentage > 0 && (
+                  <span className="text-lg text-zinc-400 line-through dark:text-zinc-500">
+                    {formatPriceFromPaise(plan.priceInPaise)}
+                  </span>
+                )}
+                <p className="font-display text-3xl font-bold text-primary-600">
+                  {formatPriceFromPaise(discountedPriceInPaise)}
+                </p>
+                {discountPercentage > 0 && (
+                  <span className="badge bg-red-600 text-white">{discountPercentage}% off</span>
+                )}
+              </div>
+            );
+          })()}
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             One-time payment for the full {plan.durationDays}-day plan.
           </p>

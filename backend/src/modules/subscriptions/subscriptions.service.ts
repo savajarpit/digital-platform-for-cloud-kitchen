@@ -214,8 +214,20 @@ export class SubscriptionsService {
 
   // ─── Storefront (public) ─────────────────────────────────
 
-  findPublishedPlans(tenantId: string, search?: string) {
-    return this.subscriptionsRepo.findPublishedPlans(tenantId, search);
+  async findPublishedPlans(tenantId: string, search?: string) {
+    const plans = await this.subscriptionsRepo.findPublishedPlans(
+      tenantId,
+      search,
+    );
+    const promoMap =
+      await this.promotionsService.getActiveScheduledDiscountsForPlans(
+        tenantId,
+        plans.map((p) => p.id),
+      );
+    return plans.map((plan) => ({
+      ...plan,
+      activePromotion: promoMap.get(plan.id) ?? null,
+    }));
   }
 
   async findPublishedPlan(tenantId: string, id: string) {
@@ -224,11 +236,17 @@ export class SubscriptionsService {
       id,
     );
     if (!plan) throw new NotFoundException('Plan not found');
-    const timeLocked = await this.featuresService.hasFeature(
-      tenantId,
-      TIME_LOCK_FEATURE_KEY,
-    );
-    return { ...plan, timeSelectionEnabled: !timeLocked };
+    const [timeLocked, promoMap] = await Promise.all([
+      this.featuresService.hasFeature(tenantId, TIME_LOCK_FEATURE_KEY),
+      this.promotionsService.getActiveScheduledDiscountsForPlans(tenantId, [
+        plan.id,
+      ]),
+    ]);
+    return {
+      ...plan,
+      timeSelectionEnabled: !timeLocked,
+      activePromotion: promoMap.get(plan.id) ?? null,
+    };
   }
 
   // ─── Admin: kitchen prep planner ─────────────────────────
@@ -304,7 +322,20 @@ export class SubscriptionsService {
       if (!slot) throw new BadRequestException('Invalid delivery slot');
     }
 
-    let discountInPaise = 0;
+    // Automatic (no-code) scheduled discount, if the tenant has one active
+    // for this plan — same "additive with the coupon" stacking as checkout's
+    // computeCartPromotions + validateCoupon.
+    const scheduledDiscountMap =
+      await this.promotionsService.getActiveScheduledDiscountsForPlans(
+        tenantId,
+        [plan.id],
+      );
+    const scheduledDiscount = scheduledDiscountMap.get(plan.id);
+    let discountInPaise = scheduledDiscount
+      ? Math.floor(
+          (plan.priceInPaise * scheduledDiscount.discountPercentage) / 100,
+        )
+      : 0;
     let couponId: string | undefined;
     let resolvedCouponCode: string | undefined;
     if (dto.couponCode) {
@@ -314,7 +345,7 @@ export class SubscriptionsService {
         userId,
         plan.priceInPaise,
       );
-      discountInPaise = result.discountInPaise;
+      discountInPaise += result.discountInPaise;
       couponId = result.couponId;
       resolvedCouponCode = result.code;
     }

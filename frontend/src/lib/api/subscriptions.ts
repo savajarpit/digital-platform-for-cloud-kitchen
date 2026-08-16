@@ -27,6 +27,7 @@ export interface PlanDetail {
   priceInPaise: number;
   days: PlanDay[];
   timeSelectionEnabled: boolean;
+  activePromotion?: { promotionName: string; discountPercentage: number } | null;
 }
 
 export interface UpcomingPreviewDay {

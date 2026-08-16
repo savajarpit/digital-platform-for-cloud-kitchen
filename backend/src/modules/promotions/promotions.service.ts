@@ -363,6 +363,45 @@ export class PromotionsService {
     return result;
   }
 
+  /** Active SCHEDULED_DISCOUNT promotion (appliesTo: PLANS) per plan — used
+   * for both the storefront plan-price badge and subscribe-time pricing. */
+  async getActiveScheduledDiscountsForPlans(
+    tenantId: string,
+    planIds: string[],
+  ): Promise<
+    Map<string, { promotionName: string; discountPercentage: number }>
+  > {
+    const [promotions, timezone] = await Promise.all([
+      this.promotionsRepo.findActivePromotionsByTypes(
+        tenantId,
+        SCHEDULED_DISCOUNT_SCOPE_TYPES,
+      ),
+      this.getTenantTimezone(tenantId),
+    ]);
+    const activeNow = promotions.filter(
+      (p) => p.appliesTo === 'PLANS' && this.isWithinWindow(p, timezone),
+    );
+
+    const result = new Map<
+      string,
+      { promotionName: string; discountPercentage: number }
+    >();
+    for (const planId of planIds) {
+      const best = activeNow
+        .filter((p) => p.storewide || p.planIds.includes(planId))
+        .sort(
+          (a, b) => (b.discountPercentage ?? 0) - (a.discountPercentage ?? 0),
+        )[0];
+      if (best) {
+        result.set(planId, {
+          promotionName: best.name,
+          discountPercentage: best.discountPercentage ?? 0,
+        });
+      }
+    }
+    return result;
+  }
+
   private async getTenantTimezone(tenantId: string): Promise<string> {
     const profile = await this.settingsRepo.findBusinessProfile(tenantId);
     return profile?.timezone ?? 'Asia/Kolkata';
@@ -474,6 +513,7 @@ export class PromotionsService {
    * Prisma row (nullable), since updatePromotion() checks the two combined. */
   private assertValidPromotionShape(dto: {
     type: PromotionType;
+    appliesTo?: 'ORDERS' | 'PLANS' | 'BOTH' | null;
     buyMealId?: string | null;
     buyQuantity?: number | null;
     freeMealId?: string | null;
@@ -484,6 +524,7 @@ export class PromotionsService {
     storewide?: boolean | null;
     mealIds?: string[] | null;
     categoryIds?: string[] | null;
+    planIds?: string[] | null;
     bonusDays?: number | null;
   }): void {
     if (dto.type === 'BOGO') {
@@ -504,14 +545,24 @@ export class PromotionsService {
           'SCHEDULED_DISCOUNT promotions require discountPercentage, startTime, and endTime',
         );
       }
-      const hasScope =
-        dto.storewide ||
-        (dto.mealIds && dto.mealIds.length > 0) ||
-        (dto.categoryIds && dto.categoryIds.length > 0);
-      if (!hasScope) {
-        throw new BadRequestException(
-          'SCHEDULED_DISCOUNT promotions must be storewide or scoped to at least one meal/category',
-        );
+      if (dto.appliesTo === 'PLANS') {
+        const hasPlanScope =
+          dto.storewide || (dto.planIds && dto.planIds.length > 0);
+        if (!hasPlanScope) {
+          throw new BadRequestException(
+            'SCHEDULED_DISCOUNT promotions scoped to Plans must be storewide or scoped to at least one plan',
+          );
+        }
+      } else {
+        const hasScope =
+          dto.storewide ||
+          (dto.mealIds && dto.mealIds.length > 0) ||
+          (dto.categoryIds && dto.categoryIds.length > 0);
+        if (!hasScope) {
+          throw new BadRequestException(
+            'SCHEDULED_DISCOUNT promotions must be storewide or scoped to at least one meal/category',
+          );
+        }
       }
     } else if (dto.type === 'PLAN_BONUS_DAYS') {
       if (!dto.bonusDays) {

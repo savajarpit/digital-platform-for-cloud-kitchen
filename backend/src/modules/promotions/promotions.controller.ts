@@ -17,6 +17,7 @@ import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 import { CurrentTenantId } from '../../common/decorators/current-tenant-id.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
 import { Role } from '../../common/enums/role.enum';
@@ -24,6 +25,7 @@ import { Role } from '../../common/enums/role.enum';
 @ApiTags('promotions')
 @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
 @RequirePermission('promotions.manage')
+@RequireFeature('promotions')
 @ApiBearerAuth('access-token')
 @Controller({ path: 'promotions', version: '1' })
 export class PromotionsController {

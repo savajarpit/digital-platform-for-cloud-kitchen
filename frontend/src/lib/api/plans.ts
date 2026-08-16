@@ -3,6 +3,11 @@ import type { ApiResponse } from "@/lib/api/response";
 
 export type PlanAccentColor = "PRIMARY" | "SECONDARY" | "ACCENT";
 
+export interface PlanActivePromotion {
+  promotionName: string;
+  discountPercentage: number;
+}
+
 export interface PublicPlan {
   id: string;
   name: string;
@@ -13,6 +18,7 @@ export interface PublicPlan {
   badgeText: string | null;
   isPopular: boolean;
   accentColor: PlanAccentColor;
+  activePromotion?: PlanActivePromotion | null;
 }
 
 /** Server-side only — published curated plans for the storefront `/plans` list. */

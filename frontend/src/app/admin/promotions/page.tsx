@@ -28,6 +28,8 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
+import { MealPickerGrid } from "@/components/admin/MealPickerGrid";
+import { useFeatures } from "@/context/FeaturesContext";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
 const paiseToRupees = (paise: number | null | undefined) =>
@@ -48,6 +50,8 @@ const APPLIES_TO_STYLES: Record<"ORDERS" | "PLANS" | "BOTH", string> = {
 
 export default function PromotionsPage() {
   const canEdit = usePermission(PERMISSIONS.PROMOTIONS_MANAGE);
+  const { has: hasFeature, loading: featuresLoading } = useFeatures();
+  const hasPromotionsFeature = hasFeature("promotions");
   const [coupons, setCoupons] = useState<Coupon[] | null>(null);
   const [promotions, setPromotions] = useState<Promotion[] | null>(null);
   const [meals, setMeals] = useState<Meal[] | null>(null);
@@ -56,6 +60,7 @@ export default function PromotionsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (featuresLoading || !hasPromotionsFeature) return;
     // limit: 100 — these pickers need every meal/plan (including
     // unavailable/unpublished ones), not a browsable page; the admin
     // Meals/Plans lists are the ones that paginate for real.
@@ -74,7 +79,24 @@ export default function PromotionsPage() {
         setPlans(pl.data);
       })
       .catch(() => setError("Couldn't load promotions."));
-  }, []);
+  }, [featuresLoading, hasPromotionsFeature]);
+
+  if (!featuresLoading && !hasPromotionsFeature) {
+    return (
+      <div className="flex flex-col gap-6">
+        <div className="flex items-center gap-2 text-primary-600">
+          <Tag className="h-5 w-5" />
+          <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
+            Promotions
+          </h2>
+        </div>
+        <div className="card p-6 text-sm text-zinc-600 dark:text-zinc-400">
+          Promotions &amp; coupons aren&apos;t enabled for your account. Contact your platform admin
+          if you&apos;d like this turned on.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -786,28 +808,11 @@ function PromotionForm({
               onChange={(v) => setForm({ ...form, minCycleDays: v === "" ? undefined : Number(v) })}
             />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              Plans (none selected = every plan)
-            </label>
-            <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
-              {plans.length === 0 ? (
-                <p className="text-xs text-zinc-400">No curated plans yet.</p>
-              ) : (
-                plans.map((plan) => (
-                  <label key={plan.id} className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={(form.planIds ?? []).includes(plan.id)}
-                      onChange={() => toggleInArray("planIds", plan.id)}
-                      className="h-3.5 w-3.5 accent-primary-600"
-                    />
-                    {plan.name}
-                  </label>
-                ))
-              )}
-            </div>
-          </div>
+          <PlanCheckboxList
+            plans={plans}
+            selectedIds={form.planIds ?? []}
+            onToggle={(id) => toggleInArray("planIds", id)}
+          />
         </div>
       )}
 
@@ -861,48 +866,46 @@ function PromotionForm({
               onChange={(e) => setForm({ ...form, storewide: e.target.checked })}
               className="h-4 w-4 accent-primary-600"
             />
-            Apply storewide (all meals)
+            {form.appliesTo === "PLANS" ? "Apply to all plans" : "Apply storewide (all meals)"}
           </label>
-          {!form.storewide && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  Meals
-                </label>
-                <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
-                  {meals.map((meal) => (
-                    <label key={meal.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={(form.mealIds ?? []).includes(meal.id)}
-                        onChange={() => toggleInArray("mealIds", meal.id)}
-                        className="h-3.5 w-3.5 accent-primary-600"
-                      />
-                      {meal.name}
-                    </label>
-                  ))}
+          {!form.storewide &&
+            (form.appliesTo === "PLANS" ? (
+              <PlanCheckboxList
+                plans={plans}
+                selectedIds={form.planIds ?? []}
+                onToggle={(id) => toggleInArray("planIds", id)}
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Meals
+                  </label>
+                  <MealPickerGrid
+                    selectedIds={form.mealIds ?? []}
+                    onToggle={(meal) => toggleInArray("mealIds", meal.id)}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                    Categories
+                  </label>
+                  <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
+                    {categories.map((cat) => (
+                      <label key={cat.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={(form.categoryIds ?? []).includes(cat.id)}
+                          onChange={() => toggleInArray("categoryIds", cat.id)}
+                          className="h-3.5 w-3.5 accent-primary-600"
+                        />
+                        {cat.name}
+                      </label>
+                    ))}
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  Categories
-                </label>
-                <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
-                  {categories.map((cat) => (
-                    <label key={cat.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={(form.categoryIds ?? []).includes(cat.id)}
-                        onChange={() => toggleInArray("categoryIds", cat.id)}
-                        className="h-3.5 w-3.5 accent-primary-600"
-                      />
-                      {cat.name}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+            ))}
         </div>
       )}
 
@@ -924,6 +927,41 @@ function PromotionForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function PlanCheckboxList({
+  plans,
+  selectedIds,
+  onToggle,
+}: {
+  plans: Plan[];
+  selectedIds: string[];
+  onToggle: (planId: string) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+        Plans (none selected = every plan)
+      </label>
+      <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
+        {plans.length === 0 ? (
+          <p className="text-xs text-zinc-400">No curated plans yet.</p>
+        ) : (
+          plans.map((plan) => (
+            <label key={plan.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(plan.id)}
+                onChange={() => onToggle(plan.id)}
+                className="h-3.5 w-3.5 accent-primary-600"
+              />
+              {plan.name}
+            </label>
+          ))
+        )}
+      </div>
+    </div>
   );
 }
 

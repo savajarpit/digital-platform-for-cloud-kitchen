@@ -23,6 +23,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { usePermissions } from "@/context/PermissionsContext";
+import { useFeatures } from "@/context/FeaturesContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 
 interface NavItem {
@@ -33,6 +34,10 @@ interface NavItem {
    * self-serve action every admin role can use) — it always renders
    * editable, never shows the view-only lock icon. */
   permission?: string;
+  /** Tenant-level entitlement (SUPER_ADMIN-granted, distinct from
+   * `permission` above) — when the tenant doesn't have this feature the
+   * link is hidden entirely, not just shown view-only. */
+  feature?: string;
 }
 
 const OPERATIONS_NAV: NavItem[] = [
@@ -40,7 +45,7 @@ const OPERATIONS_NAV: NavItem[] = [
   { href: "/admin/home", label: "Home Page", icon: LayoutGrid, permission: PERMISSIONS.MENU_MANAGE },
   { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed, permission: PERMISSIONS.MENU_MANAGE },
   { href: "/admin/orders", label: "Orders", icon: Package, permission: PERMISSIONS.ORDERS_MANAGE },
-  { href: "/admin/promotions", label: "Promotions", icon: Tag, permission: PERMISSIONS.PROMOTIONS_MANAGE },
+  { href: "/admin/promotions", label: "Promotions", icon: Tag, permission: PERMISSIONS.PROMOTIONS_MANAGE, feature: "promotions" },
   { href: "/admin/subscriptions", label: "Subscription Plans", icon: CalendarClock, permission: PERMISSIONS.SUBSCRIPTIONS_MANAGE },
   { href: "/admin/customers", label: "Customers", icon: Users, permission: PERMISSIONS.CUSTOMERS_VIEW },
 ];
@@ -58,8 +63,10 @@ const SETTINGS_NAV: NavItem[] = [
 export function AdminSidebar() {
   const pathname = usePathname();
   const { can, loading, isSuperAdmin } = usePermissions();
+  const { has: hasFeature, loading: featuresLoading } = useFeatures();
 
   function renderLink(item: NavItem) {
+    if (item.feature && !featuresLoading && !hasFeature(item.feature)) return null;
     const isActive = pathname.startsWith(item.href);
     const editable = !item.permission || loading || can(item.permission);
     return (

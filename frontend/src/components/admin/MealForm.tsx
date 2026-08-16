@@ -33,18 +33,19 @@ export function MealForm({
     e.preventDefault();
     setSaving(true);
     try {
-      const hasNutrition = calories || protein || carbs || fat;
       await onSave({
         ...form,
         priceInPaise: Math.round(Number(priceRupees) * 100),
-        nutrition: hasNutrition
-          ? {
-              ...(calories && { calories: Number(calories) }),
-              ...(protein && { protein }),
-              ...(carbs && { carbs }),
-              ...(fat && { fat }),
-            }
-          : undefined,
+        // Always an explicit object (never `undefined`) — `JSON.stringify`
+        // drops `undefined` keys entirely, so an update payload that omits
+        // `nutrition` reads as "don't touch it," not "clear it." Sending an
+        // empty object here is what actually clears previously-saved values.
+        nutrition: {
+          ...(calories && { calories: Number(calories) }),
+          ...(protein && { protein }),
+          ...(carbs && { carbs }),
+          ...(fat && { fat }),
+        },
       });
       showToast("Meal saved", "success");
     } catch (err) {
@@ -70,7 +71,7 @@ export function MealForm({
         />
         <Select
           value={form.categoryId ?? ""}
-          onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v || undefined }))}
+          onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v || null }))}
         >
           <SelectTrigger className="w-full">
             <SelectValue />

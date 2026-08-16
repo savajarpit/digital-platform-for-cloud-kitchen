@@ -189,7 +189,7 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
                     description: meal.description ?? "",
                     imageUrl: meal.imageUrl ?? "",
                     priceInPaise: meal.priceInPaise,
-                    categoryId: meal.categoryId ?? undefined,
+                    categoryId: meal.categoryId,
                     nutrition: meal.nutrition ?? undefined,
                     isVegetarian: meal.isVegetarian,
                     isAvailable: meal.isAvailable,

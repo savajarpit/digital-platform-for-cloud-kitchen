@@ -64,7 +64,10 @@ export interface MealInput {
   description?: string;
   imageUrl?: string;
   priceInPaise: number;
-  categoryId?: string;
+  // `null` (not `undefined`) is what actually clears it — an `undefined`
+  // key vanishes entirely under JSON.stringify, which a PATCH reads as
+  // "field not mentioned, leave it alone" rather than "clear it".
+  categoryId?: string | null;
   nutrition?: MealNutrition;
   isVegetarian?: boolean;
   isAvailable?: boolean;

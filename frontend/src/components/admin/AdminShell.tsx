@@ -21,8 +21,8 @@ function RoleBadge() {
 export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <PermissionsProvider>
-      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-        <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 print:bg-white">
+        <header className="border-b border-zinc-200 bg-white print:hidden dark:border-zinc-800 dark:bg-zinc-900">
           <div className="container-app flex h-16 items-center justify-between">
             <div className="flex items-center gap-3">
               <Link
@@ -40,10 +40,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <div className="container-app flex flex-col gap-6 py-8 sm:flex-row">
-          <AdminSidebar />
-          <div className="flex min-w-0 flex-1 flex-col gap-6">
-            <UsageLimitBanner />
+        <div className="container-app flex flex-col gap-6 py-8 sm:flex-row print:block print:gap-0 print:p-0">
+          <div className="print:hidden">
+            <AdminSidebar />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-6 print:block">
+            <div className="print:hidden">
+              <UsageLimitBanner />
+            </div>
             {children}
           </div>
         </div>

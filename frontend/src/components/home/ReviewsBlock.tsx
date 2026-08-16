@@ -26,11 +26,11 @@ export function ReviewsBlock({ reviews }: { reviews: PublicReview[] }) {
               ))}
             </div>
             {review.comment && (
-              <p className="mb-6 min-w-0 text-lg leading-relaxed font-medium text-balance break-words text-zinc-900 sm:text-xl dark:text-zinc-100">
+              <p className="mb-6 min-w-0 text-lg leading-relaxed font-medium text-balance wrap-break-word text-zinc-900 sm:text-xl dark:text-zinc-100">
                 &ldquo;{review.comment}&rdquo;
               </p>
             )}
-            <p className="min-w-0 break-words font-bold text-zinc-900 dark:text-zinc-100">{review.authorName}</p>
+            <p className="min-w-0 wrap-break-word font-bold text-zinc-900 dark:text-zinc-100">{review.authorName}</p>
           </div>
 
           {reviews.length > 1 && (

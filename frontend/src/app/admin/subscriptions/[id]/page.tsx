@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Clock, MapPin, Phone, User } from "lucide-react";
+import { ArrowLeft, Clock, FileText, MapPin, Phone, User } from "lucide-react";
 import { getAdminSubscription, type AdminSubscriptionDetail } from "@/lib/api/admin-subscriptions";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PlanDayBreakdown } from "@/components/admin/PlanDayBreakdown";
@@ -140,7 +140,13 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
 
       {sub.invoice && (
         <div className="card flex flex-col gap-1.5 p-6 text-sm">
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Payment</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Payment</h3>
+            <Link href={`/admin/subscriptions/${sub.id}/invoice`} className="btn-outline btn-sm">
+              <FileText className="h-4 w-4" />
+              Invoice
+            </Link>
+          </div>
           <div className="flex items-center gap-2">
             <span className="font-medium text-zinc-900 dark:text-zinc-100">
               {formatPriceFromPaise(sub.invoice.amountInPaise)}

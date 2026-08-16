@@ -140,7 +140,7 @@ export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
                   </span>
                 </div>
                 {review.comment && (
-                  <p className="mt-0.5 min-w-0 break-words text-xs text-zinc-500 dark:text-zinc-400">
+                  <p className="mt-0.5 min-w-0 wrap-break-word text-xs text-zinc-500 dark:text-zinc-400">
                     {review.comment}
                   </p>
                 )}

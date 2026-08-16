@@ -232,3 +232,14 @@ button:not(:disabled) {
     @apply mx-auto max-w-6xl px-4 sm:px-6 lg:px-8;
   }
 }
+
+/* Zeroing the page box is what actually suppresses Chrome/Edge's built-in
+   page-URL/date header and footer — there's no CSS property that targets
+   that text directly, it only goes away once there's no reserved margin
+   for it to render into. Invoice pages keep their own padding via Tailwind
+   classes instead, so content still sits away from the physical edge. If a
+   browser still shows it, that's the print dialog's own "Headers and
+   footers" checkbox — page CSS can't override a user's browser setting. */
+@page {
+  margin: 0;
+}

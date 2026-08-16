@@ -76,9 +76,9 @@ export default function SubscriptionInvoicePage({ params }: { params: Promise<{ 
         </button>
       </div>
 
-      <div className="card mx-auto mt-6 max-w-2xl p-8 print:mt-0 print:border-none print:p-0 print:shadow-none">
+      <div className="card mx-auto mt-6 max-w-2xl p-8 print:mt-0 print:border-none print:shadow-none">
         <div className="flex items-start justify-between gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 print:border-zinc-300">
-          <div>
+          <div className="min-w-0 max-w-xs">
             {config.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={config.logoUrl} alt={config.displayName} className="h-10 w-auto" />
@@ -88,7 +88,7 @@ export default function SubscriptionInvoicePage({ params }: { params: Promise<{ 
               </h2>
             )}
             {config.addressLine1 && (
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
+              <p className="mt-1 text-xs wrap-break-word text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
                 {config.addressLine1}
               </p>
             )}

@@ -3,21 +3,25 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Printer } from "lucide-react";
-import { getAdminOrder, type AdminOrderDetail } from "@/lib/api/admin-orders";
+import { getAdminSubscription, type AdminSubscriptionDetail } from "@/lib/api/admin-subscriptions";
 import { fetchPublicConfig, type PublicConfig } from "@/lib/api/settings-client";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { Skeleton } from "@/components/ui/Skeleton";
 
-export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id: string }> }) {
+export default function AdminSubscriptionInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [order, setOrder] = useState<AdminOrderDetail | null>(null);
+  const [sub, setSub] = useState<AdminSubscriptionDetail | null>(null);
   const [config, setConfig] = useState<PublicConfig | null>(null);
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    Promise.all([getAdminOrder(id), fetchPublicConfig()])
-      .then(([o, c]) => {
-        setOrder(o);
+    Promise.all([getAdminSubscription(id), fetchPublicConfig()])
+      .then(([s, c]) => {
+        if (!s.invoice) {
+          setNotFound(true);
+          return;
+        }
+        setSub(s);
         setConfig(c);
       })
       .catch(() => setNotFound(true));
@@ -26,15 +30,15 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
   if (notFound) {
     return (
       <div className="flex flex-col items-center gap-4 py-24 text-center">
-        <p className="text-zinc-600 dark:text-zinc-400">Order not found.</p>
-        <Link href="/admin/orders" className="btn-primary">
-          Back to orders
+        <p className="text-zinc-600 dark:text-zinc-400">No invoice found for this subscription.</p>
+        <Link href={`/admin/subscriptions/${id}`} className="btn-primary">
+          Back to subscription
         </Link>
       </div>
     );
   }
 
-  if (!order || !config) {
+  if (!sub || !config || !sub.invoice) {
     return (
       <div className="card p-8">
         <Skeleton className="h-8 w-48" />
@@ -42,12 +46,13 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
       </div>
     );
   }
+  const invoice = sub.invoice;
 
   return (
     <div className="print:py-0">
       <div className="flex items-center justify-between print:hidden">
         <Link
-          href={`/admin/orders/${id}`}
+          href={`/admin/subscriptions/${id}`}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-primary-600 dark:text-zinc-400"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -86,10 +91,10 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
               Invoice
             </h1>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
-              Order: <span className="font-mono">{order.orderNumber}</span>
+              Invoice: <span className="font-mono">{invoice.razorpayOrderId}</span>
             </p>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
-              Date: {new Date(order.createdAt).toLocaleDateString()}
+              Date: {new Date(invoice.createdAt).toLocaleDateString()}
             </p>
           </div>
         </div>
@@ -100,14 +105,16 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
               Billed to
             </h3>
             <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
-              {order.user.firstName} {order.user.lastName ?? ""}
+              {sub.user.firstName} {sub.user.lastName ?? ""}
             </p>
-            <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">{order.user.email}</p>
-            <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
-              {order.address.line1}
-              {order.address.line2 ? `, ${order.address.line2}` : ""}, {order.address.city},{" "}
-              {order.address.state} — {order.address.pincode}
-            </p>
+            <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">{sub.user.email}</p>
+            {sub.address && (
+              <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
+                {sub.address.line1}
+                {sub.address.line2 ? `, ${sub.address.line2}` : ""}, {sub.address.city}, {sub.address.state} —{" "}
+                {sub.address.pincode}
+              </p>
+            )}
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400 print:text-zinc-600">
@@ -115,13 +122,18 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
             </h3>
             <span
               className={`badge ${
-                order.paymentStatus === "PAID"
+                invoice.status === "PAID"
                   ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
                   : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
               }`}
             >
-              {order.paymentStatus}
+              {invoice.status}
             </span>
+            {/* {invoice.razorpayPaymentId && (
+              <p className="mt-2 font-mono text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
+                Payment: {invoice.razorpayPaymentId}
+              </p>
+            )} */}
           </div>
         </div>
 
@@ -135,40 +147,35 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
             </tr>
           </thead>
           <tbody>
-            {order.items.map((item) => (
-              <tr
-                key={item.id}
-                className="border-b border-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 print:border-zinc-200 print:text-black"
-              >
-                <td className="py-2.5">{item.nameSnapshot}</td>
-                <td className="py-2.5 text-center">{item.quantity}</td>
-                <td className="py-2.5 text-right">{formatPriceFromPaise(item.priceInPaiseSnapshot)}</td>
-                <td className="py-2.5 text-right">
-                  {formatPriceFromPaise(item.priceInPaiseSnapshot * item.quantity)}
-                </td>
-              </tr>
-            ))}
+            <tr className="border-b border-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 print:border-zinc-200 print:text-black">
+              <td className="py-2.5">
+                {sub.planNameSnapshot}
+                <span className="ml-1.5 text-xs text-zinc-400">({sub.durationDaysSnapshot} days)</span>
+              </td>
+              <td className="py-2.5 text-center">1</td>
+              <td className="py-2.5 text-right">{formatPriceFromPaise(invoice.amountInPaise)}</td>
+              <td className="py-2.5 text-right">{formatPriceFromPaise(invoice.amountInPaise)}</td>
+            </tr>
           </tbody>
         </table>
 
         <div className="mt-4 ml-auto flex max-w-60 flex-col gap-1.5 text-sm">
           <div className="flex justify-between text-zinc-600 dark:text-zinc-400 print:text-zinc-700">
             <span>Subtotal</span>
-            <span>{formatPriceFromPaise(order.subtotalInPaise)}</span>
+            <span>{formatPriceFromPaise(invoice.amountInPaise)}</span>
           </div>
-          {order.discountInPaise > 0 && (
+          {sub.couponCode && (
             <div className="flex justify-between text-zinc-600 dark:text-zinc-400 print:text-zinc-700">
-              <span>Discount{order.couponCode ? ` (${order.couponCode})` : ""}</span>
-              <span>-{formatPriceFromPaise(order.discountInPaise)}</span>
+              <span>Coupon</span>
+              <span>
+                {sub.couponCode}
+                {sub.bonusDaysGranted > 0 ? ` (+${sub.bonusDaysGranted}d)` : ""}
+              </span>
             </div>
           )}
-          <div className="flex justify-between text-zinc-600 dark:text-zinc-400 print:text-zinc-700">
-            <span>Delivery fee</span>
-            <span>{formatPriceFromPaise(order.deliveryFeeInPaise)}</span>
-          </div>
           <div className="mt-1 flex justify-between border-t border-zinc-200 pt-1.5 font-bold text-zinc-900 dark:border-zinc-700 dark:text-zinc-100 print:border-zinc-300 print:text-black">
             <span>Total</span>
-            <span>{formatPriceFromPaise(order.totalInPaise)}</span>
+            <span>{formatPriceFromPaise(invoice.amountInPaise)}</span>
           </div>
         </div>
       </div>

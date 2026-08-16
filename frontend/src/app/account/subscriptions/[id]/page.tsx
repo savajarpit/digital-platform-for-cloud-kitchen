@@ -26,6 +26,7 @@ import {
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -421,36 +422,38 @@ function DayCard({
                 <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                   Change address for this day
                 </label>
-                <select
-                  value={addressId}
-                  onChange={(e) => setAddressId(e.target.value)}
-                  className="input py-1.5 text-sm"
-                >
-                  {subscription.addresses.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.label ? `${a.label} — ` : ""}
-                      {a.line1}, {a.city}
-                    </option>
-                  ))}
-                </select>
+                <Select value={addressId} onValueChange={setAddressId}>
+                  <SelectTrigger className="py-1.5 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {subscription.addresses.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.label ? `${a.label} — ` : ""}
+                        {a.line1}, {a.city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               {canChangeTime && (
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                     Change time for this day
                   </label>
-                  <select
-                    value={slotId}
-                    onChange={(e) => setSlotId(e.target.value)}
-                    className="input py-1.5 text-sm"
-                  >
-                    <option value="">No preference</option>
-                    {subscription.deliverySlots.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({formatTime12h(s.startTime)}–{formatTime12h(s.endTime)})
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={slotId} onValueChange={setSlotId}>
+                    <SelectTrigger className="py-1.5 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">No preference</SelectItem>
+                      {subscription.deliverySlots.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} ({formatTime12h(s.startTime)}–{formatTime12h(s.endTime)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
               <button

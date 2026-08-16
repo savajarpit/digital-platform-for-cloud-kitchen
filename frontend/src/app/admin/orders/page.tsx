@@ -15,6 +15,7 @@ import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
@@ -49,21 +50,25 @@ export default function AdminOrdersPage() {
             Orders
           </h2>
         </div>
-        <select
+        <Select
           value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
+          onValueChange={(v) => {
+            setStatus(v);
             setPage(1);
           }}
-          className="input w-48"
         >
-          <option value="">All statuses</option>
-          {ALL_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s.replace(/_/g, " ")}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All statuses</SelectItem>
+            {ALL_STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s.replace(/_/g, " ")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {!canEdit && <ViewOnlyNotice />}
@@ -196,18 +201,22 @@ function OrdersTable({
                 </td>
                 <td className="px-5 py-3">
                   {canEdit && isPaid && !isFinal ? (
-                    <select
-                      value={order.status}
-                      onChange={(e) => handleStatusChange(order, e.target.value)}
-                      className={`badge cursor-pointer border-0 ${STATUS_STYLES[order.status] ?? ""}`}
-                    >
-                      <option value={order.status}>{order.status.replace(/_/g, " ")}</option>
-                      {ADMIN_SETTABLE_STATUSES.filter((s) => s !== order.status).map((s) => (
-                        <option key={s} value={s}>
-                          {s.replace(/_/g, " ")}
-                        </option>
-                      ))}
-                    </select>
+                    <Select value={order.status} onValueChange={(v) => handleStatusChange(order, v)}>
+                      <SelectTrigger
+                        variant="unstyled"
+                        className={`badge border-0 ${STATUS_STYLES[order.status] ?? ""}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={order.status}>{order.status.replace(/_/g, " ")}</SelectItem>
+                        {ADMIN_SETTABLE_STATUSES.filter((s) => s !== order.status).map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {s.replace(/_/g, " ")}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <span className={`badge ${STATUS_STYLES[order.status] ?? ""}`}>
                       {order.status.replace(/_/g, " ")}

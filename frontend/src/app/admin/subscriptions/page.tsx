@@ -44,6 +44,7 @@ import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { PrepPlannerView } from "@/components/admin/PrepPlannerView";
 import { formatPriceFromPaise } from "@/lib/format/currency";
@@ -422,17 +423,19 @@ function PlanMetaForm({
             <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
               Accent color
             </label>
-            <select
+            <Select
               value={form.accentColor ?? "PRIMARY"}
-              onChange={(e) =>
-                setForm({ ...form, accentColor: e.target.value as PlanAccentColor })
-              }
-              className="input"
+              onValueChange={(v) => setForm({ ...form, accentColor: v as PlanAccentColor })}
             >
-              <option value="PRIMARY">Primary</option>
-              <option value="SECONDARY">Secondary</option>
-              <option value="ACCENT">Accent</option>
-            </select>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PRIMARY">Primary</SelectItem>
+                <SelectItem value="SECONDARY">Secondary</SelectItem>
+                <SelectItem value="ACCENT">Accent</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <label className="flex items-center gap-2 self-end pb-2.5 text-sm text-zinc-700 dark:text-zinc-300">
             <input
@@ -665,19 +668,23 @@ function PlanEditor({
                     disabled={!canEdit}
                     className="h-3.5 w-3.5 accent-primary-600"
                   />
-                  <select
+                  <Select
                     value={day[slotType].mealId}
-                    onChange={(e) => updateSlot(i, slotType, { mealId: e.target.value })}
+                    onValueChange={(v) => updateSlot(i, slotType, { mealId: v })}
                     disabled={!canEdit || !day[slotType].included}
-                    className="input py-1.5 text-sm"
                   >
-                    <option value="">{SLOT_LABELS[slotType]} — to be announced</option>
-                    {meals.map((meal) => (
-                      <option key={meal.id} value={meal.id}>
-                        {SLOT_LABELS[slotType]}: {meal.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="py-1.5 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">{SLOT_LABELS[slotType]} — to be announced</SelectItem>
+                      {meals.map((meal) => (
+                        <SelectItem key={meal.id} value={meal.id}>
+                          {SLOT_LABELS[slotType]}: {meal.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               ))}
             </div>
@@ -747,21 +754,25 @@ function SubscribersTab() {
             className="input w-full pl-8"
           />
         </div>
-        <select
+        <Select
           value={planId}
-          onChange={(e) => {
-            setPlanId(e.target.value);
+          onValueChange={(v) => {
+            setPlanId(v);
             setPage(1);
           }}
-          className="input w-auto"
         >
-          <option value="">All plans</option>
-          {plans.map((plan) => (
-            <option key={plan.id} value={plan.id}>
-              {plan.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">All plans</SelectItem>
+            {plans.map((plan) => (
+              <SelectItem key={plan.id} value={plan.id}>
+                {plan.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {!subs ? (

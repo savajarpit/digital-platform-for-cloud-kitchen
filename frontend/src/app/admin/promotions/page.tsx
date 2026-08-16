@@ -26,6 +26,7 @@ import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
@@ -315,16 +316,18 @@ function CouponForm({
         <div className="flex gap-2">
           <div className="flex flex-1 flex-col gap-1">
             <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Type</label>
-            <select
+            <Select
               value={form.discountType}
-              onChange={(e) =>
-                setForm({ ...form, discountType: e.target.value as CouponInput["discountType"] })
-              }
-              className="input"
+              onValueChange={(v) => setForm({ ...form, discountType: v as CouponInput["discountType"] })}
             >
-              <option value="PERCENTAGE">Percentage</option>
-              <option value="FLAT">Flat (₹)</option>
-            </select>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PERCENTAGE">Percentage</SelectItem>
+                <SelectItem value="FLAT">Flat (₹)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-1 flex-col gap-1">
             <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
@@ -379,17 +382,19 @@ function CouponForm({
         <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
           Applies to
         </label>
-        <select
+        <Select
           value={form.appliesTo ?? "ORDERS"}
-          onChange={(e) =>
-            setForm({ ...form, appliesTo: e.target.value as CouponInput["appliesTo"] })
-          }
-          className="input"
+          onValueChange={(v) => setForm({ ...form, appliesTo: v as CouponInput["appliesTo"] })}
         >
-          <option value="ORDERS">Order checkout only</option>
-          <option value="PLANS">Plan signup only</option>
-          <option value="BOTH">Both orders and plans</option>
-        </select>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ORDERS">Order checkout only</SelectItem>
+            <SelectItem value="PLANS">Plan signup only</SelectItem>
+            <SelectItem value="BOTH">Both orders and plans</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
         <input
@@ -675,16 +680,17 @@ function PromotionForm({
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Type</label>
-          <select
-            value={form.type}
-            onChange={(e) => setForm({ ...form, type: e.target.value as PromotionType })}
-            className="input"
-          >
-            <option value="SCHEDULED_DISCOUNT">Scheduled discount</option>
-            <option value="BOGO">Buy X get Y free</option>
-            <option value="FREE_ITEM_ON_MINIMUM">Free item on minimum order</option>
-            <option value="PLAN_BONUS_DAYS">Plan bonus days (e.g. 7-day plan, +2 free)</option>
-          </select>
+          <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v as PromotionType })}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="SCHEDULED_DISCOUNT">Scheduled discount</SelectItem>
+              <SelectItem value="BOGO">Buy X get Y free</SelectItem>
+              <SelectItem value="FREE_ITEM_ON_MINIMUM">Free item on minimum order</SelectItem>
+              <SelectItem value="PLAN_BONUS_DAYS">Plan bonus days (e.g. 7-day plan, +2 free)</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <LabeledInput
           label="Name"
@@ -702,16 +708,18 @@ function PromotionForm({
             {APPLIES_TO_LABELS[forcedAppliesTo]} (fixed for this type)
           </span>
         ) : (
-          <select
+          <Select
             value={form.appliesTo ?? "ORDERS"}
-            onChange={(e) =>
-              setForm({ ...form, appliesTo: e.target.value as PromotionInput["appliesTo"] })
-            }
-            className="input w-auto py-1"
+            onValueChange={(v) => setForm({ ...form, appliesTo: v as PromotionInput["appliesTo"] })}
           >
-            <option value="ORDERS">Orders (meal discount)</option>
-            <option value="PLANS">Plans (plan-price discount)</option>
-          </select>
+            <SelectTrigger className="w-auto py-1">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ORDERS">Orders (meal discount)</SelectItem>
+              <SelectItem value="PLANS">Plans (plan-price discount)</SelectItem>
+            </SelectContent>
+          </Select>
         )}
       </div>
 
@@ -965,20 +973,24 @@ function MealSelect({
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">{label}</label>
-      <select
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || undefined)}
-        className="input"
-        required={!allowNone}
-      >
-        {allowNone && <option value="">— same as buy meal —</option>}
-        {!allowNone && <option value="" disabled>Select a meal</option>}
-        {meals.map((meal) => (
-          <option key={meal.id} value={meal.id}>
-            {meal.name}
-          </option>
-        ))}
-      </select>
+      <Select value={value ?? ""} onValueChange={(v) => onChange(v || undefined)}>
+        <SelectTrigger>
+          <SelectValue placeholder={allowNone ? "— same as buy meal —" : "Select a meal"} />
+        </SelectTrigger>
+        <SelectContent>
+          {allowNone && <SelectItem value="">— same as buy meal —</SelectItem>}
+          {!allowNone && (
+            <SelectItem value="" disabled>
+              Select a meal
+            </SelectItem>
+          )}
+          {meals.map((meal) => (
+            <SelectItem key={meal.id} value={meal.id}>
+              {meal.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Search, Star } from "lucide-react";
 import type { Meal } from "@/lib/api/menu";
 import { fetchMealsClient, type MealSortOption } from "@/lib/api/menu-client";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { MealCard } from "./MealCard";
 
 export function MenuBrowser({
@@ -53,15 +54,16 @@ export function MenuBrowser({
             className="input w-full pl-9"
           />
         </div>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as MealSortOption | "default")}
-          className="input w-auto"
-        >
-          <option value="default">Sort: Featured</option>
-          <option value="price_asc">Price: Low to High</option>
-          <option value="price_desc">Price: High to Low</option>
-        </select>
+        <Select value={sort} onValueChange={(v) => setSort(v as MealSortOption | "default")}>
+          <SelectTrigger className="w-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Sort: Featured</SelectItem>
+            <SelectItem value="price_asc">Price: Low to High</SelectItem>
+            <SelectItem value="price_desc">Price: High to Low</SelectItem>
+          </SelectContent>
+        </Select>
         <button
           type="button"
           onClick={() => setVegOnly((v) => !v)}

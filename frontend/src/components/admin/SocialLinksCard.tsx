@@ -16,6 +16,7 @@ import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 
 const ALL_PLATFORMS: SocialPlatform[] = [
   "INSTAGRAM",
@@ -163,17 +164,21 @@ export function SocialLinksCard({ canEdit }: { canEdit: boolean }) {
         <div className="flex flex-wrap items-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">Platform</label>
-            <select
-              value={effectivePlatform}
-              onChange={(e) => setNewPlatform(e.target.value as SocialPlatform)}
-              className="input w-40"
+            <Select
+              value={effectivePlatform ?? availablePlatforms[0]}
+              onValueChange={(v) => setNewPlatform(v as SocialPlatform)}
             >
-              {availablePlatforms.map((p) => (
-                <option key={p} value={p}>
-                  {PLATFORM_LABELS[p]}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availablePlatforms.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {PLATFORM_LABELS[p]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="min-w-48 flex-1">
             <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">

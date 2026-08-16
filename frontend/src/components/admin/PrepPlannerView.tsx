@@ -9,6 +9,7 @@ import {
   type PrepPlan,
 } from "@/lib/api/admin-subscriptions";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 
 const SLOT_LABELS: Record<MealSlotType, string> = {
   BREAKFAST: "Breakfast",
@@ -49,32 +50,37 @@ export function PrepPlannerView() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Plan</label>
-          <select
-            value={planId}
-            onChange={(e) => setPlanId(e.target.value)}
-            className="input py-1.5 text-sm"
-          >
-            {plans.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <Select value={planId} onValueChange={setPlanId}>
+            <SelectTrigger className="py-1.5 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {plans.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Day</label>
-          <select
-            value={dayNumber}
-            onChange={(e) => setDayNumber(Number(e.target.value))}
-            className="input py-1.5 text-sm"
+          <Select
+            value={String(dayNumber)}
+            onValueChange={(v) => setDayNumber(Number(v))}
             disabled={!selectedPlan}
           >
-            {Array.from({ length: selectedPlan?.durationDays ?? 1 }, (_, i) => i + 1).map((n) => (
-              <option key={n} value={n}>
-                Day {n}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="py-1.5 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Array.from({ length: selectedPlan?.durationDays ?? 1 }, (_, i) => i + 1).map((n) => (
+                <SelectItem key={n} value={String(n)}>
+                  Day {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

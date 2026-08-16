@@ -16,6 +16,7 @@ import type { PaginationMeta } from "@/lib/api/response";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { MealForm } from "@/components/admin/MealForm";
 import { MealListItem } from "@/components/admin/MealListItem";
 
@@ -117,18 +118,22 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
             className="input w-full pl-8"
           />
         </div>
-        <select
+        <Select
           value={vegFilter}
-          onChange={(e) => {
-            setVegFilter(e.target.value as VegFilter);
+          onValueChange={(v) => {
+            setVegFilter(v as VegFilter);
             setPage(1);
           }}
-          className="input w-auto"
         >
-          <option value="all">All</option>
-          <option value="veg">Vegetarian</option>
-          <option value="nonveg">Non-vegetarian</option>
-        </select>
+          <SelectTrigger className="w-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="veg">Vegetarian</SelectItem>
+            <SelectItem value="nonveg">Non-vegetarian</SelectItem>
+          </SelectContent>
+        </Select>
         <button
           type="button"
           onClick={() => {

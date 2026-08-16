@@ -15,6 +15,7 @@ import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 
 const WHATSAPP_PROVIDERS: WhatsappProvider[] = ["INTERAKT", "AISENSY", "GUPSHUP", "TWILIO"];
@@ -153,18 +154,22 @@ export default function NotificationsPage() {
                 <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   Provider
                 </label>
-                <select
+                <Select
                   value={whatsappProvider}
-                  onChange={(e) => setWhatsappProvider(e.target.value as WhatsappProvider)}
-                  className="input w-full"
+                  onValueChange={(v) => setWhatsappProvider(v as WhatsappProvider)}
                 >
-                  <option value="">Select provider…</option>
-                  {WHATSAPP_PROVIDERS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select provider…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Select provider…</SelectItem>
+                    {WHATSAPP_PROVIDERS.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="mb-1 flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -217,18 +222,19 @@ export default function NotificationsPage() {
                   <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                     Provider
                   </label>
-                  <select
-                    value={emailProvider}
-                    onChange={(e) => setEmailProvider(e.target.value as EmailProvider)}
-                    className="input w-full"
-                  >
-                    <option value="">Select provider…</option>
-                    {EMAIL_PROVIDERS.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={emailProvider} onValueChange={(v) => setEmailProvider(v as EmailProvider)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select provider…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Select provider…</SelectItem>
+                      {EMAIL_PROVIDERS.map((p) => (
+                        <SelectItem key={p} value={p}>
+                          {p}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">

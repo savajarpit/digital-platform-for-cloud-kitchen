@@ -15,6 +15,7 @@ import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 
 const emptyForm: ReviewInput = { authorName: "", rating: 5, comment: "", isPublished: true };
 
@@ -213,17 +214,21 @@ function ReviewForm({
           required
           className="input w-full"
         />
-        <select
-          value={form.rating}
-          onChange={(e) => setForm((f) => ({ ...f, rating: Number(e.target.value) }))}
-          className="input w-full"
+        <Select
+          value={String(form.rating)}
+          onValueChange={(v) => setForm((f) => ({ ...f, rating: Number(v) }))}
         >
-          {[5, 4, 3, 2, 1].map((n) => (
-            <option key={n} value={n}>
-              {n} star{n === 1 ? "" : "s"}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {[5, 4, 3, 2, 1].map((n) => (
+              <SelectItem key={n} value={String(n)}>
+                {n} star{n === 1 ? "" : "s"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <textarea
         value={form.comment ?? ""}

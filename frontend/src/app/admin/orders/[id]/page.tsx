@@ -14,6 +14,7 @@ import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -107,18 +108,19 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             {order.paymentStatus}
           </span>
           {canEdit && isPaid && !isFinal ? (
-            <select
-              value={order.status}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              className={`badge cursor-pointer border-0 ${STATUS_STYLES[order.status] ?? ""}`}
-            >
-              <option value={order.status}>{order.status.replace(/_/g, " ")}</option>
-              {ADMIN_SETTABLE_STATUSES.filter((s) => s !== order.status).map((s) => (
-                <option key={s} value={s}>
-                  {s.replace(/_/g, " ")}
-                </option>
-              ))}
-            </select>
+            <Select value={order.status} onValueChange={handleStatusChange}>
+              <SelectTrigger variant="unstyled" className={`badge border-0 ${STATUS_STYLES[order.status] ?? ""}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={order.status}>{order.status.replace(/_/g, " ")}</SelectItem>
+                {ADMIN_SETTABLE_STATUSES.filter((s) => s !== order.status).map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s.replace(/_/g, " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : (
             <span className={`badge ${STATUS_STYLES[order.status] ?? ""}`}>
               {order.status.replace(/_/g, " ")}

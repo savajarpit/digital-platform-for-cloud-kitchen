@@ -28,6 +28,7 @@ import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { TenantLimitsCard } from "@/components/admin/TenantLimitsCard";
 
@@ -148,15 +149,16 @@ function BasicsCard({
           <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Status
           </label>
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="input w-full"
-          >
-            <option value="ACTIVE">ACTIVE</option>
-            <option value="INACTIVE">INACTIVE</option>
-            <option value="SUSPENDED">SUSPENDED</option>
-          </select>
+          <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+              <SelectItem value="INACTIVE">INACTIVE</SelectItem>
+              <SelectItem value="SUSPENDED">SUSPENDED</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
       <div className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -412,14 +414,15 @@ function CreateInviteForm({
           required
           className="input w-full"
         />
-        <select
-          value={billingCycle}
-          onChange={(e) => setBillingCycle(e.target.value as BillingCycle)}
-          className="input w-full"
-        >
-          <option value="MONTHLY">Monthly</option>
-          <option value="YEARLY">Yearly</option>
-        </select>
+        <Select value={billingCycle} onValueChange={(v) => setBillingCycle(v as BillingCycle)}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="MONTHLY">Monthly</SelectItem>
+            <SelectItem value="YEARLY">Yearly</SelectItem>
+          </SelectContent>
+        </Select>
         <input
           type="number"
           value={amountRupees}
@@ -529,17 +532,18 @@ function NotificationCredentialsCard({
       </div>
       {whatsappEnabled && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <select
-            value={whatsappProvider}
-            onChange={(e) => setWhatsappProvider(e.target.value)}
-            className="input w-full"
-          >
-            <option value="">Provider…</option>
-            <option value="INTERAKT">INTERAKT</option>
-            <option value="AISENSY">AISENSY</option>
-            <option value="GUPSHUP">GUPSHUP</option>
-            <option value="TWILIO">TWILIO</option>
-          </select>
+          <Select value={whatsappProvider} onValueChange={(v) => setWhatsappProvider(v as typeof whatsappProvider)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Provider…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Provider…</SelectItem>
+              <SelectItem value="INTERAKT">INTERAKT</SelectItem>
+              <SelectItem value="AISENSY">AISENSY</SelectItem>
+              <SelectItem value="GUPSHUP">GUPSHUP</SelectItem>
+              <SelectItem value="TWILIO">TWILIO</SelectItem>
+            </SelectContent>
+          </Select>
           <input
             type="password"
             value={whatsappApiKey}
@@ -570,15 +574,16 @@ function NotificationCredentialsCard({
       </div>
       {emailEnabled && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <select
-            value={emailProvider}
-            onChange={(e) => setEmailProvider(e.target.value)}
-            className="input w-full"
-          >
-            <option value="">Provider…</option>
-            <option value="SMTP">SMTP</option>
-            <option value="RESEND">RESEND</option>
-          </select>
+          <Select value={emailProvider} onValueChange={(v) => setEmailProvider(v as typeof emailProvider)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Provider…" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Provider…</SelectItem>
+              <SelectItem value="SMTP">SMTP</SelectItem>
+              <SelectItem value="RESEND">RESEND</SelectItem>
+            </SelectContent>
+          </Select>
           <input
             type="email"
             value={emailFromAddress}

@@ -18,6 +18,7 @@ import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -234,36 +235,38 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                 <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                   Deliver to
                 </label>
-                <select
-                  value={selectedAddressId}
-                  onChange={(e) => setSelectedAddressId(e.target.value)}
-                  className="input"
-                >
-                  {addresses.map((addr) => (
-                    <option key={addr.id} value={addr.id}>
-                      {addr.label ? `${addr.label} — ` : ""}
-                      {addr.line1}, {addr.city}
-                    </option>
-                  ))}
-                </select>
+                <Select value={selectedAddressId} onValueChange={setSelectedAddressId}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {addresses.map((addr) => (
+                      <SelectItem key={addr.id} value={addr.id}>
+                        {addr.label ? `${addr.label} — ` : ""}
+                        {addr.line1}, {addr.city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               {plan.timeSelectionEnabled && deliverySlots.length > 0 && (
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                     Delivery time (every day, unless changed later)
                   </label>
-                  <select
-                    value={selectedSlotId}
-                    onChange={(e) => setSelectedSlotId(e.target.value)}
-                    className="input"
-                  >
-                    <option value="">No preference</option>
-                    {deliverySlots.map((slot) => (
-                      <option key={slot.id} value={slot.id}>
-                        {slot.name} ({formatTime12h(slot.startTime)}–{formatTime12h(slot.endTime)})
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={selectedSlotId} onValueChange={setSelectedSlotId}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">No preference</SelectItem>
+                      {deliverySlots.map((slot) => (
+                        <SelectItem key={slot.id} value={slot.id}>
+                          {slot.name} ({formatTime12h(slot.startTime)}–{formatTime12h(slot.endTime)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
               <div className="flex flex-col gap-1">

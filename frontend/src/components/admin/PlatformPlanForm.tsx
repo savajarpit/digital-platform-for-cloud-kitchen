@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ApiError, type PlatformPlanInput } from "@/lib/api/admin-platform-plans";
 import { useToast } from "@/context/ToastContext";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 
 export function PlatformPlanForm({
   initial,
@@ -62,16 +63,20 @@ export function PlatformPlanForm({
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Billing cycle</label>
-          <select
+          <Select
             value={form.billingCycle}
-            onChange={(e) =>
-              setForm({ ...form, billingCycle: e.target.value as PlatformPlanInput["billingCycle"] })
+            onValueChange={(v) =>
+              setForm({ ...form, billingCycle: v as PlatformPlanInput["billingCycle"] })
             }
-            className="input"
           >
-            <option value="MONTHLY">Monthly</option>
-            <option value="YEARLY">Yearly</option>
-          </select>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="MONTHLY">Monthly</SelectItem>
+              <SelectItem value="YEARLY">Yearly</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Sort order</label>

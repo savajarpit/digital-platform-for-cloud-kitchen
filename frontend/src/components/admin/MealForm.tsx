@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ApiError, type Category, type MealInput } from "@/lib/api/admin-menu";
 import { useToast } from "@/context/ToastContext";
 import { Toggle } from "@/components/ui/Toggle";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ImageUploadInput } from "@/components/admin/ImageUploadInput";
 
 export function MealForm({
@@ -67,18 +68,22 @@ export function MealForm({
           required
           className="input w-full"
         />
-        <select
+        <Select
           value={form.categoryId ?? ""}
-          onChange={(e) => setForm((f) => ({ ...f, categoryId: e.target.value || undefined }))}
-          className="input w-full"
+          onValueChange={(v) => setForm((f) => ({ ...f, categoryId: v || undefined }))}
         >
-          <option value="">Uncategorized</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">Uncategorized</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <textarea
         value={form.description ?? ""}

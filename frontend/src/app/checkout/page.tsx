@@ -21,6 +21,7 @@ import { formatTime12h, hhmmToMinutes } from "@/lib/format/time";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { AddressForm } from "@/components/addresses/AddressForm";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
 
 export default function CheckoutPage() {
@@ -396,37 +397,37 @@ export default function CheckoutPage() {
                   <label htmlFor="deliveryDay" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                     {t("deliveryDay")}
                   </label>
-                  <select
-                    id="deliveryDay"
-                    value={selectedDay}
-                    onChange={(e) => setSelectedDay(e.target.value)}
-                    className="input"
-                  >
-                    {dayOptions.length === 0 && <option value="">{t("selectDay")}</option>}
-                    {dayOptions.map((day) => (
-                      <option key={day.value} value={day.value}>
-                        {day.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={selectedDay} onValueChange={setSelectedDay}>
+                    <SelectTrigger id="deliveryDay">
+                      <SelectValue placeholder={t("selectDay")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {dayOptions.length === 0 && <SelectItem value="">{t("selectDay")}</SelectItem>}
+                      {dayOptions.map((day) => (
+                        <SelectItem key={day.value} value={day.value}>
+                          {day.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex flex-col gap-1">
                   <label htmlFor="deliverySlot" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                     {t("deliverySlot")}
                   </label>
-                  <select
-                    id="deliverySlot"
-                    value={effectiveSlotId}
-                    onChange={(e) => setSelectedSlotId(e.target.value)}
-                    className="input"
-                  >
-                    {!effectiveSlotId && <option value="">{t("selectSlot")}</option>}
-                    {visibleSlots.map((slot) => (
-                      <option key={slot.id} value={slot.id}>
-                        {slot.name} ({formatTime12h(slot.startTime)}–{formatTime12h(slot.endTime)})
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={effectiveSlotId} onValueChange={setSelectedSlotId}>
+                    <SelectTrigger id="deliverySlot">
+                      <SelectValue placeholder={t("selectSlot")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {!effectiveSlotId && <SelectItem value="">{t("selectSlot")}</SelectItem>}
+                      {visibleSlots.map((slot) => (
+                        <SelectItem key={slot.id} value={slot.id}>
+                          {slot.name} ({formatTime12h(slot.startTime)}–{formatTime12h(slot.endTime)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   {visibleSlots.length === 0 && (
                     <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{t("noSlotsToday")}</p>
                   )}

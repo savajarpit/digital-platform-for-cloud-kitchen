@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Pencil,
   Plus,
+  Search,
   Settings,
   Trash2,
   Users,
@@ -74,6 +75,7 @@ export default function AdminSubscriptionsPage() {
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
   const [page, setPage] = useState(1);
+  const [planSearch, setPlanSearch] = useState("");
   const [meals, setMeals] = useState<Meal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -86,16 +88,19 @@ export default function AdminSubscriptionsPage() {
   }, []);
 
   useEffect(() => {
-    listPlansAdmin({ page })
-      .then(({ data, meta }) => {
-        setPlans(data);
-        setMeta(meta ?? null);
-      })
-      .catch(() => setError("Couldn't load plans."));
-  }, [page]);
+    const handle = setTimeout(() => {
+      listPlansAdmin({ page, search: planSearch || undefined })
+        .then(({ data, meta }) => {
+          setPlans(data);
+          setMeta(meta ?? null);
+        })
+        .catch(() => setError("Couldn't load plans."));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [page, planSearch]);
 
   function refetch() {
-    listPlansAdmin({ page })
+    listPlansAdmin({ page, search: planSearch || undefined })
       .then(({ data, meta }) => {
         setPlans(data);
         setMeta(meta ?? null);
@@ -139,11 +144,28 @@ export default function AdminSubscriptionsPage() {
             Subscription Plans
           </h2>
         </div>
-        {tab === "plans" && canEdit && !creating && editingPlanId === null && (
-          <button type="button" onClick={() => setCreating(true)} className="btn-primary btn-sm">
-            <Plus className="h-4 w-4" />
-            New Plan
-          </button>
+        {tab === "plans" && (
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+              <input
+                type="text"
+                value={planSearch}
+                onChange={(e) => {
+                  setPlanSearch(e.target.value);
+                  setPage(1);
+                }}
+                placeholder="Search plans…"
+                className="input w-48 pl-8"
+              />
+            </div>
+            {canEdit && !creating && editingPlanId === null && (
+              <button type="button" onClick={() => setCreating(true)} className="btn-primary btn-sm">
+                <Plus className="h-4 w-4" />
+                New Plan
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -202,7 +224,9 @@ export default function AdminSubscriptionsPage() {
           <Skeleton className="mt-4 h-32 w-full" />
         </div>
       ) : plans.length === 0 && !creating ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No curated plans yet.</p>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          {planSearch ? "No plans match your search." : "No curated plans yet."}
+        </p>
       ) : (
         <div className="flex flex-col gap-3">
           {plans.map((plan) =>
@@ -685,106 +709,149 @@ function SubscribersTab() {
   const [subs, setSubs] = useState<AdminSubscription[] | null>(null);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [planId, setPlanId] = useState("");
+  const [plans, setPlans] = useState<Plan[]>([]);
 
   useEffect(() => {
-    listSubscriptionsAdmin({ page })
-      .then(({ data, meta }) => {
-        setSubs(data);
-        setMeta(meta ?? null);
-      })
-      .catch(() => setSubs([]));
-  }, [page]);
+    listPlansAdmin({ limit: 100 })
+      .then(({ data }) => setPlans(data))
+      .catch(() => setPlans([]));
+  }, []);
 
-  if (!subs) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-32 w-full" />
-      </div>
-    );
-  }
-
-  if (subs.length === 0) {
-    return <p className="text-sm text-zinc-500 dark:text-zinc-400">No customer subscriptions yet.</p>;
-  }
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      listSubscriptionsAdmin({ page, search: search || undefined, planId: planId || undefined })
+        .then(({ data, meta }) => {
+          setSubs(data);
+          setMeta(meta ?? null);
+        })
+        .catch(() => setSubs([]));
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [page, search, planId]);
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-zinc-100 text-left text-xs font-semibold text-zinc-500 uppercase dark:border-zinc-800 dark:text-zinc-400">
-              <th className="px-4 py-3">Customer</th>
-              <th className="px-4 py-3">Plan</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Coupon / Bonus</th>
-              <th className="px-4 py-3">Cycle</th>
-              <th className="px-4 py-3">Price</th>
-            </tr>
-          </thead>
-          <tbody>
-            {subs.map((sub) => (
-              <tr key={sub.id} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
-                <td className="px-4 py-3">
-                  <Link
-                    href={`/admin/subscriptions/${sub.id}`}
-                    className="text-zinc-900 hover:text-primary-600 hover:underline dark:text-zinc-100"
-                  >
-                    {sub.user.firstName} {sub.user.lastName ?? ""}
-                  </Link>
-                  <div className="text-xs text-zinc-400">{sub.user.email}</div>
-                </td>
-                <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{sub.planNameSnapshot}</td>
-                <td className="px-4 py-3">
-                  <span className={`badge ${SUBSCRIPTION_STATUS_STYLES[sub.status]}`}>
-                    {sub.status.replace("_", " ")}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400">
-                  {sub.couponCode ? <span className="font-mono">{sub.couponCode}</span> : "—"}
-                  {sub.bonusDaysGranted > 0 && (
-                    <span className="ml-1.5 badge bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400">
-                      +{sub.bonusDaysGranted}d
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400">
-                  {sub.startDate ? new Date(sub.startDate).toLocaleDateString() : "—"}
-                  {" – "}
-                  {sub.cycleEnd ? new Date(sub.cycleEnd).toLocaleDateString() : "—"}
-                </td>
-                <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">
-                  {formatPriceFromPaise(sub.priceInPaiseSnapshot)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {meta && meta.totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400">
-          <span>
-            Page {meta.page} of {meta.totalPages} · {meta.total} subscribers
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((p) => p - 1)}
-              disabled={!meta.hasPrev}
-              className="btn-outline btn-sm"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage((p) => p + 1)}
-              disabled={!meta.hasNext}
-              className="btn-outline btn-sm"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-48 flex-1">
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search subscribers…"
+            className="input w-full pl-8"
+          />
         </div>
+        <select
+          value={planId}
+          onChange={(e) => {
+            setPlanId(e.target.value);
+            setPage(1);
+          }}
+          className="input w-auto"
+        >
+          <option value="">All plans</option>
+          {plans.map((plan) => (
+            <option key={plan.id} value={plan.id}>
+              {plan.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {!subs ? (
+        <div className="card p-6">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="mt-4 h-32 w-full" />
+        </div>
+      ) : subs.length === 0 ? (
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          {search || planId ? "No subscribers match." : "No customer subscriptions yet."}
+        </p>
+      ) : (
+        <>
+          <div className="card overflow-x-auto p-0">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-100 text-left text-xs font-semibold text-zinc-500 uppercase dark:border-zinc-800 dark:text-zinc-400">
+                  <th className="px-4 py-3">Customer</th>
+                  <th className="px-4 py-3">Plan</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Coupon / Bonus</th>
+                  <th className="px-4 py-3">Cycle</th>
+                  <th className="px-4 py-3">Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {subs.map((sub) => (
+                  <tr key={sub.id} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/admin/subscriptions/${sub.id}`}
+                        className="text-zinc-900 hover:text-primary-600 hover:underline dark:text-zinc-100"
+                      >
+                        {sub.user.firstName} {sub.user.lastName ?? ""}
+                      </Link>
+                      <div className="text-xs text-zinc-400">{sub.user.email}</div>
+                    </td>
+                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-400">{sub.planNameSnapshot}</td>
+                    <td className="px-4 py-3">
+                      <span className={`badge ${SUBSCRIPTION_STATUS_STYLES[sub.status]}`}>
+                        {sub.status.replace("_", " ")}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                      {sub.couponCode ? <span className="font-mono">{sub.couponCode}</span> : "—"}
+                      {sub.bonusDaysGranted > 0 && (
+                        <span className="ml-1.5 badge bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400">
+                          +{sub.bonusDaysGranted}d
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                      {sub.startDate ? new Date(sub.startDate).toLocaleDateString() : "—"}
+                      {" – "}
+                      {sub.cycleEnd ? new Date(sub.cycleEnd).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">
+                      {formatPriceFromPaise(sub.priceInPaiseSnapshot)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {meta && meta.totalPages > 1 && (
+            <div className="flex items-center justify-between text-sm text-zinc-500 dark:text-zinc-400">
+              <span>
+                Page {meta.page} of {meta.totalPages} · {meta.total} subscribers
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => p - 1)}
+                  disabled={!meta.hasPrev}
+                  className="btn-outline btn-sm"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={!meta.hasNext}
+                  className="btn-outline btn-sm"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

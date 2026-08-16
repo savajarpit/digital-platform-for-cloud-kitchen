@@ -17,6 +17,7 @@ import { UpdatePlanDto } from './dto/update-plan.dto';
 import { UpsertPlanDaysDto } from './dto/upsert-plan-days.dto';
 import { PublishPlanDto } from './dto/publish-plan.dto';
 import { QueryAdminPlansDto } from './dto/query-admin-plans.dto';
+import { QueryAdminSubscriptionsDto } from './dto/query-admin-subscriptions.dto';
 import { SubscribeDto } from './dto/subscribe.dto';
 import { VerifyPlanPaymentDto } from './dto/verify-plan-payment.dto';
 import { SkipDayDto } from './dto/skip-day.dto';
@@ -54,6 +55,7 @@ export class SubscriptionsService {
       tenantId,
       skip,
       query.limit,
+      query.search,
     );
     return {
       data,
@@ -100,13 +102,15 @@ export class SubscriptionsService {
 
   async findAllSubscriptionsForAdmin(
     tenantId: string,
-    query: QueryAdminPlansDto,
+    query: QueryAdminSubscriptionsDto,
   ) {
     const skip = this.pagination.getOffsetSkip(query.page, query.limit);
     const [data, total] = await this.subscriptionsRepo.findAllForTenantAdmin(
       tenantId,
       skip,
       query.limit,
+      query.search,
+      query.planId,
     );
     return {
       data,

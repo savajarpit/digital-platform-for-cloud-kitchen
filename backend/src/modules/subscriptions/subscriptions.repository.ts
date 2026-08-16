@@ -50,15 +50,20 @@ export class SubscriptionsRepository {
     tenantId: string,
     skip: number,
     take: number,
+    search?: string,
   ): Promise<[SubscriptionPlan[], number]> {
+    const where: Prisma.SubscriptionPlanWhereInput = {
+      tenantId,
+      ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
+    };
     return this.prisma.$transaction([
       this.prisma.subscriptionPlan.findMany({
-        where: { tenantId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip,
         take,
       }),
-      this.prisma.subscriptionPlan.count({ where: { tenantId } }),
+      this.prisma.subscriptionPlan.count({ where }),
     ]);
   }
 
@@ -247,10 +252,24 @@ export class SubscriptionsRepository {
     tenantId: string,
     skip: number,
     take: number,
+    search?: string,
+    planId?: string,
   ): Promise<[Subscription[], number]> {
-    const where = {
+    const where: Prisma.SubscriptionWhereInput = {
       tenantId,
       status: { not: SubscriptionStatus.PENDING_PAYMENT },
+      ...(planId ? { planId } : {}),
+      ...(search
+        ? {
+            user: {
+              OR: [
+                { firstName: { contains: search, mode: 'insensitive' } },
+                { lastName: { contains: search, mode: 'insensitive' } },
+                { email: { contains: search, mode: 'insensitive' } },
+              ],
+            },
+          }
+        : {}),
     };
     return this.prisma.$transaction([
       this.prisma.subscription.findMany({

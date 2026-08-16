@@ -19,6 +19,7 @@ import { UpdatePlanDto } from './dto/update-plan.dto';
 import { UpsertPlanDaysDto } from './dto/upsert-plan-days.dto';
 import { PublishPlanDto } from './dto/publish-plan.dto';
 import { QueryAdminPlansDto } from './dto/query-admin-plans.dto';
+import { QueryAdminSubscriptionsDto } from './dto/query-admin-subscriptions.dto';
 import { QueryPrepPlanDto } from './dto/query-prep-plan.dto';
 import { SubscribeDto } from './dto/subscribe.dto';
 import { VerifyPlanPaymentDto } from './dto/verify-plan-payment.dto';
@@ -203,7 +204,7 @@ export class SubscriptionsController {
   })
   findAllSubscriptionsForAdmin(
     @CurrentTenantId() tenantId: string,
-    @Query() query: QueryAdminPlansDto,
+    @Query() query: QueryAdminSubscriptionsDto,
   ) {
     return this.subscriptionsService.findAllSubscriptionsForAdmin(
       tenantId,

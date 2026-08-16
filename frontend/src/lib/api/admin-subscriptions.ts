@@ -141,13 +141,14 @@ export interface TodaysDeliveries {
   }[];
 }
 
-export function listPlansAdmin(params: { page?: number; limit?: number } = {}): Promise<{
+export function listPlansAdmin(params: { page?: number; limit?: number; search?: string } = {}): Promise<{
   data: Plan[];
   meta?: PaginationMeta;
 }> {
   const search = new URLSearchParams();
   if (params.page) search.set("page", String(params.page));
   if (params.limit) search.set("limit", String(params.limit));
+  if (params.search) search.set("search", params.search);
   const qs = search.toString();
   return proxyFetchPaginated<Plan[]>(`/subscriptions/plans/admin${qs ? `?${qs}` : ""}`);
 }
@@ -185,13 +186,20 @@ export function deletePlan(id: string): Promise<void> {
   return proxyFetch<void>(`/subscriptions/plans/${id}`, { method: "DELETE" });
 }
 
-export function listSubscriptionsAdmin(params: { page?: number; limit?: number } = {}): Promise<{
+export function listSubscriptionsAdmin(params: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  planId?: string;
+} = {}): Promise<{
   data: AdminSubscription[];
   meta?: PaginationMeta;
 }> {
   const search = new URLSearchParams();
   if (params.page) search.set("page", String(params.page));
   if (params.limit) search.set("limit", String(params.limit));
+  if (params.search) search.set("search", params.search);
+  if (params.planId) search.set("planId", params.planId);
   const qs = search.toString();
   return proxyFetchPaginated<AdminSubscription[]>(`/subscriptions/admin${qs ? `?${qs}` : ""}`);
 }

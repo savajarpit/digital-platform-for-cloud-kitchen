@@ -29,6 +29,7 @@ import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { TenantLimitsCard } from "@/components/admin/TenantLimitsCard";
 
@@ -544,8 +545,7 @@ function NotificationCredentialsCard({
               <SelectItem value="TWILIO">TWILIO</SelectItem>
             </SelectContent>
           </Select>
-          <input
-            type="password"
+          <PasswordInput
             value={whatsappApiKey}
             onChange={(e) => setWhatsappApiKey(e.target.value)}
             placeholder={settings?.whatsappApiKeyConfigured ? "API key (configured)" : "API key"}
@@ -628,8 +628,7 @@ function NotificationCredentialsCard({
                 placeholder="SMTP username"
                 className="input w-full"
               />
-              <input
-                type="password"
+              <PasswordInput
                 value={smtpPassword}
                 onChange={(e) => setSmtpPassword(e.target.value)}
                 placeholder="SMTP password"
@@ -700,15 +699,13 @@ function PaymentCredentialsCard({
           placeholder="Key ID"
           className="input w-full"
         />
-        <input
-          type="password"
+        <PasswordInput
           value={keySecret}
           onChange={(e) => setKeySecret(e.target.value)}
           placeholder={settings?.razorpayKeySecretConfigured ? "Key secret (configured)" : "Key secret"}
           className="input w-full"
         />
-        <input
-          type="password"
+        <PasswordInput
           value={webhookSecret}
           onChange={(e) => setWebhookSecret(e.target.value)}
           placeholder={

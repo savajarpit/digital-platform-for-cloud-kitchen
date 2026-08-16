@@ -17,6 +17,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 const WHATSAPP_PROVIDERS: WhatsappProvider[] = ["INTERAKT", "AISENSY", "GUPSHUP", "TWILIO"];
 const EMAIL_PROVIDERS: EmailProvider[] = ["SMTP", "RESEND"];
@@ -176,8 +177,7 @@ export default function NotificationsPage() {
                   API key
                   <ConfiguredBadge configured={settings.whatsappApiKeyConfigured} />
                 </label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={whatsappApiKey}
                   onChange={(e) => setWhatsappApiKey(e.target.value)}
                   placeholder={settings.whatsappApiKeyConfigured ? "Leave blank to keep current" : ""}
@@ -319,8 +319,7 @@ export default function NotificationsPage() {
                       <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                         Password
                       </label>
-                      <input
-                        type="password"
+                      <PasswordInput
                         value={smtpPassword}
                         onChange={(e) => setSmtpPassword(e.target.value)}
                         className="input w-full"

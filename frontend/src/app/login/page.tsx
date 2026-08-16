@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { ApiError, login } from "@/lib/api/auth";
 import { OtpVerificationForm } from "@/components/auth/OtpVerificationForm";
 import { FormField } from "@/components/auth/FormField";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/context/ToastContext";
 
 export default function LoginPage() {
@@ -73,10 +74,9 @@ export default function LoginPage() {
                     {t("forgotPassword")}
                   </Link>
                 </div>
-                <input
+                <PasswordInput
                   id="password"
                   name="password"
-                  type="password"
                   required
                   autoComplete="current-password"
                   className="input"

@@ -1,3 +1,5 @@
+import { PasswordInput } from "@/components/ui/PasswordInput";
+
 export function FormField({
   id,
   name,
@@ -24,16 +26,28 @@ export function FormField({
       <label htmlFor={id} className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
         {label}
       </label>
-      <input
-        id={id}
-        name={name}
-        type={type}
-        required={required}
-        autoComplete={autoComplete}
-        minLength={minLength}
-        placeholder={placeholder}
-        className="input"
-      />
+      {type === "password" ? (
+        <PasswordInput
+          id={id}
+          name={name}
+          required={required}
+          autoComplete={autoComplete}
+          minLength={minLength}
+          placeholder={placeholder}
+          className="input"
+        />
+      ) : (
+        <input
+          id={id}
+          name={name}
+          type={type}
+          required={required}
+          autoComplete={autoComplete}
+          minLength={minLength}
+          placeholder={placeholder}
+          className="input"
+        />
+      )}
       {hint && <p className="text-xs text-zinc-500 dark:text-zinc-500">{hint}</p>}
     </div>
   );

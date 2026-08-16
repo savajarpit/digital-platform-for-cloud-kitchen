@@ -13,6 +13,7 @@ import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 
 function ConfiguredBadge({ configured }: { configured: boolean }) {
   if (!configured) return null;
@@ -113,8 +114,7 @@ export default function PaymentSettingsPage() {
               Key secret
               <ConfiguredBadge configured={settings.razorpayKeySecretConfigured} />
             </label>
-            <input
-              type="password"
+            <PasswordInput
               value={keySecret}
               onChange={(e) => setKeySecret(e.target.value)}
               placeholder={settings.razorpayKeySecretConfigured ? "Leave blank to keep current" : ""}
@@ -126,8 +126,7 @@ export default function PaymentSettingsPage() {
               Webhook secret
               <ConfiguredBadge configured={settings.razorpayWebhookSecretConfigured} />
             </label>
-            <input
-              type="password"
+            <PasswordInput
               value={webhookSecret}
               onChange={(e) => setWebhookSecret(e.target.value)}
               placeholder={settings.razorpayWebhookSecretConfigured ? "Leave blank to keep current" : ""}

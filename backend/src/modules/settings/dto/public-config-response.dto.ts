@@ -72,6 +72,58 @@ export class PublicConfigResponseDto {
   @Expose()
   showReviewsOnHomepage: boolean;
 
+  @ApiPropertyOptional({ example: 'Fresh & healthy' })
+  @Expose()
+  heroTagline?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  heroTitle?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  heroSubtitle?: string;
+
+  @ApiProperty({ type: [String] })
+  @Expose()
+  heroImageUrls: string[];
+
+  @ApiPropertyOptional({ example: 'What our customers say' })
+  @Expose()
+  reviewsSectionTitle?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  reviewsSectionDescription?: string;
+
+  @ApiProperty({ example: true })
+  @Expose()
+  ctaEnabled: boolean;
+
+  @ApiPropertyOptional()
+  @Expose()
+  ctaTitle?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  ctaDescription?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  ctaPrimaryLabel?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  ctaPrimaryLink?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  ctaSecondaryLabel?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  ctaSecondaryLink?: string;
+
   constructor(partial: Partial<PublicConfigResponseDto>) {
     Object.assign(this, partial);
   }

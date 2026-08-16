@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { Role, Status, Tenant } from '../../generated/prisma';
+import {
+  defaultHomePageContent,
+  defaultSubscriptionSettings,
+  defaultPlanFeatures,
+  defaultPlanFaqs,
+} from '../../common/constants/tenant-default-content';
 
 export interface CreateTenantWithOwnerInput {
   businessName: string;
@@ -75,6 +81,21 @@ export class PlatformRepository {
               '# Refund & Return Policy\n\nPlaceholder refund/cancellation policy. Replace this from Settings → Content before going live.',
             isPublished: true,
           },
+        }),
+        // Home page hero/CTA + Plans page copy — real starter content so a
+        // freshly provisioned storefront never looks blank, same precedent
+        // as the placeholder legal pages above. Tenant edits/deletes freely.
+        tx.homePageContent.create({
+          data: { tenantId: tenant.id, ...defaultHomePageContent() },
+        }),
+        tx.subscriptionSettings.create({
+          data: { tenantId: tenant.id, ...defaultSubscriptionSettings() },
+        }),
+        tx.planFeature.createMany({
+          data: defaultPlanFeatures().map((f) => ({ tenantId: tenant.id, ...f })),
+        }),
+        tx.planFaq.createMany({
+          data: defaultPlanFaqs().map((f) => ({ tenantId: tenant.id, ...f })),
         }),
       ]);
 

@@ -1,91 +1,57 @@
-import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { ArrowRight, Clock, Leaf, ShieldCheck, Truck } from "lucide-react";
 import { getPublicConfig } from "@/lib/api/settings";
 import { getPublicHomeSections } from "@/lib/api/home-sections";
-import { getPublishedPlans, getShowPlansOnHomepage } from "@/lib/api/plans";
+import { getPublishedPlans, getPlansHomeSettings } from "@/lib/api/plans";
 import { getPublicReviews } from "@/lib/api/reviews";
+import { Hero } from "@/components/home/Hero";
 import { HomeSectionsBlock } from "@/components/home/HomeSectionsBlock";
 import { PlansHomeBlock } from "@/components/home/PlansHomeBlock";
 import { ReviewsBlock } from "@/components/home/ReviewsBlock";
+import { HomeCtaSection } from "@/components/home/HomeCtaSection";
 
 export default async function Home() {
-  const [config, t, sections, plans, showPlans, reviews] = await Promise.all([
+  const [config, t, sections, plans, plansHomeSettings, reviews] = await Promise.all([
     getPublicConfig(),
     getTranslations("home"),
     getPublicHomeSections(),
     getPublishedPlans(),
-    getShowPlansOnHomepage(),
+    getPlansHomeSettings(),
     getPublicReviews(),
   ]);
-  const hasHeroImage = Boolean(config.heroImageUrl);
-  const showPlansBlock = showPlans && plans.length > 0;
+  const showPlansBlock = plansHomeSettings.showOnHomepage && plans.length > 0;
   const showReviewsBlock = config.showReviewsOnHomepage && reviews.length > 0;
+  const reviewAvg = reviews.length
+    ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+    : null;
 
   return (
     <main className="flex flex-1 flex-col">
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-linear-to-br from-primary-50 via-white to-accent-50 dark:from-primary-950 dark:via-zinc-950 dark:to-zinc-900" />
-        <div className="absolute top-20 right-0 z-0 h-96 w-96 rounded-full bg-primary-200/40 blur-3xl dark:bg-primary-900/30" />
+      <Hero
+        config={config}
+        heroCtaLabel={t("heroCta")}
+        viewPlansLabel={t("viewPlans")}
+        reviewAvg={reviewAvg}
+        reviewCount={reviews.length}
+      />
 
-        <div
-          className={`container-app relative grid gap-10 py-16 sm:py-24 ${
-            hasHeroImage ? "items-center text-center lg:grid-cols-2 lg:text-left" : "justify-items-center text-center"
-          }`}
-        >
-          <div className={`flex flex-col gap-6 ${hasHeroImage ? "items-center lg:items-start" : "items-center"}`}>
-            <span className="badge bg-primary-100 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
-              <Leaf className="h-3.5 w-3.5" />
-              Fresh &amp; healthy
-            </span>
-            <h1 className="font-display text-3xl font-extrabold tracking-tight text-zinc-900 sm:text-5xl md:text-6xl dark:text-zinc-50">
-              {config.displayName}
-            </h1>
-            <p className="max-w-md text-base text-zinc-600 sm:text-lg dark:text-zinc-400">
-              Fresh, healthy meals delivered to your door.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link href="/menu" className="btn-primary btn-lg">
-                {t("heroCta")}
-                <ArrowRight className="h-5 w-5" />
-              </Link>
-              <Link href="/plans" className="btn-outline btn-lg">
-                {t("viewPlans")}
-              </Link>
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-5 lg:justify-start">
-              <div className="flex items-center gap-2">
-                <Truck className="h-5 w-5 text-primary-600" />
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Free delivery</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-primary-600" />
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Fresh guarantee</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Clock className="h-5 w-5 text-primary-600" />
-                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Cancel anytime</span>
-              </div>
-            </div>
-          </div>
-
-          {hasHeroImage && (
-            <div className="hidden animate-scale-in lg:block">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={config.heroImageUrl}
-                alt={config.displayName}
-                className="aspect-square w-full rounded-3xl object-cover shadow-soft"
-              />
-            </div>
-          )}
-        </div>
-      </section>
-
-      <HomeSectionsBlock sections={sections} currency={config.currency} />
-      {showPlansBlock && <PlansHomeBlock plans={plans} />}
-      {showReviewsBlock && <ReviewsBlock reviews={reviews} />}
+      <div className="bg-zinc-50 dark:bg-zinc-950">
+        <HomeSectionsBlock sections={sections} currency={config.currency} />
+        {showPlansBlock && (
+          <PlansHomeBlock
+            plans={plans}
+            title={plansHomeSettings.homepageTitle}
+            description={plansHomeSettings.homepageDescription}
+          />
+        )}
+        {showReviewsBlock && (
+          <ReviewsBlock
+            reviews={reviews}
+            title={config.reviewsSectionTitle}
+            description={config.reviewsSectionDescription}
+          />
+        )}
+        <HomeCtaSection config={config} />
+      </div>
     </main>
   );
 }

@@ -200,6 +200,9 @@ model Tenant {
   homeSections             HomeSection[]
   reviews                  Review[]
   socialLinks              SocialLink[]
+  homePageContent          HomePageContent?
+  planFeatures             PlanFeature[]
+  planFaqs                 PlanFaq[]
 
   @@map("tenants")
 }
@@ -609,6 +612,8 @@ model Review {
   id          String   @id @default(uuid())
   tenantId    String
   authorName  String
+  avatarUrl   String?
+  role        String?
   rating      Int
   comment     String?
   isPublished Boolean  @default(true)
@@ -621,6 +626,73 @@ model Review {
   @@index([tenantId])
   @@index([tenantId, isPublished])
   @@map("reviews")
+}
+
+// Home page hero + CTA + reviews-section copy — one row per tenant, edited
+// from /admin/home. All fields nullable so an unconfigured tenant falls
+// back to the frontend's own hardcoded defaults, byte-for-byte unchanged
+// from before this model existed.
+model HomePageContent {
+  id                        String   @id @default(uuid())
+  tenantId                  String   @unique
+  heroTagline               String?
+  heroTitle                 String?
+  heroSubtitle              String?
+  heroImageUrls             String[] @default([])
+  reviewsSectionTitle       String?
+  reviewsSectionDescription String?
+  ctaEnabled                Boolean  @default(true)
+  ctaTitle                  String?
+  ctaDescription            String?
+  ctaPrimaryLabel           String?
+  ctaPrimaryLink            String?
+  ctaSecondaryLabel         String?
+  ctaSecondaryLink          String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("home_page_content")
+}
+
+// "Why subscribe?" cards on the /plans page — admin-curated, same
+// tenant-scoped-list pattern as HomeSection/Review.
+model PlanFeature {
+  id          String   @id @default(uuid())
+  tenantId    String
+  icon        String
+  title       String
+  description String?
+  sortOrder   Int      @default(0)
+  isEnabled   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, isEnabled])
+  @@map("plan_features")
+}
+
+// FAQ accordion on the /plans page.
+model PlanFaq {
+  id          String   @id @default(uuid())
+  tenantId    String
+  question    String
+  answer      String
+  sortOrder   Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, isPublished])
+  @@map("plan_faqs")
 }
 
 // ─── Addresses & Commerce ─────────────────────────────────
@@ -1045,6 +1117,21 @@ model SubscriptionSettings {
   // Home page plans block — only rendered if true AND at least one
   // published SubscriptionPlan exists.
   showOnHomepage              Boolean  @default(true)
+  // Home page "Meal Plans" block copy — falls back to the frontend's own
+  // hardcoded default when unset.
+  homepageTitle               String?
+  homepageDescription         String?
+  // /plans page's own header band copy.
+  plansPageTitle              String?
+  plansPageSubtitle           String?
+  // Plans-page extra sections, each independently toggleable.
+  whySubscribeEnabled         Boolean  @default(true)
+  faqEnabled                  Boolean  @default(true)
+  contactCtaEnabled           Boolean  @default(true)
+  contactCtaTitle             String?
+  contactCtaDescription       String?
+  // Falls back to BusinessProfile.supportEmail when unset.
+  contactEmail                String?
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 

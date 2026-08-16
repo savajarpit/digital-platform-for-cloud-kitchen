@@ -21,6 +21,19 @@ export interface PublicConfig {
   addressLine1?: string;
   maxAdvanceOrderDays: number;
   showReviewsOnHomepage: boolean;
+  heroTagline?: string;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  heroImageUrls: string[];
+  reviewsSectionTitle?: string;
+  reviewsSectionDescription?: string;
+  ctaEnabled: boolean;
+  ctaTitle?: string;
+  ctaDescription?: string;
+  ctaPrimaryLabel?: string;
+  ctaPrimaryLink?: string;
+  ctaSecondaryLabel?: string;
+  ctaSecondaryLink?: string;
 }
 
 export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
@@ -34,6 +47,16 @@ export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   currency: "INR",
   maxAdvanceOrderDays: 2,
   showReviewsOnHomepage: false,
+  heroTagline: "Fresh & healthy",
+  heroSubtitle: "Fresh, healthy meals delivered to your door.",
+  heroImageUrls: [],
+  reviewsSectionTitle: "What our customers say",
+  ctaEnabled: true,
+  ctaTitle: "Start eating better today",
+  ctaPrimaryLabel: "Choose Your Plan",
+  ctaPrimaryLink: "/plans",
+  ctaSecondaryLabel: "Order a Single Meal",
+  ctaSecondaryLink: "/menu",
 };
 
 /**

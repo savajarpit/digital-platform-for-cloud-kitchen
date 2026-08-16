@@ -27,14 +27,81 @@ export async function getPublishedPlans(): Promise<PublicPlan[]> {
   }
 }
 
-/** Server-side only — whether the home page's plans block is turned on. */
-export async function getShowPlansOnHomepage(): Promise<boolean> {
+export interface PlansHomeSettings {
+  showOnHomepage: boolean;
+  homepageTitle: string;
+  homepageDescription?: string;
+  plansPageTitle: string;
+  plansPageSubtitle: string;
+  whySubscribeEnabled: boolean;
+  faqEnabled: boolean;
+  contactCtaEnabled: boolean;
+  contactCtaTitle: string;
+  contactCtaDescription: string;
+  contactEmail?: string;
+}
+
+const DEFAULT_PLANS_HOME_SETTINGS: PlansHomeSettings = {
+  showOnHomepage: true,
+  homepageTitle: "Meal Plans",
+  plansPageTitle: "Choose Your Plan",
+  plansPageSubtitle:
+    "Flexible subscription plans that adapt to your routine. Skip, pause, or cancel — no lock-in, ever.",
+  whySubscribeEnabled: true,
+  faqEnabled: true,
+  contactCtaEnabled: true,
+  contactCtaTitle: "Still have questions?",
+  contactCtaDescription: "Our team is happy to help you find the right plan.",
+};
+
+/**
+ * Server-side only — the home "Meal Plans" block's copy/toggle plus the
+ * /plans page's own header + extra-section config. One endpoint backs both.
+ */
+export async function getPlansHomeSettings(): Promise<PlansHomeSettings> {
   try {
     const res = await serverFetch("/subscriptions/settings/public");
-    if (!res.ok) return true;
-    const body = (await res.json()) as ApiResponse<{ showOnHomepage: boolean }>;
-    return body.data?.showOnHomepage ?? true;
+    if (!res.ok) return DEFAULT_PLANS_HOME_SETTINGS;
+    const body = (await res.json()) as ApiResponse<PlansHomeSettings>;
+    return body.data ?? DEFAULT_PLANS_HOME_SETTINGS;
   } catch {
-    return true;
+    return DEFAULT_PLANS_HOME_SETTINGS;
+  }
+}
+
+export interface PublicPlanFeature {
+  id: string;
+  icon: string;
+  title: string;
+  description: string | null;
+}
+
+/** Server-side only — "Why subscribe?" cards for the /plans page. */
+export async function getPlanFeatures(): Promise<PublicPlanFeature[]> {
+  try {
+    const res = await serverFetch("/plan-features");
+    if (!res.ok) return [];
+    const body = (await res.json()) as ApiResponse<PublicPlanFeature[]>;
+    return body.data ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export interface PublicPlanFaq {
+  id: string;
+  question: string;
+  answer: string;
+}
+
+/** Server-side only — FAQ accordion for the /plans page. */
+export async function getPlanFaqs(): Promise<PublicPlanFaq[]> {
+  try {
+    const res = await serverFetch("/plan-faqs");
+    if (!res.ok) return [];
+    const body = (await res.json()) as ApiResponse<PublicPlanFaq[]>;
+    return body.data ?? [];
+  } catch {
+    return [];
   }
 }

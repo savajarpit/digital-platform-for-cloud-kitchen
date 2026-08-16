@@ -27,6 +27,7 @@ import { ResponseMessage } from '../../common/decorators/response-message.decora
 import { Role } from '../../common/enums/role.enum';
 import { PublicConfigResponseDto } from './dto/public-config-response.dto';
 import { UpdateBusinessProfileDto } from './dto/update-business-profile.dto';
+import { UpdateHomePageContentDto } from './dto/update-home-page-content.dto';
 import { UpdateOrderAcceptanceDto } from './dto/update-order-acceptance.dto';
 import { UpdateInstantDeliverySettingsDto } from './dto/update-instant-delivery-settings.dto';
 import { UpdateDeliveryZonesDto } from './dto/update-delivery-zones.dto';
@@ -117,6 +118,30 @@ export class SettingsController {
     @Body() dto: UpdateBusinessProfileDto,
   ) {
     return this.settingsService.updateBusinessProfile(tenantId, dto);
+  }
+
+  // ── Home page content (hero / CTA / reviews-section copy) ───
+
+  @Get('home-page-content')
+  @Roles(...ADMIN_ROLES)
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Home page content retrieved successfully')
+  @ApiOperation({ summary: 'Admin: get hero/CTA/reviews-section copy' })
+  getHomePageContent(@CurrentTenantId() tenantId: string) {
+    return this.settingsService.getHomePageContent(tenantId);
+  }
+
+  @Patch('home-page-content')
+  @Roles(...ADMIN_ROLES)
+  @RequirePermission('settings.branding.edit')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Home page content updated successfully')
+  @ApiOperation({ summary: 'Admin: update hero/CTA/reviews-section copy' })
+  updateHomePageContent(
+    @CurrentTenantId() tenantId: string,
+    @Body() dto: UpdateHomePageContentDto,
+  ) {
+    return this.settingsService.updateHomePageContent(tenantId, dto);
   }
 
   // ── Order acceptance ──────────────────────────────────────

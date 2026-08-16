@@ -16,8 +16,16 @@ import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { ImageUploadInput } from "@/components/admin/ImageUploadInput";
 
-const emptyForm: ReviewInput = { authorName: "", rating: 5, comment: "", isPublished: true };
+const emptyForm: ReviewInput = {
+  authorName: "",
+  avatarUrl: undefined,
+  role: "",
+  rating: 5,
+  comment: "",
+  isPublished: true,
+};
 
 export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
@@ -113,6 +121,8 @@ export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
               key={review.id}
               initial={{
                 authorName: review.authorName,
+                avatarUrl: review.avatarUrl ?? undefined,
+                role: review.role ?? "",
                 rating: review.rating,
                 comment: review.comment ?? "",
                 isPublished: review.isPublished,
@@ -129,11 +139,27 @@ export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
               key={review.id}
               className="flex items-start justify-between gap-3 rounded-lg border border-zinc-100 px-3.5 py-2.5 dark:border-zinc-800"
             >
-              <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-1 gap-3">
+                {review.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={review.avatarUrl}
+                    alt={review.authorName}
+                    className="h-8 w-8 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-bold text-primary-700 dark:bg-primary-950 dark:text-primary-400">
+                    {review.authorName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                     {review.authorName}
                   </span>
+                  {review.role && (
+                    <span className="text-xs text-zinc-400">· {review.role}</span>
+                  )}
                   <span className="flex items-center gap-0.5 text-amber-400">
                     {Array.from({ length: review.rating }).map((_, i) => (
                       <Star key={i} className="h-3 w-3 fill-amber-400" />
@@ -145,6 +171,7 @@ export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
                     {review.comment}
                   </p>
                 )}
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-3">
                 <Toggle checked={review.isPublished} onChange={() => handleTogglePublished(review)} disabled={!canEdit} />
@@ -206,6 +233,12 @@ function ReviewForm({
       onSubmit={handleSubmit}
       className="flex flex-col gap-3 rounded-lg border border-primary-200 bg-primary-50/30 p-4 dark:border-primary-900 dark:bg-primary-950/20"
     >
+      <ImageUploadInput
+        label="Photo (optional)"
+        value={form.avatarUrl}
+        onChange={(url) => setForm((f) => ({ ...f, avatarUrl: url }))}
+        previewClassName="h-14 w-14 rounded-full"
+      />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input
           value={form.authorName}
@@ -214,22 +247,28 @@ function ReviewForm({
           required
           className="input w-full"
         />
-        <Select
-          value={String(form.rating)}
-          onValueChange={(v) => setForm((f) => ({ ...f, rating: Number(v) }))}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {[5, 4, 3, 2, 1].map((n) => (
-              <SelectItem key={n} value={String(n)}>
-                {n} star{n === 1 ? "" : "s"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <input
+          value={form.role ?? ""}
+          onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+          placeholder="Role (e.g. Verified Customer)"
+          className="input w-full"
+        />
       </div>
+      <Select
+        value={String(form.rating)}
+        onValueChange={(v) => setForm((f) => ({ ...f, rating: Number(v) }))}
+      >
+        <SelectTrigger className="w-full sm:w-48">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {[5, 4, 3, 2, 1].map((n) => (
+            <SelectItem key={n} value={String(n)}>
+              {n} star{n === 1 ? "" : "s"}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <textarea
         value={form.comment ?? ""}
         onChange={(e) => setForm((f) => ({ ...f, comment: e.target.value }))}

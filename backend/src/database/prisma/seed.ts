@@ -16,6 +16,12 @@ import { PrismaClient, Role } from '../../generated/prisma';
 import { PERMISSION_CATALOG } from '../../common/enums/permission.enum';
 import { FEATURE_CATALOG } from '../../common/enums/feature.enum';
 import { slugify } from '../../common/utils/slug.util';
+import {
+  defaultHomePageContent,
+  defaultSubscriptionSettings,
+  defaultPlanFeatures,
+  defaultPlanFaqs,
+} from '../../common/constants/tenant-default-content';
 
 dotenv.config({
   path: path.resolve(
@@ -97,6 +103,22 @@ async function main() {
 
       await prisma.paymentSettings.create({
         data: { tenantId: tenant.id },
+      });
+
+      await prisma.homePageContent.create({
+        data: { tenantId: tenant.id, ...defaultHomePageContent() },
+      });
+
+      await prisma.subscriptionSettings.create({
+        data: { tenantId: tenant.id, ...defaultSubscriptionSettings() },
+      });
+
+      await prisma.planFeature.createMany({
+        data: defaultPlanFeatures().map((f) => ({ tenantId: tenant.id, ...f })),
+      });
+
+      await prisma.planFaq.createMany({
+        data: defaultPlanFaqs().map((f) => ({ tenantId: tenant.id, ...f })),
       });
 
       const passwordHash = await bcrypt.hash(ownerPassword, 12);

@@ -25,6 +25,7 @@ import { PauseDto } from './dto/pause.dto';
 import { SetDayOverrideDto } from './dto/set-day-override.dto';
 import { UpdateSubscriptionSettingsDto } from './dto/update-subscription-settings.dto';
 import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
+import { defaultSubscriptionSettings } from '../../common/constants/tenant-default-content';
 
 const PREVIEW_DAYS_AHEAD = 14;
 const CANCEL_FEATURE_KEY = 'subscription-self-cancel';
@@ -128,6 +129,7 @@ export class SubscriptionsService {
         closureReason: null,
         noticeHoursBeforeDelivery: 24,
         showOnHomepage: true,
+        ...defaultSubscriptionSettings(),
       }
     );
   }
@@ -136,12 +138,28 @@ export class SubscriptionsService {
     return this.subscriptionsRepo.upsertSettings(tenantId, dto);
   }
 
-  /** Public: just the one flag the storefront home page needs. */
-  async getPublicSettings(
-    tenantId: string,
-  ): Promise<{ showOnHomepage: boolean }> {
+  /** Public: the flags/copy the storefront home page + /plans page need. */
+  async getPublicSettings(tenantId: string) {
     const settings = await this.subscriptionsRepo.findSettings(tenantId);
-    return { showOnHomepage: settings?.showOnHomepage ?? true };
+    const defaults = defaultSubscriptionSettings();
+    return {
+      showOnHomepage: settings?.showOnHomepage ?? true,
+      homepageTitle: settings?.homepageTitle ?? defaults.homepageTitle,
+      homepageDescription:
+        settings?.homepageDescription ?? defaults.homepageDescription,
+      plansPageTitle: settings?.plansPageTitle ?? defaults.plansPageTitle,
+      plansPageSubtitle:
+        settings?.plansPageSubtitle ?? defaults.plansPageSubtitle,
+      whySubscribeEnabled:
+        settings?.whySubscribeEnabled ?? defaults.whySubscribeEnabled,
+      faqEnabled: settings?.faqEnabled ?? defaults.faqEnabled,
+      contactCtaEnabled:
+        settings?.contactCtaEnabled ?? defaults.contactCtaEnabled,
+      contactCtaTitle: settings?.contactCtaTitle ?? defaults.contactCtaTitle,
+      contactCtaDescription:
+        settings?.contactCtaDescription ?? defaults.contactCtaDescription,
+      contactEmail: settings?.contactEmail ?? null,
+    };
   }
 
   // ─── Admin: today's deliveries ───────────────────────────

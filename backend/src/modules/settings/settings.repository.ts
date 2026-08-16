@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import {
   BusinessProfile,
   DeliverySlot,
+  HomePageContent,
   InstantDeliverySettings,
   NotificationSettings,
   OrderAcceptanceSettings,
@@ -24,6 +25,21 @@ export class SettingsRepository {
     data: Prisma.BusinessProfileUpdateInput,
   ): Promise<BusinessProfile> {
     return this.prisma.businessProfile.update({ where: { tenantId }, data });
+  }
+
+  findHomePageContent(tenantId: string): Promise<HomePageContent | null> {
+    return this.prisma.homePageContent.findUnique({ where: { tenantId } });
+  }
+
+  upsertHomePageContent(
+    tenantId: string,
+    data: Omit<Prisma.HomePageContentUncheckedCreateInput, 'tenantId'>,
+  ): Promise<HomePageContent> {
+    return this.prisma.homePageContent.upsert({
+      where: { tenantId },
+      update: data,
+      create: { ...data, tenantId },
+    });
   }
 
   findOrderAcceptanceSettings(

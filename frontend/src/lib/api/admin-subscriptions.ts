@@ -123,6 +123,16 @@ export interface SubscriptionSettings {
   closureReason: string | null;
   noticeHoursBeforeDelivery: number;
   showOnHomepage: boolean;
+  homepageTitle?: string | null;
+  homepageDescription?: string | null;
+  plansPageTitle?: string | null;
+  plansPageSubtitle?: string | null;
+  whySubscribeEnabled: boolean;
+  faqEnabled: boolean;
+  contactCtaEnabled: boolean;
+  contactCtaTitle?: string | null;
+  contactCtaDescription?: string | null;
+  contactEmail?: string | null;
 }
 
 export interface TodaysDeliveries {

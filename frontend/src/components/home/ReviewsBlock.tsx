@@ -4,18 +4,29 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, Quote, Star } from "lucide-react";
 import type { PublicReview } from "@/lib/api/reviews";
 
-export function ReviewsBlock({ reviews }: { reviews: PublicReview[] }) {
+export function ReviewsBlock({
+  reviews,
+  title,
+  description,
+}: {
+  reviews: PublicReview[];
+  title?: string;
+  description?: string;
+}) {
   const [active, setActive] = useState(0);
 
   if (reviews.length === 0) return null;
   const review = reviews[active];
 
   return (
-    <section className="bg-zinc-50 py-12 sm:py-16 dark:bg-zinc-900/50">
+    <section className="py-12 sm:py-16">
       <div className="container-app">
         <h2 className="section-title text-center text-zinc-900 dark:text-zinc-100">
-          What our customers say
+          {title ?? "What our customers say"}
         </h2>
+        {description && (
+          <p className="mt-2 text-center text-sm text-zinc-500 dark:text-zinc-400">{description}</p>
+        )}
 
         <div className="mx-auto mt-8 max-w-3xl">
           <div className="card relative p-8 text-center sm:p-10">
@@ -30,7 +41,28 @@ export function ReviewsBlock({ reviews }: { reviews: PublicReview[] }) {
                 &ldquo;{review.comment}&rdquo;
               </p>
             )}
-            <p className="min-w-0 wrap-break-word font-bold text-zinc-900 dark:text-zinc-100">{review.authorName}</p>
+            <div className="flex items-center justify-center gap-3">
+              {review.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={review.avatarUrl}
+                  alt={review.authorName}
+                  className="h-12 w-12 rounded-full object-cover"
+                />
+              ) : (
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary-100 font-bold text-primary-700 dark:bg-primary-950 dark:text-primary-400">
+                  {review.authorName.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="text-left">
+                <p className="min-w-0 wrap-break-word font-bold text-zinc-900 dark:text-zinc-100">
+                  {review.authorName}
+                </p>
+                {review.role && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{review.role}</p>
+                )}
+              </div>
+            </div>
           </div>
 
           {reviews.length > 1 && (

@@ -5,6 +5,8 @@ export { ApiError };
 export interface Review {
   id: string;
   authorName: string;
+  avatarUrl: string | null;
+  role: string | null;
   rating: number;
   comment: string | null;
   isPublished: boolean;
@@ -14,6 +16,8 @@ export interface Review {
 
 export interface ReviewInput {
   authorName: string;
+  avatarUrl?: string;
+  role?: string;
   rating: number;
   comment?: string;
   isPublished?: boolean;

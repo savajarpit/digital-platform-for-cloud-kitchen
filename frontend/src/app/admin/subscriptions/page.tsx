@@ -48,6 +48,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { PrepPlannerView } from "@/components/admin/PrepPlannerView";
 import { MealCombobox } from "@/components/admin/MealCombobox";
+import { PlansPageSettingsCard } from "@/components/subscriptions-admin/PlansPageSettingsCard";
+import { PlanFeaturesManager } from "@/components/admin/PlanFeaturesManager";
+import { PlanFaqManager } from "@/components/admin/PlanFaqManager";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -198,7 +201,14 @@ export default function AdminSubscriptionsPage() {
 
       {tab === "subscribers" && <SubscribersTab />}
       {tab === "today" && <TodaysDeliveriesTab />}
-      {tab === "settings" && <SettingsTab canEdit={canEdit} />}
+      {tab === "settings" && (
+        <div className="flex flex-col gap-6">
+          <SettingsTab canEdit={canEdit} />
+          <PlansPageSettingsCard canEdit={canEdit} />
+          <PlanFeaturesManager canEdit={canEdit} />
+          <PlanFaqManager canEdit={canEdit} />
+        </div>
+      )}
 
       {tab === "plans" && creating && (
         <PlanMetaForm

@@ -3,6 +3,7 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUrl,
   Max,
   MaxLength,
   Min,
@@ -14,6 +15,17 @@ export class UpsertReviewDto {
   @IsString()
   @MaxLength(80)
   authorName: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUrl()
+  avatarUrl?: string;
+
+  @ApiPropertyOptional({ example: 'Verified Customer' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  role?: string;
 
   @ApiProperty({ example: 5 })
   @IsInt()

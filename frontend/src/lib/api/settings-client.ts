@@ -19,6 +19,8 @@ const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   currency: "INR",
   maxAdvanceOrderDays: 2,
   showReviewsOnHomepage: false,
+  heroImageUrls: [],
+  ctaEnabled: true,
 };
 
 /**

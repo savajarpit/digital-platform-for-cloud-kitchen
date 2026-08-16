@@ -8,6 +8,7 @@ import { SettingsRepository } from './settings.repository';
 import {
   BusinessProfile,
   DeliverySlot,
+  HomePageContent,
   InstantDeliverySettings,
   NotificationSettings,
   OrderAcceptanceSettings,
@@ -20,6 +21,8 @@ import {
   ThemeConfigDto,
 } from './dto/public-config-response.dto';
 import { UpdateBusinessProfileDto } from './dto/update-business-profile.dto';
+import { UpdateHomePageContentDto } from './dto/update-home-page-content.dto';
+import { defaultHomePageContent } from '../../common/constants/tenant-default-content';
 import { UpdateOrderAcceptanceDto } from './dto/update-order-acceptance.dto';
 import { UpdateInstantDeliverySettingsDto } from './dto/update-instant-delivery-settings.dto';
 import { UpdateDeliveryZonesDto } from './dto/update-delivery-zones.dto';
@@ -47,10 +50,15 @@ export class SettingsService {
       throw new NotFoundException('No tenant context for this request');
     }
 
-    const profile = await this.settingsRepo.findBusinessProfile(tenantId);
+    const [profile, homePageContent] = await Promise.all([
+      this.settingsRepo.findBusinessProfile(tenantId),
+      this.settingsRepo.findHomePageContent(tenantId),
+    ]);
     if (!profile) {
       throw new NotFoundException('Business profile not configured yet');
     }
+
+    const heroDefaults = defaultHomePageContent();
 
     return new PublicConfigResponseDto({
       displayName: profile.displayName,
@@ -66,6 +74,25 @@ export class SettingsService {
       addressLine1: profile.addressLine1 ?? undefined,
       maxAdvanceOrderDays: profile.maxAdvanceOrderDays,
       showReviewsOnHomepage: profile.showReviewsOnHomepage,
+      heroTagline: homePageContent?.heroTagline ?? heroDefaults.heroTagline,
+      heroTitle: homePageContent?.heroTitle ?? undefined,
+      heroSubtitle: homePageContent?.heroSubtitle ?? heroDefaults.heroSubtitle,
+      heroImageUrls: homePageContent?.heroImageUrls ?? [],
+      reviewsSectionTitle:
+        homePageContent?.reviewsSectionTitle ?? heroDefaults.reviewsSectionTitle,
+      reviewsSectionDescription:
+        homePageContent?.reviewsSectionDescription ??
+        heroDefaults.reviewsSectionDescription,
+      ctaEnabled: homePageContent?.ctaEnabled ?? heroDefaults.ctaEnabled,
+      ctaTitle: homePageContent?.ctaTitle ?? heroDefaults.ctaTitle,
+      ctaDescription: homePageContent?.ctaDescription ?? heroDefaults.ctaDescription,
+      ctaPrimaryLabel:
+        homePageContent?.ctaPrimaryLabel ?? heroDefaults.ctaPrimaryLabel,
+      ctaPrimaryLink: homePageContent?.ctaPrimaryLink ?? heroDefaults.ctaPrimaryLink,
+      ctaSecondaryLabel:
+        homePageContent?.ctaSecondaryLabel ?? heroDefaults.ctaSecondaryLabel,
+      ctaSecondaryLink:
+        homePageContent?.ctaSecondaryLink ?? heroDefaults.ctaSecondaryLink,
     });
   }
 
@@ -114,6 +141,19 @@ export class SettingsService {
         ? { themeConfig: mergedTheme as unknown as Prisma.InputJsonValue }
         : {}),
     });
+  }
+
+  // ── Home page content (hero / CTA / reviews-section copy) ──
+
+  getHomePageContent(tenantId: string): Promise<HomePageContent | null> {
+    return this.settingsRepo.findHomePageContent(tenantId);
+  }
+
+  updateHomePageContent(
+    tenantId: string,
+    dto: UpdateHomePageContentDto,
+  ): Promise<HomePageContent> {
+    return this.settingsRepo.upsertHomePageContent(tenantId, dto);
   }
 
   // ── Order acceptance ──────────────────────────────────────

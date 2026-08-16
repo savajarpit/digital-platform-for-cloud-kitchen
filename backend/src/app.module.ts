@@ -67,6 +67,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { HomeSectionsModule } from './modules/home-sections/home-sections.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SocialLinksModule } from './modules/social-links/social-links.module';
+import { PlanContentModule } from './modules/plan-content/plan-content.module';
 
 @Module({
   imports: [
@@ -159,6 +160,7 @@ import { SocialLinksModule } from './modules/social-links/social-links.module';
     HomeSectionsModule,
     ReviewsModule,
     SocialLinksModule,
+    PlanContentModule,
   ],
 
   providers: [

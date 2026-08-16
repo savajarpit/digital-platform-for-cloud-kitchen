@@ -354,6 +354,16 @@ export class SubscriptionsRepository {
       closureReason?: string | null;
       noticeHoursBeforeDelivery?: number;
       showOnHomepage?: boolean;
+      homepageTitle?: string;
+      homepageDescription?: string;
+      plansPageTitle?: string;
+      plansPageSubtitle?: string;
+      whySubscribeEnabled?: boolean;
+      faqEnabled?: boolean;
+      contactCtaEnabled?: boolean;
+      contactCtaTitle?: string;
+      contactCtaDescription?: string;
+      contactEmail?: string;
     },
   ): Promise<SubscriptionSettings> {
     return this.prisma.subscriptionSettings.upsert({

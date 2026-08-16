@@ -4,6 +4,8 @@ import type { ApiResponse } from "@/lib/api/response";
 export interface PublicReview {
   id: string;
   authorName: string;
+  avatarUrl: string | null;
+  role: string | null;
   rating: number;
   comment: string | null;
 }

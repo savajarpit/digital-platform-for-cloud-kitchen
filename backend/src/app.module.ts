@@ -66,6 +66,7 @@ import { PlatformLeadsModule } from './modules/platform-leads/platform-leads.mod
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { HomeSectionsModule } from './modules/home-sections/home-sections.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
+import { SocialLinksModule } from './modules/social-links/social-links.module';
 
 @Module({
   imports: [
@@ -157,6 +158,7 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
     UploadsModule,
     HomeSectionsModule,
     ReviewsModule,
+    SocialLinksModule,
   ],
 
   providers: [

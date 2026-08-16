@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Toggle } from "@/components/ui/Toggle";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { ImageUploadInput } from "@/components/admin/ImageUploadInput";
+import { SocialLinksCard } from "@/components/admin/SocialLinksCard";
 
 type FormState = UpdateBusinessProfileInput;
 
@@ -93,6 +94,7 @@ export default function BusinessProfilePage() {
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       <div className="flex items-center gap-2 text-primary-600">
         <Store className="h-5 w-5" />
@@ -368,5 +370,8 @@ export default function BusinessProfilePage() {
         </button>
       </fieldset>
     </form>
+
+    <SocialLinksCard canEdit={canEdit} />
+    </>
   );
 }

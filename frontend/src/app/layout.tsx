@@ -5,6 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
 import { getPublicConfig } from "@/lib/api/settings";
 import { getPublishedPages } from "@/lib/api/content";
+import { getPublicSocialLinks } from "@/lib/api/social-links";
 import { buildThemeStyle } from "@/lib/theme/build-theme-style";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
@@ -39,9 +40,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [config, pages, locale, cookieStore] = await Promise.all([
+  const [config, pages, socialLinks, locale, cookieStore] = await Promise.all([
     getPublicConfig(),
     getPublishedPages(),
+    getPublicSocialLinks(),
     getLocale(),
     cookies(),
   ]);
@@ -74,7 +76,7 @@ export default async function RootLayout({
                 isAdmin={isAdmin}
               />
               <div className="flex flex-1 flex-col">{children}</div>
-              <Footer config={config} pages={pages} />
+              <Footer config={config} pages={pages} socialLinks={socialLinks} />
             </ConfirmProvider>
           </ToastProvider>
         </NextIntlClientProvider>

@@ -22,6 +22,10 @@ export class PublicConfigResponseDto {
 
   @ApiPropertyOptional()
   @Expose()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
   logoUrl?: string;
 
   @ApiPropertyOptional()

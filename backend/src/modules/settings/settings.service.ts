@@ -54,6 +54,7 @@ export class SettingsService {
 
     return new PublicConfigResponseDto({
       displayName: profile.displayName,
+      description: profile.description ?? undefined,
       logoUrl: profile.logoUrl ?? undefined,
       faviconUrl: profile.faviconUrl ?? undefined,
       heroImageUrl: profile.heroImageUrl ?? undefined,

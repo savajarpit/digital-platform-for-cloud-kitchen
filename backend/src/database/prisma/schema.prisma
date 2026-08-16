@@ -109,6 +109,16 @@ enum PlanAccentColor {
   ACCENT
 }
 
+enum SocialPlatform {
+  INSTAGRAM
+  FACEBOOK
+  YOUTUBE
+  LINKEDIN
+  TWITTER
+  WHATSAPP
+  PINTEREST
+}
+
 enum MealSlotType {
   BREAKFAST
   LUNCH
@@ -189,6 +199,7 @@ model Tenant {
   platformLeads            PlatformLead[]
   homeSections             HomeSection[]
   reviews                  Review[]
+  socialLinks              SocialLink[]
 
   @@map("tenants")
 }
@@ -274,6 +285,26 @@ model BusinessProfile {
 
   @@index([tenantId])
   @@map("business_profiles")
+}
+
+// Footer social icons — one link per platform per tenant, toggled on/off
+// independent of whether it's configured (lets an admin park a URL without
+// it going live yet).
+model SocialLink {
+  id        String         @id @default(uuid())
+  tenantId  String
+  platform  SocialPlatform
+  url       String
+  isEnabled Boolean        @default(true)
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, platform])
+  @@index([tenantId])
+  @@map("social_links")
 }
 
 model OrderAcceptanceSettings {

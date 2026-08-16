@@ -9,6 +9,7 @@ export interface ThemeConfig {
 
 export interface PublicConfig {
   displayName: string;
+  description?: string;
   logoUrl?: string;
   faviconUrl?: string;
   heroImageUrl?: string;

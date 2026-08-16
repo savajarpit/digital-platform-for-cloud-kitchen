@@ -3,13 +3,17 @@ import { getTranslations } from "next-intl/server";
 import { Leaf, Mail, MapPin, Phone } from "lucide-react";
 import type { PublicConfig } from "@/lib/api/settings";
 import type { StaticPageSummary } from "@/lib/api/content";
+import type { PublicSocialLink } from "@/lib/api/social-links";
+import { SocialIcon } from "@/components/icons/SocialIcon";
 
 export async function Footer({
   config,
   pages,
+  socialLinks,
 }: {
   config: PublicConfig;
   pages: StaticPageSummary[];
+  socialLinks: PublicSocialLink[];
 }) {
   const t = await getTranslations("nav");
   const year = new Date().getFullYear();
@@ -40,8 +44,24 @@ export async function Footer({
               <span className="font-display text-lg font-bold text-white">{config.displayName}</span>
             </div>
             <p className="max-w-xs text-sm leading-relaxed text-zinc-400">
-              Fresh, healthy meals delivered to your door.
+              {config.description || "Fresh, healthy meals delivered to your door."}
             </p>
+            {socialLinks.length > 0 && (
+              <div className="flex gap-3">
+                {socialLinks.map((link) => (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={link.platform}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 transition-colors hover:bg-primary-600 hover:text-white"
+                  >
+                    <SocialIcon platform={link.platform} className="h-4 w-4" />
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -82,13 +102,17 @@ export async function Footer({
                 {config.supportPhone && (
                   <li className="flex items-start gap-3">
                     <Phone className="mt-0.5 h-4 w-4 shrink-0 text-primary-400" />
-                    <span>{config.supportPhone}</span>
+                    <a href={`tel:${config.supportPhone}`} className="transition-colors hover:text-primary-400">
+                      {config.supportPhone}
+                    </a>
                   </li>
                 )}
                 {config.supportEmail && (
                   <li className="flex items-start gap-3">
                     <Mail className="mt-0.5 h-4 w-4 shrink-0 text-primary-400" />
-                    <span>{config.supportEmail}</span>
+                    <a href={`mailto:${config.supportEmail}`} className="transition-colors hover:text-primary-400">
+                      {config.supportEmail}
+                    </a>
                   </li>
                 )}
                 {config.addressLine1 && (

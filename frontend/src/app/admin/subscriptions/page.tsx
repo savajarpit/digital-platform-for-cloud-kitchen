@@ -47,6 +47,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { PrepPlannerView } from "@/components/admin/PrepPlannerView";
+import { MealCombobox } from "@/components/admin/MealCombobox";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -496,11 +497,11 @@ function FeatureListEditor({
               key={i}
               className="flex items-center justify-between gap-2 rounded-lg border border-zinc-200 px-3 py-1.5 text-sm dark:border-zinc-700"
             >
-              <span className="text-zinc-700 dark:text-zinc-300">{feature}</span>
+              <span className="min-w-0 flex-1 wrap-break-word text-zinc-700 dark:text-zinc-300">{feature}</span>
               <button
                 type="button"
                 onClick={() => onChange(features.filter((_, idx) => idx !== i))}
-                className="text-xs font-medium text-red-600 hover:text-red-700"
+                className="shrink-0 text-xs font-medium text-red-600 hover:text-red-700"
               >
                 Remove
               </button>
@@ -660,7 +661,7 @@ function PlanEditor({
             >
               <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Day {i + 1}</span>
               {SLOT_TYPES.map((slotType) => (
-                <div key={slotType} className="flex items-center gap-2">
+                <div key={slotType} className="flex min-w-0 items-center gap-2">
                   <input
                     type="checkbox"
                     checked={day[slotType].included}
@@ -668,23 +669,13 @@ function PlanEditor({
                     disabled={!canEdit}
                     className="h-3.5 w-3.5 accent-primary-600"
                   />
-                  <Select
+                  <MealCombobox
                     value={day[slotType].mealId}
-                    onValueChange={(v) => updateSlot(i, slotType, { mealId: v })}
+                    onChange={(mealId) => updateSlot(i, slotType, { mealId })}
+                    knownMeals={meals}
+                    noneLabel={`${SLOT_LABELS[slotType]} — to be announced`}
                     disabled={!canEdit || !day[slotType].included}
-                  >
-                    <SelectTrigger className="py-1.5 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">{SLOT_LABELS[slotType]} — to be announced</SelectItem>
-                      {meals.map((meal) => (
-                        <SelectItem key={meal.id} value={meal.id}>
-                          {SLOT_LABELS[slotType]}: {meal.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
               ))}
             </div>

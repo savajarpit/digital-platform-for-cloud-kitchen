@@ -52,9 +52,9 @@ export function SelectTrigger({
   return (
     <RadixSelect.Trigger
       id={id}
-      className={`${base} flex cursor-pointer items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
+      className={`${base} flex min-w-0 cursor-pointer items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >
-      <span className="truncate">{children}</span>
+      <span className="min-w-0 truncate">{children}</span>
       <RadixSelect.Icon>
         <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400" />
       </RadixSelect.Icon>

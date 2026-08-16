@@ -55,7 +55,7 @@ export function PlanCard({ plan, index }: { plan: PublicPlan; index: number }) {
               >
                 <Check className={`h-3 w-3 ${PLAN_ACCENT_ICON_TEXT[plan.accentColor]}`} />
               </div>
-              <span className="text-zinc-700 dark:text-zinc-300">{feature}</span>
+              <span className="min-w-0 flex-1 wrap-break-word text-zinc-700 dark:text-zinc-300">{feature}</span>
             </li>
           ))}
         </ul>

@@ -70,7 +70,7 @@ export default function AddressesPage() {
 
   return (
     <main className="container-app flex-1 py-10">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h1 className="section-title text-zinc-900 dark:text-zinc-100">{t("title")}</h1>
         {!showForm && (
           <button type="button" onClick={() => setShowForm(true)} className="btn-primary btn-sm">

@@ -22,6 +22,7 @@ import {
   PlatformPaymentFailedEmailJob,
 } from '../../shared-modules/queue/processors/mail.processor';
 import {
+  BillingCycle,
   PlatformInvoiceStatus,
   PlatformSubscriptionStatus,
 } from '../../generated/prisma';
@@ -134,6 +135,35 @@ export class PlatformBillingService {
     const tenant = await this.billingRepo.findTenantBasics(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
 
+    // Picking a catalog plan derives the billing shape from it — anything
+    // else in the body is ignored so the invite always matches what's
+    // actually in the PlatformPlan catalog, not a stale/mistyped copy of it.
+    // planId is explicitly null (not undefined) in the manual branch so a
+    // re-invite that switches from a catalog plan to a one-off deal clears
+    // the old link instead of Prisma silently leaving it untouched.
+    let planId: string | null;
+    let planCode: string;
+    let billingCycle: BillingCycle;
+    let amountInPaise: number;
+    if (dto.planId) {
+      const plan = await this.plansRepo.findById(dto.planId);
+      if (!plan) throw new NotFoundException('Platform plan not found');
+      planId = plan.id;
+      planCode = plan.name;
+      billingCycle = plan.billingCycle;
+      amountInPaise = plan.priceInPaise;
+    } else {
+      if (!dto.planCode || !dto.billingCycle || dto.amountInPaise === undefined) {
+        throw new BadRequestException(
+          'Provide either planId or planCode/billingCycle/amountInPaise',
+        );
+      }
+      planId = null;
+      planCode = dto.planCode;
+      billingCycle = dto.billingCycle;
+      amountInPaise = dto.amountInPaise;
+    }
+
     const token = CryptoUtil.generateToken(32);
     const expiresAt = new Date(
       Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000,
@@ -141,9 +171,10 @@ export class PlatformBillingService {
 
     await this.billingRepo.createSubscriptionAndInvite({
       tenantId,
-      planCode: dto.planCode,
-      billingCycle: dto.billingCycle,
-      amountInPaise: dto.amountInPaise,
+      planId,
+      planCode,
+      billingCycle,
+      amountInPaise,
       token,
       expiresAt,
       createdByUserId,
@@ -157,9 +188,9 @@ export class PlatformBillingService {
         email: owner.email,
         businessName: tenant.name,
         activationUrl,
-        planCode: dto.planCode,
-        amountInPaise: dto.amountInPaise,
-        billingCycle: dto.billingCycle,
+        planCode,
+        amountInPaise,
+        billingCycle,
       };
       try {
         await this.mailQueue.add('send-platform-activation-invite', job, {

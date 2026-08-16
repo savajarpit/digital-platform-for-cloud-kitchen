@@ -189,9 +189,13 @@ export function setFeatureGrant(
 // ── Platform billing (Phase 8) ─────────────────────────────────────
 
 export interface CreateSubscriptionInviteInput {
-  planCode: string;
-  billingCycle: BillingCycle;
-  amountInPaise: number;
+  /** Pick an existing PlatformPlan catalog entry — the other three fields
+   * are derived from it server-side when set. Omit to specify a one-off/
+   * comped deal via planCode/billingCycle/amountInPaise instead. */
+  planId?: string;
+  planCode?: string;
+  billingCycle?: BillingCycle;
+  amountInPaise?: number;
 }
 
 export function createSubscriptionInvite(

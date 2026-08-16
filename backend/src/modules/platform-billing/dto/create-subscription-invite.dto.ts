@@ -1,22 +1,33 @@
-import { IsEnum, IsInt, IsString, Min, MaxLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Min, MaxLength } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingCycle } from '../../../generated/prisma';
 
 export class CreateSubscriptionInviteDto {
-  @ApiProperty({ example: 'STANDARD' })
+  @ApiPropertyOptional({
+    description:
+      'Pick an existing PlatformPlan catalog entry — planCode/billingCycle/amountInPaise are derived from it, ignoring anything else in this body. Omit to specify a one-off/comped deal via the fields below instead.',
+  })
+  @IsOptional()
+  @IsUUID()
+  planId?: string;
+
+  @ApiPropertyOptional({ example: 'STANDARD' })
+  @IsOptional()
   @IsString()
   @MaxLength(40)
-  planCode: string;
+  planCode?: string;
 
-  @ApiProperty({ enum: BillingCycle, example: BillingCycle.MONTHLY })
+  @ApiPropertyOptional({ enum: BillingCycle, example: BillingCycle.MONTHLY })
+  @IsOptional()
   @IsEnum(BillingCycle)
-  billingCycle: BillingCycle;
+  billingCycle?: BillingCycle;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 99900,
     description: 'Amount in paise, per billing cycle',
   })
+  @IsOptional()
   @IsInt()
   @Min(100)
-  amountInPaise: number;
+  amountInPaise?: number;
 }

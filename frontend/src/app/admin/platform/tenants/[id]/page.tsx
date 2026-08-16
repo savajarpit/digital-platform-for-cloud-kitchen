@@ -6,7 +6,6 @@ import { ArrowLeft, Bell, Building2, CreditCard, KeyRound, Puzzle, Receipt } fro
 import {
   ApiError,
   cancelSubscriptionAtPeriodEnd,
-  createSubscriptionInvite,
   getRoleGrants,
   getTenant,
   getTenantFeatures,
@@ -18,7 +17,6 @@ import {
   updateTenant,
   updateTenantNotifications,
   updateTenantPayment,
-  type BillingCycle,
   type FeatureGrant,
   type PermissionGrant,
   type PlatformInvoice,
@@ -32,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { TenantLimitsCard } from "@/components/admin/TenantLimitsCard";
+import { CreateInviteForm } from "@/components/admin/CreateInviteForm";
 
 const ROLES = ["OWNER", "STAFF"] as const;
 
@@ -366,78 +365,6 @@ function BillingCard({
         </div>
       )}
     </div>
-  );
-}
-
-function CreateInviteForm({
-  tenantId,
-  onCreated,
-}: {
-  tenantId: string;
-  onCreated: (activationUrl: string) => void;
-}) {
-  const { showToast } = useToast();
-  const [planCode, setPlanCode] = useState("STANDARD");
-  const [billingCycle, setBillingCycle] = useState<BillingCycle>("MONTHLY");
-  const [amountRupees, setAmountRupees] = useState("999");
-  const [saving, setSaving] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const { activationUrl } = await createSubscriptionInvite(tenantId, {
-        planCode,
-        billingCycle,
-        amountInPaise: Math.round(Number(amountRupees) * 100),
-      });
-      onCreated(activationUrl);
-      showToast("Activation invite created and emailed to the owner", "success");
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't create invite.", "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        No subscription set up yet — create one to email this tenant&apos;s owner an activation
-        payment link.
-      </p>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <input
-          type="text"
-          value={planCode}
-          onChange={(e) => setPlanCode(e.target.value)}
-          placeholder="Plan code"
-          required
-          className="input w-full"
-        />
-        <Select value={billingCycle} onValueChange={(v) => setBillingCycle(v as BillingCycle)}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="MONTHLY">Monthly</SelectItem>
-            <SelectItem value="YEARLY">Yearly</SelectItem>
-          </SelectContent>
-        </Select>
-        <input
-          type="number"
-          value={amountRupees}
-          onChange={(e) => setAmountRupees(e.target.value)}
-          placeholder="₹ per cycle"
-          min={1}
-          required
-          className="input w-full"
-        />
-      </div>
-      <button type="submit" disabled={saving} className="btn-primary w-fit btn-sm">
-        {saving ? "Creating…" : "Create Activation Link"}
-      </button>
-    </form>
   );
 }
 

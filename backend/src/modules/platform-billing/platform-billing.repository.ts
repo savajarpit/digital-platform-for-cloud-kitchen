@@ -114,6 +114,7 @@ export class PlatformBillingRepository {
 
   async createSubscriptionAndInvite(params: {
     tenantId: string;
+    planId?: string | null;
     planCode: string;
     billingCycle: BillingCycle;
     amountInPaise: number;
@@ -128,6 +129,7 @@ export class PlatformBillingRepository {
       const subscription = await tx.platformSubscription.upsert({
         where: { tenantId: params.tenantId },
         update: {
+          planId: params.planId,
           planCode: params.planCode,
           billingCycle: params.billingCycle,
           amountInPaise: params.amountInPaise,
@@ -135,6 +137,7 @@ export class PlatformBillingRepository {
         },
         create: {
           tenantId: params.tenantId,
+          planId: params.planId,
           planCode: params.planCode,
           billingCycle: params.billingCycle,
           amountInPaise: params.amountInPaise,

@@ -129,6 +129,28 @@ export class PlatformRazorpayClientService {
   }
 
   /**
+   * Best-effort invoice URL lookup for the post-charge email — Razorpay's
+   * `subscription.charged` webhook payload only ever carries
+   * `payment.entity.invoice_id`, never a nested invoice entity with its
+   * own `short_url` (there is no `payload.invoice` in any real Razorpay
+   * subscription webhook, despite that shape looking plausible). The real
+   * URL needs a separate `invoices.fetch()` call. Deliberately swallows
+   * failures and returns null rather than throwing — a missing invoice
+   * link in the confirmation email is a cosmetic loss, not worth failing
+   * the whole webhook (and the retry) over.
+   */
+  async fetchInvoiceUrl(invoiceId: string): Promise<string | null> {
+    const client = this.getClient();
+    try {
+      const invoice = await client.invoices.fetch(invoiceId);
+      return invoice.short_url ?? null;
+    } catch (error) {
+      this.logError('fetch platform invoice url', error);
+      return null;
+    }
+  }
+
+  /**
    * Schedules cancellation for the end of the current billing cycle — the
    * subscription keeps billing rights and stays `active` until
    * `current_end`, then Razorpay itself transitions it to `cancelled` and

@@ -53,6 +53,13 @@ export interface PlatformLeadNotificationEmailJob {
   isUpgradeRequest: boolean;
 }
 
+export interface PlatformWebhookFailedEmailJob {
+  email: string;
+  eventType: string;
+  eventId: string;
+  errorMessage: string;
+}
+
 @Processor('mail')
 export class MailProcessor {
   private readonly logger = new Logger(MailProcessor.name);
@@ -110,6 +117,15 @@ export class MailProcessor {
       businessName: job.data.businessName,
       type: job.data.type,
       state: job.data.state,
+    });
+  }
+
+  @Process('send-platform-webhook-failed')
+  async sendPlatformWebhookFailed(job: Job<PlatformWebhookFailedEmailJob>) {
+    await this.mailService.sendPlatformWebhookFailed(job.data.email, {
+      eventType: job.data.eventType,
+      eventId: job.data.eventId,
+      errorMessage: job.data.errorMessage,
     });
   }
 

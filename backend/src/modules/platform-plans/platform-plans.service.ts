@@ -37,6 +37,12 @@ export class PlatformPlansService {
 
   async delete(id: string): Promise<void> {
     await this.assertExists(id);
+    const referencedBy = await this.plansRepo.countSubscriptionsReferencing(id);
+    if (referencedBy > 0) {
+      throw new BadRequestException(
+        'This plan is still assigned to at least one subscription (current or scheduled) — reassign or wait for it to change plans before deleting.',
+      );
+    }
     await this.plansRepo.delete(id);
   }
 

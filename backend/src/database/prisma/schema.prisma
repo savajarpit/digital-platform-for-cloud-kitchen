@@ -1460,7 +1460,14 @@ model PlatformInvoice {
   tenantId               String
   platformSubscriptionId String
   razorpayInvoiceId      String?
-  razorpayPaymentId      String?
+  // Unique (when set) so a webhook retry after a partial local failure
+  // upserts the same row instead of creating a duplicate invoice + a
+  // duplicate invoice/payment-failed email — Razorpay's own payment id is
+  // the one stable identifier every real charge attempt has. Postgres
+  // treats multiple NULLs as distinct under a unique constraint, so the
+  // rare payment-less pending event (no payment attempt made yet) is
+  // unaffected by this constraint.
+  razorpayPaymentId      String?               @unique
   amountInPaise          Int
   status                 PlatformInvoiceStatus
   invoiceUrl             String?

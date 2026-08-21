@@ -29,6 +29,10 @@ import {
   platformLeadNotificationTemplate,
   PlatformLeadNotificationTemplateData,
 } from './templates/platform-lead-notification.template';
+import {
+  platformWebhookFailedTemplate,
+  PlatformWebhookFailedTemplateData,
+} from './templates/platform-webhook-failed.template';
 
 @Injectable()
 export class MailService {
@@ -110,6 +114,14 @@ export class MailService {
     data: PlatformLimitAlertTemplateData,
   ): Promise<void> {
     const { subject, html } = platformLimitAlertTemplate(data);
+    await this.send(to, subject, html);
+  }
+
+  async sendPlatformWebhookFailed(
+    to: string,
+    data: PlatformWebhookFailedTemplateData,
+  ): Promise<void> {
+    const { subject, html } = platformWebhookFailedTemplate(data);
     await this.send(to, subject, html);
   }
 

@@ -275,6 +275,60 @@ export class PlatformBillingRepository {
     ]);
   }
 
+  /** Reconciliation for `subscription.activated` — the webhook confirming
+   * what the synchronous verifyAndActivate() call already did inline. Only
+   * flips PENDING_PAYMENT → ACTIVE; deliberately a no-op for any other
+   * current status (PAST_DUE/CANCELLED/already-ACTIVE) so a stray/late
+   * webhook can never resurrect a subscription that moved on for a real
+   * reason since. */
+  async reconcileActivated(tenantId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const subscription = await tx.platformSubscription.findUnique({
+        where: { tenantId },
+      });
+      if (subscription?.status !== PlatformSubscriptionStatus.PENDING_PAYMENT) {
+        return;
+      }
+      await tx.platformSubscription.update({
+        where: { tenantId },
+        data: { status: PlatformSubscriptionStatus.ACTIVE },
+      });
+      await tx.tenant.update({
+        where: { id: tenantId },
+        data: { status: Status.ACTIVE },
+      });
+    });
+  }
+
+  /** `subscription.completed` — every scheduled billing cycle finished
+   * (Razorpay's total_count exhausted). No distinct DB status for this
+   * (practically unreachable — total_count is set to ~10 years' worth of
+   * cycles, see PlatformRazorpayClientService), so it's treated the same
+   * as a cancellation: no more billing rights either way, and a fresh
+   * subscription can be created if this is ever genuinely hit. */
+  async markCompleted(tenantId: string): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.platformSubscription.update({
+        where: { tenantId },
+        data: {
+          status: PlatformSubscriptionStatus.CANCELLED,
+          cancelAtPeriodEnd: false,
+        },
+      }),
+      this.prisma.tenant.update({
+        where: { id: tenantId },
+        data: { status: Status.INACTIVE },
+      }),
+    ]);
+  }
+
+  /** Idempotent on razorpayPaymentId when present — a webhook retry after a
+   * partial local failure (invoice written, a later step in the same
+   * handler throws) must not produce a second invoice row + a second
+   * invoice/payment-failed email for the exact same real charge attempt.
+   * Falls back to a plain create when there's no payment id to key on
+   * (e.g. a `subscription.pending` event with no payment attempt made
+   * yet) — that shape doesn't have a stable identifier to dedupe on. */
   createInvoice(data: {
     tenantId: string;
     platformSubscriptionId: string;
@@ -286,7 +340,14 @@ export class PlatformBillingRepository {
     periodStart: Date | null;
     periodEnd: Date | null;
   }): Promise<PlatformInvoice> {
-    return this.prisma.platformInvoice.create({ data });
+    if (!data.razorpayPaymentId) {
+      return this.prisma.platformInvoice.create({ data });
+    }
+    return this.prisma.platformInvoice.upsert({
+      where: { razorpayPaymentId: data.razorpayPaymentId },
+      update: data,
+      create: data,
+    });
   }
 
   findInvoicesByTenantId(tenantId: string): Promise<PlatformInvoice[]> {

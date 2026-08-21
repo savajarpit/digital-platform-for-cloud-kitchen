@@ -9,6 +9,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
+import { createHash } from 'crypto';
+import { Prisma } from '../../generated/prisma';
 import { PlatformBillingRepository } from './platform-billing.repository';
 import { PlatformRazorpayClientService } from '../../shared-modules/razorpay/platform-razorpay-client.service';
 import { PlatformPlansRepository } from '../platform-plans/platform-plans.repository';
@@ -20,6 +22,7 @@ import {
   PlatformActivationInviteEmailJob,
   PlatformInvoiceEmailJob,
   PlatformPaymentFailedEmailJob,
+  PlatformWebhookFailedEmailJob,
 } from '../../shared-modules/queue/processors/mail.processor';
 import {
   BillingCycle,
@@ -38,16 +41,15 @@ interface RazorpaySubscriptionWebhookPayload {
         current_end?: number;
       };
     };
+    // Razorpay's real subscription webhook payload never carries a
+    // top-level `invoice` entity — the invoice reference lives at
+    // `payment.entity.invoice_id`, and its short_url needs a separate
+    // invoices.fetch() call (see PlatformRazorpayClientService).
     payment?: {
       entity?: {
         id?: string;
         amount?: number;
-      };
-    };
-    invoice?: {
-      entity?: {
-        id?: string;
-        short_url?: string;
+        invoice_id?: string;
       };
     };
   };
@@ -278,6 +280,13 @@ export class PlatformBillingService {
         ? new Date(fetched.currentEnd * 1000)
         : null,
     });
+    // A reactivation (not just a brand-new tenant) may carry stale
+    // TenantLimits — blocked-attempt counters, alert-dedupe flags, or a
+    // manual override from before a prior cancellation/suspension. Reset
+    // on every activation, same as the other two paths that change a
+    // tenant's effective plan (switchPlan's immediate upgrade, and the
+    // scheduled-downgrade webhook finalization).
+    await this.tenantLimits.resetForPlanChange(invite.tenantId);
 
     return { activated: true };
   }
@@ -286,6 +295,7 @@ export class PlatformBillingService {
     const tenant = await this.billingRepo.findTenantBasics(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
     await this.billingRepo.manualActivate(tenantId);
+    await this.tenantLimits.resetForPlanChange(tenantId);
   }
 
   listInvoices(tenantId: string) {
@@ -350,28 +360,83 @@ export class PlatformBillingService {
       throw new BadRequestException('Invalid webhook payload');
     }
 
-    const subscriptionId = payload.payload?.subscription?.entity?.id;
-    if (!subscriptionId) return; // an event type we don't act on
+    // Razorpay's own recommended dedup key (unique per event, per their
+    // docs) — but never trust a header is always present. The fallback is
+    // a hash of the raw body, not `${subscriptionId}:${event}` — a
+    // per-type key would collide across two genuinely different charges of
+    // the *same* event type on the *same* subscription (e.g. two real
+    // `subscription.charged` events, one per billing cycle), silently
+    // dropping the second one as a "duplicate" it isn't. A content hash
+    // still dedupes a true retried-redelivery of the same payload
+    // correctly, without that collision.
+    const eventId =
+      eventIdHeader ?? createHash('sha256').update(rawBody).digest('hex');
 
-    const eventId = eventIdHeader ?? `${subscriptionId}:${payload.event}`;
     const existing = await this.billingRepo.findWebhookEvent(eventId);
     if (existing?.status === 'PROCESSED') return;
 
-    const record =
-      existing ??
-      (await this.billingRepo.createWebhookEvent(
-        eventId,
-        payload.event ?? 'unknown',
-      ));
+    // Recorded here — before we even look at whether we recognize the
+    // payload's shape — so "did we receive event X" is always answerable
+    // from this table for every webhook that passes signature
+    // verification, not just the ones we happened to act on.
+    let record = existing;
+    if (!record) {
+      try {
+        record = await this.billingRepo.createWebhookEvent(
+          eventId,
+          payload.event ?? 'unknown',
+        );
+      } catch (error) {
+        // Two concurrent deliveries of the same event both raced past the
+        // findWebhookEvent check above — the loser hits the eventId unique
+        // constraint. That's not a real failure, it means the winner is
+        // already (or about to be) handling this exact event; just adopt
+        // its row instead of erroring the whole request.
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          record = await this.billingRepo.findWebhookEvent(eventId);
+        }
+        if (!record) throw error;
+      }
+    }
+
+    const subscriptionId = payload.payload?.subscription?.entity?.id;
+    if (!subscriptionId) {
+      // A real subscription.* event always includes this per Razorpay's
+      // own payload docs — reaching here means either a non-subscription
+      // event landed on this endpoint, or a malformed/test request.
+      // Already recorded above; nothing to act on.
+      await this.billingRepo.markWebhookProcessed(record.id);
+      return;
+    }
 
     try {
       await this.processEvent(payload, subscriptionId);
       await this.billingRepo.markWebhookProcessed(record.id);
     } catch (error) {
-      await this.billingRepo.markWebhookFailed(
-        record.id,
-        (error as Error).message,
-      );
+      const errorMessage = (error as Error).message;
+      await this.billingRepo.markWebhookFailed(record.id, errorMessage);
+      // Razorpay retries automatically for ~24h — a single transient
+      // failure (a momentary DB blip, a network hiccup) usually self-heals
+      // on the next redelivery and isn't worth paging over. Only alert
+      // once this exact event has already failed at least once *before*
+      // this attempt too — that's the "this isn't going to fix itself"
+      // signal. Nothing else in this codebase currently notifies Arpit
+      // that a webhook is stuck, so this was previously a silent gap for
+      // a billing system.
+      if (existing?.status === 'FAILED') {
+        const alertEmail = this.config.get<string>('platformBilling.alertEmail');
+        if (alertEmail) {
+          await this.enqueueWebhookFailedEmail({
+            email: alertEmail,
+            eventType: payload.event ?? 'unknown',
+            eventId,
+            errorMessage,
+          });
+        }
+      }
       throw error;
     }
   }
@@ -396,18 +461,26 @@ export class PlatformBillingService {
     if (!tenant) return;
 
     const paymentEntity = payload.payload?.payment?.entity;
-    const invoiceEntity = payload.payload?.invoice?.entity;
     const subscriptionEntity = payload.payload?.subscription?.entity;
 
     if (payload.event === 'subscription.charged') {
+      // The webhook payload only ever carries the invoice *id*
+      // (payment.entity.invoice_id) — the short_url needs its own
+      // Razorpay call. Best-effort: a failed lookup returns null rather
+      // than failing the whole webhook, so a missing link never turns a
+      // real charge into a retried/duplicated event.
+      const invoiceUrl = paymentEntity?.invoice_id
+        ? await this.razorpayClient.fetchInvoiceUrl(paymentEntity.invoice_id)
+        : null;
+
       await this.billingRepo.createInvoice({
         tenantId: subscription.tenantId,
         platformSubscriptionId: subscription.id,
-        razorpayInvoiceId: invoiceEntity?.id ?? null,
+        razorpayInvoiceId: paymentEntity?.invoice_id ?? null,
         razorpayPaymentId: paymentEntity?.id ?? null,
         amountInPaise: paymentEntity?.amount ?? subscription.amountInPaise,
         status: PlatformInvoiceStatus.PAID,
-        invoiceUrl: invoiceEntity?.short_url ?? null,
+        invoiceUrl,
         periodStart: null,
         periodEnd: subscriptionEntity?.current_end
           ? new Date(subscriptionEntity.current_end * 1000)
@@ -449,14 +522,14 @@ export class PlatformBillingService {
           email: owner.email,
           businessName: tenant.name,
           amountInPaise: paymentEntity?.amount ?? subscription.amountInPaise,
-          invoiceUrl: invoiceEntity?.short_url ?? null,
+          invoiceUrl,
         });
       }
     } else if (payload.event === 'subscription.pending') {
       await this.billingRepo.createInvoice({
         tenantId: subscription.tenantId,
         platformSubscriptionId: subscription.id,
-        razorpayInvoiceId: invoiceEntity?.id ?? null,
+        razorpayInvoiceId: paymentEntity?.invoice_id ?? null,
         razorpayPaymentId: paymentEntity?.id ?? null,
         amountInPaise: paymentEntity?.amount ?? subscription.amountInPaise,
         status: PlatformInvoiceStatus.FAILED,
@@ -486,15 +559,46 @@ export class PlatformBillingService {
           isOwnerRecipient: false,
         });
       }
+    } else if (payload.event === 'subscription.activated') {
+      // Reconciliation, not the primary activation path — verifyAndActivate()
+      // already flips status inline off the payment-verify call, before any
+      // webhook can arrive. This only matters if that synchronous write
+      // somehow didn't land; reconcileActivated() is itself a no-op unless
+      // the subscription is still sitting at PENDING_PAYMENT.
+      await this.billingRepo.reconcileActivated(subscription.tenantId);
     } else if (payload.event === 'subscription.halted') {
       await this.billingRepo.haltSubscriptionAndSuspendTenant(
         subscription.tenantId,
       );
+    } else if (payload.event === 'subscription.completed') {
+      await this.billingRepo.markCompleted(subscription.tenantId);
     } else if (payload.event === 'subscription.cancelled') {
       // The scheduled cancel-at-cycle-end (see scheduleCancellation) taking
       // effect — Razorpay stops billing rights and moves the subscription
       // to its terminal cancelled state.
       await this.billingRepo.markCancelled(subscription.tenantId);
+    } else if (
+      payload.event === 'subscription.paused' ||
+      payload.event === 'subscription.resumed'
+    ) {
+      // PlatformSubscription never exposes a pause action anywhere in this
+      // app (only cancel) — nothing here ever calls Razorpay's
+      // subscriptions.pause()/.resume(). Seeing one of these means it
+      // happened directly on the Razorpay dashboard, out of band. Logged
+      // rather than silently dropped so it's visible, but deliberately not
+      // auto-acted on — a manual dashboard action needs a human to decide
+      // whether Tenant.status should follow it.
+      this.logger.warn(
+        `Received ${payload.event} for tenant ${subscription.tenantId} — this app never triggers a pause/resume itself, so this happened directly on the Razorpay dashboard. No status change applied automatically.`,
+      );
+    } else {
+      // subscription.authenticated / subscription.updated / anything future
+      // — routine events with no local state for us to reconcile. Logged at
+      // debug rather than silently falling through, so a genuinely new
+      // event type is still visible if Razorpay adds one.
+      this.logger.debug(
+        `Unhandled webhook event ${payload.event ?? '(none)'} for tenant ${subscription.tenantId} — no action needed.`,
+      );
     }
   }
 
@@ -513,6 +617,21 @@ export class PlatformBillingService {
     job: PlatformPaymentFailedEmailJob,
   ): Promise<void> {
     await this.mailQueue.add('send-platform-payment-failed', job, {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: true,
+      removeOnFail: false,
+    });
+  }
+
+  private async enqueueWebhookFailedEmail(
+    job: PlatformWebhookFailedEmailJob,
+  ): Promise<void> {
+    // Deliberately no jobId dedup here (unlike the activation-invite
+    // email) — a distinct alert per failed attempt is fine; Bull's own
+    // attempts/backoff already bounds it, and this only fires from the
+    // 2nd+ failure onward per the caller's own guard.
+    await this.mailQueue.add('send-platform-webhook-failed', job, {
       attempts: 3,
       backoff: { type: 'exponential', delay: 5000 },
       removeOnComplete: true,

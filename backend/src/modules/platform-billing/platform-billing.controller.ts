@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Post,
   Get,
   Req,
@@ -64,7 +65,10 @@ export class PlatformBillingController {
     summary:
       'Self-serve: switch to a higher/lower plan — an upgrade is prorated and applied immediately, a downgrade is scheduled for the end of the current billing cycle',
   })
-  switchPlan(@CurrentTenantId() tenantId: string, @Param('id') id: string) {
+  switchPlan(
+    @CurrentTenantId() tenantId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.platformBillingService.switchPlan(tenantId, id);
   }
 

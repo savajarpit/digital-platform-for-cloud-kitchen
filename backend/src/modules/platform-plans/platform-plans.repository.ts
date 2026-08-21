@@ -35,4 +35,18 @@ export class PlatformPlansRepository {
   delete(id: string): Promise<PlatformPlan> {
     return this.prisma.platformPlan.delete({ where: { id } });
   }
+
+  /** Both FKs (planId/scheduledPlanId) are ON DELETE SET NULL — deleting a
+   * referenced plan wouldn't fail at the DB level, it would silently null
+   * out an active subscription's plan link (breaking its usage-cap
+   * enforcement) or forget a scheduled downgrade mid-flight. Checked
+   * explicitly before allowing a delete rather than relying on the
+   * cascade. Queries platformSubscription directly rather than importing
+   * PlatformBillingRepository, to avoid a circular module dependency
+   * (platform-billing already depends on platform-plans, not the reverse). */
+  countSubscriptionsReferencing(planId: string): Promise<number> {
+    return this.prisma.platformSubscription.count({
+      where: { OR: [{ planId }, { scheduledPlanId: planId }] },
+    });
+  }
 }

@@ -121,20 +121,10 @@ export class PlatformController {
   @ResponseMessage('Cancellation scheduled')
   @ApiOperation({
     summary:
-      'SUPER_ADMIN-only: schedule cancellation for the end of the current billing period (not immediate)',
+      'SUPER_ADMIN-only: schedule cancellation for the end of the current billing period (not immediate). Final once confirmed — Razorpay has no API to undo a scheduled cancellation, so there is no resume action.',
   })
   async scheduleCancellation(@Param('id') id: string) {
     await this.platformBillingService.scheduleCancellation(id);
-  }
-
-  @Post('tenants/:id/subscription/resume')
-  @ResponseMessage('Subscription resumed')
-  @ApiOperation({
-    summary:
-      'SUPER_ADMIN-only: undo a scheduled cancellation before it takes effect',
-  })
-  async resumeSubscription(@Param('id') id: string) {
-    await this.platformBillingService.resumeSubscription(id);
   }
 
   @Get('tenants/:id/limits')

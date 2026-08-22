@@ -6,6 +6,7 @@ import {
   ApiError,
   getMyEligiblePlans,
   switchPlatformPlan,
+  verifySwitchPlan,
   type EligiblePlansResponse,
 } from "@/lib/api/admin-platform-plans";
 import { getMyUsage, type UsageSummary } from "@/lib/api/tenant-limits";
@@ -14,6 +15,7 @@ import { useConfirm } from "@/context/ConfirmContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EligiblePlanCard } from "@/components/admin/EligiblePlanCard";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 
 export default function MyPlanPage() {
   const { showToast } = useToast();
@@ -39,24 +41,52 @@ export default function MyPlanPage() {
   function handleSwitch(planId: string, planName: string, isUpgrade: boolean) {
     confirm({
       message: isUpgrade
-        ? `Switch to ${planName}? You'll be charged a prorated amount right away.`
-        : `Switch to ${planName}? This takes effect at the end of your current billing cycle.`,
+        ? `Switch to ${planName}? You'll complete a quick payment and it takes effect right away. This cannot be undone once confirmed.`
+        : `Switch to ${planName}? You'll authorize the new plan now, but it only takes effect at the end of your current billing cycle. This cannot be undone once confirmed — Razorpay does not support cancelling a scheduled switch.`,
       confirmLabel: isUpgrade ? "Upgrade" : "Switch",
-      processingLabel: "Switching…",
+      processingLabel: "Opening payment…",
       onConfirm: async () => {
         setSwitchingId(planId);
         try {
-          const result = await switchPlatformPlan(planId);
-          showToast(
-            result.scheduled
-              ? "Switch scheduled for the end of your current cycle."
-              : "Plan switched — the new limits are active now.",
-            "success",
-          );
-          reload();
+          const checkout = await switchPlatformPlan(planId);
+          await loadRazorpayScript();
+          const razorpay = new window.Razorpay({
+            key: checkout.razorpayKeyId,
+            subscription_id: checkout.razorpaySubscriptionId,
+            name: planName,
+            description: `Switch to ${checkout.planCode}`,
+            handler: (response) => {
+              verifySwitchPlan({
+                planId,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySubscriptionId:
+                  response.razorpay_subscription_id ?? checkout.razorpaySubscriptionId,
+                razorpaySignature: response.razorpay_signature,
+              })
+                .then((result) => {
+                  showToast(
+                    result.scheduled
+                      ? "Switch scheduled for the end of your current cycle."
+                      : "Plan switched — the new limits are active now.",
+                    "success",
+                  );
+                  reload();
+                })
+                .catch((err: unknown) =>
+                  showToast(
+                    err instanceof ApiError ? err.message : "Payment verification failed.",
+                    "error",
+                  ),
+                )
+                .finally(() => setSwitchingId(null));
+            },
+            modal: {
+              ondismiss: () => setSwitchingId(null),
+            },
+          });
+          razorpay.open();
         } catch (err) {
-          showToast(err instanceof ApiError ? err.message : "Couldn't switch plans.", "error");
-        } finally {
+          showToast(err instanceof ApiError ? err.message : "Couldn't start the switch.", "error");
           setSwitchingId(null);
         }
       },
@@ -101,6 +131,18 @@ export default function MyPlanPage() {
               </div>
             )}
           </div>
+
+          {eligible.pendingSwitch && (
+            <div className="rounded-lg border border-sky-200 bg-sky-50/50 px-3.5 py-2.5 text-sm dark:border-sky-900 dark:bg-sky-950/30">
+              <p className="text-sky-700 dark:text-sky-400">
+                Switching to <strong>{eligible.pendingSwitch.planName}</strong>
+                {eligible.pendingSwitch.changeAt &&
+                  ` on ${new Date(eligible.pendingSwitch.changeAt).toLocaleDateString()}`}
+                . This can&apos;t be cancelled — Razorpay doesn&apos;t support undoing a scheduled
+                switch. Picking a different plan below replaces it.
+              </p>
+            </div>
+          )}
 
           {eligible.plans.length === 0 ? (
             <p className="text-sm text-zinc-500 dark:text-zinc-400">

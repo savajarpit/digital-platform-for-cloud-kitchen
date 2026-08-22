@@ -41,8 +41,8 @@ export function EligiblePlanCard({
       </ul>
       <p className="text-xs text-zinc-400">
         {plan.isUpgrade
-          ? "Prorated and applied immediately."
-          : "Takes effect at the end of your current billing cycle."}
+          ? "You'll pay the full new plan price now and it starts immediately."
+          : "You'll authorize the new plan now, but it only starts at the end of your current billing cycle."}
       </p>
       <button type="button" onClick={onSwitch} disabled={busy} className="btn-outline btn-sm w-fit">
         {busy ? "Switching…" : plan.isUpgrade ? "Upgrade" : "Switch"}

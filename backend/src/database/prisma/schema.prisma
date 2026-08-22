@@ -819,6 +819,10 @@ model RazorpayWebhookEvent {
   eventType    String
   status       String    @default("PENDING")
   errorMessage String?
+  // The raw parsed JSON body, exactly as Razorpay sent it — kept for
+  // debugging/audit (e.g. inspecting a real delivery in Prisma Studio)
+  // without needing to re-derive it from logs.
+  payload      Json?
   processedAt  DateTime?
   createdAt    DateTime  @default(now())
 
@@ -1280,38 +1284,45 @@ model PlatformPage {
 // PaymentSettings row).
 
 model PlatformSubscription {
-  id                     String                     @id @default(uuid())
-  tenantId               String                     @unique
+  id                            String                     @id @default(uuid())
+  tenantId                      String                     @unique
   // Nullable — a comped/custom one-off deal (SUPER_ADMIN typed a free-text
   // planCode/amount at invite-creation time instead of picking a catalog
   // row) has no PlatformPlan at all. When set, TenantLimits resolves its
   // effective order/subscriber caps from this plan's defaults unless a
   // per-tenant override is set.
-  planId                 String?
-  planCode               String
-  billingCycle           BillingCycle
-  amountInPaise          Int
-  status                 PlatformSubscriptionStatus @default(PENDING_PAYMENT)
-  razorpaySubscriptionId String?
-  razorpayCustomerId     String?
-  currentPeriodEnd       DateTime?
+  planId                        String?
+  planCode                      String
+  billingCycle                  BillingCycle
+  amountInPaise                 Int
+  status                        PlatformSubscriptionStatus @default(PENDING_PAYMENT)
+  razorpaySubscriptionId        String?
+  razorpayCustomerId            String?
+  currentPeriodEnd              DateTime?
   // True once SUPER_ADMIN has scheduled a cancellation — the subscription
   // stays ACTIVE and keeps billing rights until currentPeriodEnd, then the
   // `subscription.cancelled` webhook flips status to CANCELLED. Resumable
   // (set back to false) any time before that webhook fires.
-  cancelAtPeriodEnd      Boolean                    @default(false)
-  // Self-serve plan switch (confirmed 2026-08-03): an upgrade is prorated
-  // and applied immediately via Razorpay's subscription-update API
-  // (schedule_change_at=now), so planId/planCode/amountInPaise flip right
-  // away. A downgrade is scheduled for the end of the current billing
-  // interval instead (schedule_change_at=cycle_end) — recorded here and
-  // only committed to planId/amountInPaise once the next
-  // `subscription.charged` webhook confirms the new (lower) cycle actually
-  // started, never optimistically.
-  scheduledPlanId        String?
-  scheduledPlanChangeAt  DateTime?
-  createdAt              DateTime                   @default(now())
-  updatedAt              DateTime                   @updatedAt
+  cancelAtPeriodEnd             Boolean                    @default(false)
+  // Self-serve plan switch (redesigned 2026-08-22 — Razorpay does not
+  // reliably support an in-place plan_id update for any real payment
+  // method, confirmed live against a card-paid subscription and cross-
+  // checked against Razorpay's docs/Chargebee's integration notes; every
+  // switch now goes through a fresh Checkout on a brand-new subscription).
+  // An upgrade cancels the old subscription immediately and applies the
+  // new one's planId/planCode/amountInPaise/razorpaySubscriptionId right
+  // away, once its payment is verified. A downgrade authorizes the new
+  // subscription now (deferred `start_at` = currentPeriodEnd) but keeps
+  // billing on the OLD subscription/plan until it — recorded here,
+  // pendingRazorpaySubscriptionId tracks the new one — and only commits
+  // planId/planCode/amountInPaise/razorpaySubscriptionId once the OLD
+  // subscription's `subscription.cancelled` webhook confirms its cycle
+  // actually ended, never optimistically.
+  scheduledPlanId               String?
+  scheduledPlanChangeAt         DateTime?
+  pendingRazorpaySubscriptionId String?
+  createdAt                     DateTime                   @default(now())
+  updatedAt                     DateTime                   @updatedAt
 
   tenant        Tenant            @relation(fields: [tenantId], references: [id])
   plan          PlatformPlan?     @relation(fields: [planId], references: [id])

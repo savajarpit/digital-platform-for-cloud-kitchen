@@ -220,12 +220,10 @@ export function manualActivateTenant(tenantId: string): Promise<void> {
   return proxyFetch<void>(`/platform/tenants/${tenantId}/activate`, { method: "PATCH" });
 }
 
+/** Final once confirmed — Razorpay has no API to undo a scheduled
+ * cancellation, so there is deliberately no resume action. */
 export function cancelSubscriptionAtPeriodEnd(tenantId: string): Promise<void> {
   return proxyFetch<void>(`/platform/tenants/${tenantId}/subscription/cancel`, { method: "POST" });
-}
-
-export function resumeSubscription(tenantId: string): Promise<void> {
-  return proxyFetch<void>(`/platform/tenants/${tenantId}/subscription/resume`, { method: "POST" });
 }
 
 export type PlatformInvoiceStatus = "PAID" | "FAILED";

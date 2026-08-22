@@ -70,10 +70,18 @@ export class PlatformRazorpayClientService {
     return this.requireCredentials().keyId;
   }
 
+  /**
+   * @param startAt Omit for an immediate-start subscription (first-time
+   * activation, or an upgrade's replacement subscription). Set to the
+   * current subscription's `currentPeriodEnd` for a downgrade's replacement
+   * — the customer authorizes now, but the first actual charge (and
+   * `subscription.activated`/`charged` events) won't fire until then.
+   */
   async createPlanAndSubscription(params: {
     planCode: string;
     billingCycle: BillingCycle;
     amountInPaise: number;
+    startAt?: Date;
   }): Promise<CreatedSubscription> {
     const client = this.getClient();
 
@@ -93,6 +101,9 @@ export class PlatformRazorpayClientService {
         total_count: TOTAL_COUNT_BY_CYCLE[params.billingCycle],
         customer_notify: 1,
         notes: { planCode: params.planCode },
+        ...(params.startAt
+          ? { start_at: Math.floor(params.startAt.getTime() / 1000) }
+          : {}),
       });
 
       return {
@@ -102,7 +113,7 @@ export class PlatformRazorpayClientService {
     } catch (error) {
       this.logError('create platform plan/subscription', error);
       throw new InternalServerErrorException(
-        'Could not start the activation payment — please try again in a moment.',
+        'Could not start the payment — please try again in a moment.',
       );
     }
   }
@@ -169,64 +180,21 @@ export class PlatformRazorpayClientService {
   }
 
   /**
-   * Self-serve plan switch (confirmed 2026-08-03) — updates the SAME
-   * subscription's plan in place via Razorpay's native subscription-update
-   * API, rather than cancelling and recreating: an upgrade
-   * (`scheduleChangeAt: 'now'`) is prorated and charged against the
-   * existing mandate immediately, no new Checkout round-trip needed; a
-   * downgrade (`scheduleChangeAt: 'cycle_end'`) is scheduled for the next
-   * billing cycle, no immediate charge. Creates a fresh Razorpay `plan` for
-   * the target tier first, same as {@link createPlanAndSubscription} —
-   * Razorpay plans are immutable, so a tier change always needs a new one.
+   * Cancels outright, right now — no billing-rights grace period. Used for
+   * (a) killing the OLD subscription the moment an upgrade's replacement is
+   * verified, and (b) voiding an unwound pending replacement subscription
+   * that authorized but never actually started billing. Never used for a
+   * subscription still meant to keep serving its current cycle — that's
+   * {@link cancelAtCycleEnd}.
    */
-  async changePlan(params: {
-    razorpaySubscriptionId: string;
-    planCode: string;
-    billingCycle: BillingCycle;
-    amountInPaise: number;
-    scheduleChangeAt: 'now' | 'cycle_end';
-  }): Promise<void> {
+  async cancelSubscriptionNow(razorpaySubscriptionId: string): Promise<void> {
     const client = this.getClient();
     try {
-      const plan = await client.plans.create({
-        period: PERIOD_BY_CYCLE[params.billingCycle],
-        interval: 1,
-        item: {
-          name: `Platform subscription — ${params.planCode}`,
-          amount: params.amountInPaise,
-          currency: 'INR',
-        },
-      });
-
-      await client.subscriptions.update(params.razorpaySubscriptionId, {
-        plan_id: plan.id,
-        schedule_change_at: params.scheduleChangeAt,
-        customer_notify: 1,
-      });
+      await client.subscriptions.cancel(razorpaySubscriptionId, false);
     } catch (error) {
-      this.logError('change platform subscription plan', error);
+      this.logError('cancel platform subscription immediately', error);
       throw new InternalServerErrorException(
-        'Could not switch plans right now — please try again in a moment.',
-      );
-    }
-  }
-
-  /**
-   * Undoes a cancellation scheduled via {@link cancelAtCycleEnd}, as long as
-   * the current billing cycle hasn't ended yet (Razorpay's generic
-   * "scheduled changes" mechanism — `has_scheduled_changes` — covers both
-   * plan-change and cancel-at-cycle-end scheduling).
-   */
-  async resumeScheduledCancellation(
-    razorpaySubscriptionId: string,
-  ): Promise<void> {
-    const client = this.getClient();
-    try {
-      await client.subscriptions.cancelScheduledChanges(razorpaySubscriptionId);
-    } catch (error) {
-      this.logError('resume platform subscription', error);
-      throw new InternalServerErrorException(
-        'Could not resume the subscription — please try again in a moment.',
+        'Could not cancel the subscription — please try again in a moment.',
       );
     }
   }

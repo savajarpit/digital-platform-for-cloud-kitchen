@@ -22,6 +22,7 @@ import {
 import { SkipThrottle } from '@nestjs/throttler';
 import { PlatformBillingService } from './platform-billing.service';
 import { VerifyActivationDto } from './dto/verify-activation.dto';
+import { SwitchPlanVerifyDto } from './dto/switch-plan-verify.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentTenantId } from '../../common/decorators/current-tenant-id.decorator';
@@ -60,16 +61,31 @@ export class PlatformBillingController {
   @Post('plans/:id/switch')
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
   @ApiBearerAuth('access-token')
-  @ResponseMessage('Plan switch processed')
+  @ResponseMessage('Switch checkout ready')
   @ApiOperation({
     summary:
-      'Self-serve: switch to a higher/lower plan — an upgrade is prorated and applied immediately, a downgrade is scheduled for the end of the current billing cycle',
+      'Self-serve, step 1 of 2: create a replacement Razorpay subscription for the target plan and return Checkout details — Razorpay does not support an in-place plan change for any real payment method',
   })
   switchPlan(
     @CurrentTenantId() tenantId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.platformBillingService.switchPlan(tenantId, id);
+  }
+
+  @Post('plans/switch/verify')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Plan switch processed')
+  @ApiOperation({
+    summary:
+      'Self-serve, step 2 of 2: verify the Checkout payment from switchPlan and take over (upgrade, now) or schedule the handoff (downgrade, at cycle end). Final once verified — Razorpay has no API to undo a scheduled cancellation, so a downgrade switch cannot be cancelled afterward.',
+  })
+  switchPlanVerify(
+    @CurrentTenantId() tenantId: string,
+    @Body() dto: SwitchPlanVerifyDto,
+  ) {
+    return this.platformBillingService.switchPlanVerify(tenantId, dto);
   }
 
   @Public()

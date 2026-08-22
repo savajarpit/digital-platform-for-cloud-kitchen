@@ -6,6 +6,7 @@ import {
   PlatformInvoiceStatus,
   PlatformSubscription,
   PlatformSubscriptionStatus,
+  Prisma,
   RazorpayWebhookEvent,
   Role,
   Status,
@@ -38,11 +39,20 @@ export class PlatformBillingRepository {
     });
   }
 
+  /** A webhook may arrive for either the primary subscription or a not-yet-
+   * primary one authorized for a scheduled downgrade (e.g. `subscription.
+   * authenticated` right after the tenant completes its deferred-start
+   * Checkout) — check both fields, not just the primary one. */
   findSubscriptionByRazorpayId(
     razorpaySubscriptionId: string,
   ): Promise<PlatformSubscription | null> {
     return this.prisma.platformSubscription.findFirst({
-      where: { razorpaySubscriptionId },
+      where: {
+        OR: [
+          { razorpaySubscriptionId },
+          { pendingRazorpaySubscriptionId: razorpaySubscriptionId },
+        ],
+      },
     });
   }
 
@@ -53,7 +63,9 @@ export class PlatformBillingRepository {
     });
   }
 
-  /** An upgrade — applied immediately, the new plan's fields become current right away, clearing any stale scheduled downgrade from a prior switch. */
+  /** An upgrade's replacement subscription, verified — becomes current right
+   * away (the OLD Razorpay subscription is cancelled by the caller before
+   * this runs), clearing any stale scheduled downgrade from a prior switch. */
   applyImmediatePlanChange(
     tenantId: string,
     params: {
@@ -61,6 +73,7 @@ export class PlatformBillingRepository {
       planCode: string;
       amountInPaise: number;
       billingCycle: BillingCycle;
+      razorpaySubscriptionId: string;
     },
   ): Promise<PlatformSubscription> {
     return this.prisma.platformSubscription.update({
@@ -70,26 +83,40 @@ export class PlatformBillingRepository {
         planCode: params.planCode,
         amountInPaise: params.amountInPaise,
         billingCycle: params.billingCycle,
+        razorpaySubscriptionId: params.razorpaySubscriptionId,
         scheduledPlanId: null,
         scheduledPlanChangeAt: null,
+        pendingRazorpaySubscriptionId: null,
       },
     });
   }
 
-  /** A downgrade — recorded but not applied; TenantLimits/plan fields stay on the current (higher) plan until the next `subscription.charged` webhook confirms the new cycle actually started (see finalizeScheduledPlanChange). */
+  /** A downgrade's replacement subscription, verified but deferred — the
+   * OLD subscription keeps billing (its cancellation is scheduled by the
+   * caller for the same cycle-end); TenantLimits/plan fields stay on the
+   * current (higher) plan until the OLD subscription's `subscription.
+   * cancelled` webhook confirms its cycle actually ended (see
+   * PlatformBillingService.processEvent's markCancelled handling). */
   scheduleDowngrade(
     tenantId: string,
-    params: { scheduledPlanId: string; scheduledPlanChangeAt: Date | null },
+    params: {
+      scheduledPlanId: string;
+      scheduledPlanChangeAt: Date | null;
+      pendingRazorpaySubscriptionId: string;
+    },
   ): Promise<PlatformSubscription> {
     return this.prisma.platformSubscription.update({
       where: { tenantId },
       data: {
         scheduledPlanId: params.scheduledPlanId,
         scheduledPlanChangeAt: params.scheduledPlanChangeAt,
+        pendingRazorpaySubscriptionId: params.pendingRazorpaySubscriptionId,
       },
     });
   }
 
+  /** The scheduled downgrade's replacement subscription taking over as
+   * primary, once the OLD one's cycle actually ended (see markCancelled). */
   finalizeScheduledPlanChange(
     tenantId: string,
     params: {
@@ -97,6 +124,7 @@ export class PlatformBillingRepository {
       planCode: string;
       amountInPaise: number;
       billingCycle: BillingCycle;
+      razorpaySubscriptionId: string;
     },
   ): Promise<PlatformSubscription> {
     return this.prisma.platformSubscription.update({
@@ -106,8 +134,25 @@ export class PlatformBillingRepository {
         planCode: params.planCode,
         amountInPaise: params.amountInPaise,
         billingCycle: params.billingCycle,
+        razorpaySubscriptionId: params.razorpaySubscriptionId,
         scheduledPlanId: null,
         scheduledPlanChangeAt: null,
+        pendingRazorpaySubscriptionId: null,
+      },
+    });
+  }
+
+  /** Clears a pending scheduled switch without touching the current plan —
+   * the Razorpay-side unwind (voiding the pending subscription, undoing the
+   * current one's scheduled cancel-at-cycle-end) happens in the service
+   * layer before this runs. */
+  unwindPendingPlanChange(tenantId: string): Promise<PlatformSubscription> {
+    return this.prisma.platformSubscription.update({
+      where: { tenantId },
+      data: {
+        scheduledPlanId: null,
+        scheduledPlanChangeAt: null,
+        pendingRazorpaySubscriptionId: null,
       },
     });
   }
@@ -235,8 +280,35 @@ export class PlatformBillingRepository {
     });
   }
 
-  /** The scheduled cancellation actually taking effect, at period end (subscription.cancelled webhook). */
-  async markCancelled(tenantId: string): Promise<void> {
+  /** `subscription.cancelled` on the primary subscription — two different
+   * real meanings, distinguished by whether a scheduled-downgrade handoff
+   * is in flight:
+   * - A pending replacement exists (`pendingRazorpaySubscriptionId` set):
+   *   this cancellation is the OLD subscription's cycle ending exactly
+   *   where scheduled to line up with the new one — the downgrade taking
+   *   effect, not a real cancellation. Swap the replacement in as primary,
+   *   apply its plan, keep the tenant ACTIVE.
+   * - Nothing pending: a real cancellation (SUPER_ADMIN's `scheduleCancellation`
+   *   reaching its cycle-end) — today's terminal-state behavior.
+   */
+  async markCancelled(tenantId: string): Promise<{ downgradeHandoff: boolean }> {
+    const subscription = await this.prisma.platformSubscription.findUnique({
+      where: { tenantId },
+      include: { scheduledPlan: true },
+    });
+
+    if (subscription?.pendingRazorpaySubscriptionId && subscription.scheduledPlan) {
+      const target = subscription.scheduledPlan;
+      await this.finalizeScheduledPlanChange(tenantId, {
+        planId: target.id,
+        planCode: target.name,
+        amountInPaise: target.priceInPaise,
+        billingCycle: target.billingCycle,
+        razorpaySubscriptionId: subscription.pendingRazorpaySubscriptionId,
+      });
+      return { downgradeHandoff: true };
+    }
+
     await this.prisma.$transaction([
       this.prisma.platformSubscription.update({
         where: { tenantId },
@@ -250,6 +322,7 @@ export class PlatformBillingRepository {
         data: { status: Status.INACTIVE },
       }),
     ]);
+    return { downgradeHandoff: false };
   }
 
   updateSubscriptionPeriod(
@@ -368,9 +441,10 @@ export class PlatformBillingRepository {
   createWebhookEvent(
     eventId: string,
     eventType: string,
+    payload: Prisma.InputJsonValue,
   ): Promise<RazorpayWebhookEvent> {
     return this.prisma.razorpayWebhookEvent.create({
-      data: { eventId, eventType, status: 'PENDING' },
+      data: { eventId, eventType, payload, status: 'PENDING' },
     });
   }
 

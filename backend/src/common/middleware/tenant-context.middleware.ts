@@ -24,6 +24,20 @@ export class TenantContextMiddleware implements NestMiddleware {
 
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
+      // Razorpay's real servers call the webhook via whatever host you gave
+      // them (a tunnel URL in dev, your own domain in prod) — never a
+      // tenant's own domain, so it can never resolve here. The activation
+      // routes are identified by their invite token, not a tenant-scoped
+      // request either. All three already resolve their own tenant
+      // internally (razorpaySubscriptionId lookup / invite.tenantId) and
+      // never read req.tenantContext, so skipping resolution here is safe —
+      // matches the platformAdminHost bypass below, just path-based instead
+      // of host-based.
+      if (isPlatformBillingCallbackRoute(req.path)) {
+        next();
+        return;
+      }
+
       const host =
         (req.headers['x-tenant-domain'] as string | undefined) ??
         req.headers.host ??
@@ -46,4 +60,11 @@ export class TenantContextMiddleware implements NestMiddleware {
       next(error);
     }
   }
+}
+
+function isPlatformBillingCallbackRoute(path: string): boolean {
+  return (
+    path.endsWith('/platform/billing/webhook') ||
+    /\/platform\/activate\/[^/]+(\/verify)?$/.test(path)
+  );
 }

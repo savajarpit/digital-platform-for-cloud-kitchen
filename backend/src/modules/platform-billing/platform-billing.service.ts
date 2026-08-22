@@ -17,6 +17,7 @@ import { PlatformPlansRepository } from '../platform-plans/platform-plans.reposi
 import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 import { CreateSubscriptionInviteDto } from './dto/create-subscription-invite.dto';
 import { VerifyActivationDto } from './dto/verify-activation.dto';
+import { SwitchPlanVerifyDto } from './dto/switch-plan-verify.dto';
 import { CryptoUtil } from '../../common/utils/crypto.util';
 import {
   PlatformActivationInviteEmailJob,
@@ -68,17 +69,25 @@ export class PlatformBillingService {
     @InjectQueue('mail') private readonly mailQueue: Queue,
   ) {}
 
-  /** Self-serve plan switch (confirmed 2026-08-03) — only for an already
-   * ACTIVE tenant, never part of first-time onboarding. An upgrade is
-   * prorated and applied immediately against the existing Razorpay mandate
-   * (no new Checkout round-trip needed); a downgrade is scheduled for the
-   * end of the current billing cycle and only committed locally once the
-   * next `subscription.charged` webhook confirms it actually took effect
-   * (see processEvent below) — never optimistically. */
+  /** Self-serve plan switch, step 1 of 2 (redesigned 2026-08-22 — see
+   * schema.prisma's PlatformSubscription doc comment for why: Razorpay does
+   * not reliably support an in-place plan_id update for any real payment
+   * method). Creates the replacement Razorpay subscription and hands back
+   * Checkout details — does not touch the DB yet, same discipline as
+   * getInviteDetails(). An upgrade's replacement starts immediately; a
+   * downgrade's replacement is authorized now but deferred (`start_at` =
+   * current cycle's end) so it only starts billing once the current plan's
+   * paid-for time is actually used up. */
   async switchPlan(
     tenantId: string,
     targetPlanId: string,
-  ): Promise<{ scheduled: boolean }> {
+  ): Promise<{
+    isUpgrade: boolean;
+    razorpaySubscriptionId: string;
+    razorpayKeyId: string;
+    planCode: string;
+    amountInPaise: number;
+  }> {
     const [subscription, targetPlan] = await Promise.all([
       this.billingRepo.findSubscriptionWithPlanByTenantId(tenantId),
       this.plansRepo.findById(targetPlanId),
@@ -101,32 +110,107 @@ export class PlatformBillingService {
       throw new ConflictException('Already on this plan');
     }
 
+    if (subscription.pendingRazorpaySubscriptionId) {
+      await this.voidPendingReplacement(
+        tenantId,
+        subscription.pendingRazorpaySubscriptionId,
+      );
+    }
+
     const isUpgrade = targetPlan.priceInPaise > subscription.amountInPaise;
 
-    await this.razorpayClient.changePlan({
-      razorpaySubscriptionId: subscription.razorpaySubscriptionId,
+    const created = await this.razorpayClient.createPlanAndSubscription({
       planCode: targetPlan.name,
       billingCycle: targetPlan.billingCycle,
       amountInPaise: targetPlan.priceInPaise,
-      scheduleChangeAt: isUpgrade ? 'now' : 'cycle_end',
+      startAt: isUpgrade
+        ? undefined
+        : (subscription.currentPeriodEnd ?? undefined),
     });
 
+    return {
+      isUpgrade,
+      razorpaySubscriptionId: created.razorpaySubscriptionId,
+      razorpayKeyId: this.razorpayClient.getKeyId(),
+      planCode: targetPlan.name,
+      amountInPaise: targetPlan.priceInPaise,
+    };
+  }
+
+  /** Self-serve plan switch, step 2 of 2 — the tenant completed Checkout on
+   * the replacement subscription from switchPlan(); verify the payment,
+   * then either take over immediately (upgrade) or hand off at the current
+   * cycle's end (downgrade, finalized later by processEvent's
+   * subscription.cancelled handling). */
+  async switchPlanVerify(
+    tenantId: string,
+    dto: SwitchPlanVerifyDto,
+  ): Promise<{ scheduled: boolean }> {
+    const [subscription, targetPlan] = await Promise.all([
+      this.billingRepo.findSubscriptionWithPlanByTenantId(tenantId),
+      this.plansRepo.findById(dto.planId),
+    ]);
+    if (!subscription || !subscription.razorpaySubscriptionId) {
+      throw new BadRequestException('No active subscription to switch.');
+    }
+    if (!targetPlan) throw new NotFoundException('Plan not found');
+
+    const valid = this.razorpayClient.verifySubscriptionPaymentSignature({
+      razorpayPaymentId: dto.razorpayPaymentId,
+      razorpaySubscriptionId: dto.razorpaySubscriptionId,
+      razorpaySignature: dto.razorpaySignature,
+    });
+    if (!valid) {
+      throw new BadRequestException('Payment verification failed');
+    }
+
+    const isUpgrade = targetPlan.priceInPaise > subscription.amountInPaise;
+    const oldRazorpaySubscriptionId = subscription.razorpaySubscriptionId;
+
     if (isUpgrade) {
+      await this.razorpayClient.cancelSubscriptionNow(
+        oldRazorpaySubscriptionId,
+      );
       await this.billingRepo.applyImmediatePlanChange(tenantId, {
         planId: targetPlan.id,
         planCode: targetPlan.name,
         amountInPaise: targetPlan.priceInPaise,
         billingCycle: targetPlan.billingCycle,
+        razorpaySubscriptionId: dto.razorpaySubscriptionId,
       });
       await this.tenantLimits.resetForPlanChange(tenantId);
     } else {
+      await this.razorpayClient.cancelAtCycleEnd(oldRazorpaySubscriptionId);
       await this.billingRepo.scheduleDowngrade(tenantId, {
         scheduledPlanId: targetPlan.id,
         scheduledPlanChangeAt: subscription.currentPeriodEnd,
+        pendingRazorpaySubscriptionId: dto.razorpaySubscriptionId,
       });
     }
 
     return { scheduled: !isUpgrade };
+  }
+
+  /** Voids a not-yet-started replacement subscription and clears the local
+   * pending fields — used when switching to a different target plan before
+   * the first switch completes, or on a full cancel while a downgrade is
+   * mid-flight. Deliberately does NOT touch the current subscription's own
+   * scheduled cancellation: Razorpay has no API to undo a `cancel_at_cycle_
+   * end` cancellation once submitted (confirmed live and against their docs
+   * — "Cancel an Update" only reverses a scheduled *plan* change, never a
+   * scheduled cancellation, and "Once cancelled, you cannot renew or
+   * reactivate it" applies regardless of immediate or at-cycle-end). A
+   * self-serve "cancel my scheduled downgrade, stay on my current plan"
+   * action is therefore not offered — once confirmed, a downgrade switch
+   * is final; the UI warns of this before the tenant confirms. */
+  private async voidPendingReplacement(
+    tenantId: string,
+    pendingRazorpaySubscriptionId: string,
+  ): Promise<void> {
+    await this.razorpayClient.cancelSubscriptionNow(
+      pendingRazorpaySubscriptionId,
+    );
+    await this.billingRepo.unwindPendingPlanChange(tenantId);
   }
 
   async createInvite(
@@ -302,6 +386,10 @@ export class PlatformBillingService {
     return this.billingRepo.findInvoicesByTenantId(tenantId);
   }
 
+  /** Final the moment it's confirmed — Razorpay has no API to undo a
+   * `cancel_at_cycle_end` cancellation once submitted (see
+   * voidPendingReplacement's doc comment), so there is deliberately no
+   * resume action; the admin UI warns of this before SUPER_ADMIN confirms. */
   async scheduleCancellation(tenantId: string): Promise<void> {
     const subscription =
       await this.billingRepo.findSubscriptionByTenantId(tenantId);
@@ -315,27 +403,17 @@ export class PlatformBillingService {
       throw new ConflictException('Cancellation is already scheduled');
     }
 
+    if (subscription.pendingRazorpaySubscriptionId) {
+      await this.voidPendingReplacement(
+        tenantId,
+        subscription.pendingRazorpaySubscriptionId,
+      );
+    }
+
     await this.razorpayClient.cancelAtCycleEnd(
       subscription.razorpaySubscriptionId,
     );
     await this.billingRepo.setCancelAtPeriodEnd(tenantId, true);
-  }
-
-  async resumeSubscription(tenantId: string): Promise<void> {
-    const subscription =
-      await this.billingRepo.findSubscriptionByTenantId(tenantId);
-    if (!subscription) throw new NotFoundException('No subscription found');
-    if (
-      !subscription.cancelAtPeriodEnd ||
-      !subscription.razorpaySubscriptionId
-    ) {
-      throw new BadRequestException('No scheduled cancellation to resume');
-    }
-
-    await this.razorpayClient.resumeScheduledCancellation(
-      subscription.razorpaySubscriptionId,
-    );
-    await this.billingRepo.setCancelAtPeriodEnd(tenantId, false);
   }
 
   async handleWebhook(
@@ -385,6 +463,7 @@ export class PlatformBillingService {
         record = await this.billingRepo.createWebhookEvent(
           eventId,
           payload.event ?? 'unknown',
+          payload as unknown as Prisma.InputJsonValue,
         );
       } catch (error) {
         // Two concurrent deliveries of the same event both raced past the
@@ -493,27 +572,6 @@ export class PlatformBillingService {
           : subscription.currentPeriodEnd,
       );
 
-      // A scheduled downgrade (switchPlan, cycle_end) finally taking
-      // effect — this charge is for the new cycle, so commit the plan
-      // change locally now rather than optimistically at request time.
-      if (subscription.scheduledPlanId) {
-        const scheduledPlan = await this.plansRepo.findById(
-          subscription.scheduledPlanId,
-        );
-        if (scheduledPlan) {
-          await this.billingRepo.finalizeScheduledPlanChange(
-            subscription.tenantId,
-            {
-              planId: scheduledPlan.id,
-              planCode: scheduledPlan.name,
-              amountInPaise: scheduledPlan.priceInPaise,
-              billingCycle: scheduledPlan.billingCycle,
-            },
-          );
-          await this.tenantLimits.resetForPlanChange(subscription.tenantId);
-        }
-      }
-
       const owner = await this.billingRepo.findOwnerEmail(
         subscription.tenantId,
       );
@@ -573,10 +631,18 @@ export class PlatformBillingService {
     } else if (payload.event === 'subscription.completed') {
       await this.billingRepo.markCompleted(subscription.tenantId);
     } else if (payload.event === 'subscription.cancelled') {
-      // The scheduled cancel-at-cycle-end (see scheduleCancellation) taking
-      // effect — Razorpay stops billing rights and moves the subscription
-      // to its terminal cancelled state.
-      await this.billingRepo.markCancelled(subscription.tenantId);
+      // Either the scheduled cancel-at-cycle-end (see scheduleCancellation)
+      // taking effect — Razorpay stops billing rights and moves the
+      // subscription to its terminal cancelled state — or a scheduled
+      // downgrade's OLD subscription reaching its cycle-end exactly where
+      // scheduled, handing off to the already-authorized replacement (see
+      // markCancelled's own doc comment for the full distinction).
+      const { downgradeHandoff } = await this.billingRepo.markCancelled(
+        subscription.tenantId,
+      );
+      if (downgradeHandoff) {
+        await this.tenantLimits.resetForPlanChange(subscription.tenantId);
+      }
     } else if (
       payload.event === 'subscription.paused' ||
       payload.event === 'subscription.resumed'

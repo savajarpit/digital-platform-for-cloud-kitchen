@@ -11,7 +11,6 @@ import {
   getTenantFeatures,
   listTenantInvoices,
   manualActivateTenant,
-  resumeSubscription,
   setFeatureGrant,
   setPermissionGrant,
   updateTenant,
@@ -270,7 +269,7 @@ function BillingCard({
   function handleCancel() {
     confirm({
       message:
-        "Schedule cancellation for this subscription? It stays active and keeps billing until the end of the current period, then cancels automatically — it won't cut the tenant off immediately.",
+        "Schedule cancellation for this subscription? It stays active and keeps billing until the end of the current period, then cancels automatically — it won't cut the tenant off immediately. This cannot be undone once confirmed — Razorpay does not support reversing a scheduled cancellation.",
       confirmLabel: "Schedule Cancellation",
       processingLabel: "Scheduling…",
       variant: "danger",
@@ -285,17 +284,6 @@ function BillingCard({
         }
       },
     });
-  }
-
-  async function handleResume() {
-    try {
-      await resumeSubscription(tenant.id);
-      const refreshed = await getTenant(tenant.id);
-      onSaved(refreshed);
-      showToast("Subscription resumed", "success");
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't resume subscription.", "error");
-    }
   }
 
   return (
@@ -350,16 +338,15 @@ function BillingCard({
           )}
 
           {subscription.status === "ACTIVE" && subscription.cancelAtPeriodEnd && (
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/50 px-3.5 py-2.5 text-sm dark:border-amber-900 dark:bg-amber-950/30">
+            <div className="rounded-lg border border-amber-200 bg-amber-50/50 px-3.5 py-2.5 text-sm dark:border-amber-900 dark:bg-amber-950/30">
               <span className="text-amber-700 dark:text-amber-400">
                 Cancels on{" "}
                 {subscription.currentPeriodEnd
                   ? new Date(subscription.currentPeriodEnd).toLocaleDateString()
                   : "the end of the current period"}
+                . This can&apos;t be undone — Razorpay doesn&apos;t support reversing a scheduled
+                cancellation.
               </span>
-              <button type="button" onClick={handleResume} className="btn-outline btn-sm">
-                Resume Subscription
-              </button>
             </div>
           )}
 

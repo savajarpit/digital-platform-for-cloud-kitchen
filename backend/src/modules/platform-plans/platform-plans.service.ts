@@ -88,6 +88,12 @@ export class PlatformPlansService {
       currentPlanId: subscription.planId,
       currentAmountInPaise: subscription.amountInPaise,
       plans: eligible,
+      pendingSwitch: subscription.scheduledPlan
+        ? {
+            planName: subscription.scheduledPlan.name,
+            changeAt: subscription.scheduledPlanChangeAt,
+          }
+        : null,
     };
   }
 

@@ -65,7 +65,7 @@ export class TenantLimitsRepository {
   findPlanDefaults(tenantId: string) {
     return this.prisma.platformSubscription.findUnique({
       where: { tenantId },
-      include: { plan: true },
+      include: { plan: true, scheduledPlan: { select: { name: true } } },
     });
   }
 

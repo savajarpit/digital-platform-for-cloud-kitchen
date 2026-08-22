@@ -38,7 +38,9 @@ export default function PlatformPlansAdminPage() {
   useEffect(() => {
     listPlatformPlansAdmin()
       .then(setPlans)
-      .catch(() => setError("Couldn't load plans."));
+      .catch((err: unknown) =>
+        setError(err instanceof ApiError ? err.message : "Couldn't load plans."),
+      );
   }, []);
 
   function handleDelete(plan: PlatformPlan) {

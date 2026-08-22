@@ -91,7 +91,9 @@ export default function AdminSubscriptionsPage() {
   useEffect(() => {
     listMeals({ limit: 100 })
       .then(({ data }) => setMeals(data))
-      .catch(() => setError("Couldn't load meals."));
+      .catch((err: unknown) =>
+        setError(err instanceof ApiError ? err.message : "Couldn't load meals."),
+      );
   }, []);
 
   useEffect(() => {
@@ -101,7 +103,9 @@ export default function AdminSubscriptionsPage() {
           setPlans(data);
           setMeta(meta ?? null);
         })
-        .catch(() => setError("Couldn't load plans."));
+        .catch((err: unknown) =>
+          setError(err instanceof ApiError ? err.message : "Couldn't load plans."),
+        );
     }, 250);
     return () => clearTimeout(handle);
   }, [page, planSearch]);
@@ -112,7 +116,9 @@ export default function AdminSubscriptionsPage() {
         setPlans(data);
         setMeta(meta ?? null);
       })
-      .catch(() => setError("Couldn't load plans."));
+      .catch((err: unknown) =>
+        setError(err instanceof ApiError ? err.message : "Couldn't load plans."),
+      );
   }
 
   function handleDelete(plan: Plan) {

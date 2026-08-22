@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { getMyFeatures } from "@/lib/api/features";
 
 interface FeaturesContextValue {
@@ -13,11 +14,26 @@ const FeaturesContext = createContext<FeaturesContextValue | undefined>(undefine
 
 export function FeaturesProvider({ children }: { children: ReactNode }) {
   const [features, setFeatures] = useState<string[] | null>(null);
+  const pathname = usePathname();
 
+  // Same staleness gap as PermissionsProvider (see its comment) — this also
+  // mounts once for the whole admin session, so re-check on navigation and
+  // tab focus rather than only once at first load.
   useEffect(() => {
     getMyFeatures()
       .then((res) => setFeatures(res.features))
       .catch(() => setFeatures([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  useEffect(() => {
+    function refetch() {
+      getMyFeatures()
+        .then((res) => setFeatures(res.features))
+        .catch(() => undefined);
+    }
+    window.addEventListener("focus", refetch);
+    return () => window.removeEventListener("focus", refetch);
   }, []);
 
   const value: FeaturesContextValue = {

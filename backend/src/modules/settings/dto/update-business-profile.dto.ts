@@ -147,4 +147,13 @@ export class UpdateBusinessProfileDto {
   @IsOptional()
   @IsBoolean()
   showReviewsOnHomepage?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "Google Search Console's HTML-tag verification content — the `content` attribute value from the <meta name=\"google-site-verification\"> tag Search Console gives you, not the whole tag.",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  searchConsoleVerification?: string;
 }

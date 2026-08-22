@@ -151,7 +151,11 @@ export class PlatformRepository {
           take: 1,
           select: { id: true, email: true },
         },
-        platformSubscription: true,
+        platformSubscription: {
+          include: {
+            scheduledPlan: { select: { name: true } },
+          },
+        },
       },
     });
   }

@@ -61,6 +61,55 @@ export class PublicConfigResponseDto {
   @Expose()
   addressLine1?: string;
 
+  @ApiPropertyOptional()
+  @Expose()
+  addressLine2?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  city?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  state?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  country?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  pincode?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  whatsappBusinessNumber?: string;
+
+  @ApiPropertyOptional({
+    description: 'GST registration number, shown on invoices/footer if set',
+  })
+  @Expose()
+  gstNumber?: string;
+
+  @ApiPropertyOptional({
+    description: 'Kitchen latitude, for LocalBusiness structured data',
+  })
+  @Expose()
+  kitchenLat?: number;
+
+  @ApiPropertyOptional({
+    description: 'Kitchen longitude, for LocalBusiness structured data',
+  })
+  @Expose()
+  kitchenLng?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Google Search Console verification content, rendered as a <meta name=\"google-site-verification\"> tag when set",
+  })
+  @Expose()
+  searchConsoleVerification?: string;
+
   @ApiProperty({
     example: 2,
     description: 'How many days ahead a customer may schedule delivery',

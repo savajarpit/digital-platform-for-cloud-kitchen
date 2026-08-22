@@ -29,6 +29,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { PLATFORM_ROOT_DOMAIN } from "@/lib/config/env";
 import { TenantLimitsCard } from "@/components/admin/TenantLimitsCard";
 import { CreateInviteForm } from "@/components/admin/CreateInviteForm";
 
@@ -164,10 +165,53 @@ function BasicsCard({
       <div className="text-xs text-zinc-500 dark:text-zinc-400">
         Owner login: <span className="font-mono">{tenant.users[0]?.email ?? "—"}</span>
       </div>
+      <LiveAtLine tenant={tenant} />
       <button type="submit" disabled={saving} className="btn-primary w-fit">
         {saving ? "Saving…" : "Save"}
       </button>
     </form>
+  );
+}
+
+function LiveAtLine({ tenant }: { tenant: TenantDetail }) {
+  if (tenant.customDomain) {
+    return (
+      <div className="text-xs text-zinc-500 dark:text-zinc-400">
+        Live at:{" "}
+        <a
+          href={`https://${tenant.customDomain}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-primary-600 hover:text-primary-700"
+        >
+          {tenant.customDomain}
+        </a>
+      </div>
+    );
+  }
+
+  if (!PLATFORM_ROOT_DOMAIN) {
+    return (
+      <div className="text-xs text-zinc-500 dark:text-zinc-400">
+        Live at: no custom domain set, and no platform subdomain configured yet.
+      </div>
+    );
+  }
+
+  const subdomain = `${tenant.slug}.${PLATFORM_ROOT_DOMAIN}`;
+  return (
+    <div className="text-xs text-zinc-500 dark:text-zinc-400">
+      Live at:{" "}
+      <a
+        href={`https://${subdomain}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-mono text-primary-600 hover:text-primary-700"
+      >
+        {subdomain}
+      </a>{" "}
+      (no custom domain set)
+    </div>
   );
 }
 
@@ -271,15 +315,33 @@ function BillingCard({
             >
               {subscription.status.replace(/_/g, " ")}
             </span>
+            <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              {subscription.planCode} — {formatPriceFromPaise(subscription.amountInPaise)}
+            </span>
             <span className="text-sm text-zinc-600 dark:text-zinc-400">
               {subscription.billingCycle === "MONTHLY" ? "Monthly" : "Yearly"}
             </span>
-            {subscription.currentPeriodEnd && (
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">
-                Next billing: {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
-              </span>
-            )}
           </div>
+
+          {subscription.status === "ACTIVE" &&
+            !subscription.cancelAtPeriodEnd &&
+            subscription.currentPeriodEnd && (
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                Upcoming invoice: {formatPriceFromPaise(subscription.amountInPaise)} on{" "}
+                {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                {subscription.scheduledPlan && " (before the scheduled plan change below)"}
+              </p>
+            )}
+
+          {subscription.scheduledPlan && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50/50 px-3.5 py-2.5 text-sm dark:border-sky-900 dark:bg-sky-950/30">
+              <span className="text-sky-700 dark:text-sky-400">
+                Switching to <strong>{subscription.scheduledPlan.name}</strong>
+                {subscription.scheduledPlanChangeAt &&
+                  ` on ${new Date(subscription.scheduledPlanChangeAt).toLocaleDateString()}`}
+              </span>
+            </div>
+          )}
 
           {subscription.status !== "ACTIVE" && (
             <button type="button" onClick={handleManualActivate} className="btn-outline btn-sm w-fit">

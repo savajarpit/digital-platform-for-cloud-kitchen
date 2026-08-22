@@ -19,6 +19,16 @@ export interface PublicConfig {
   supportEmail?: string;
   supportPhone?: string;
   addressLine1?: string;
+  addressLine2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  pincode?: string;
+  whatsappBusinessNumber?: string;
+  gstNumber?: string;
+  kitchenLat?: number;
+  kitchenLng?: number;
+  searchConsoleVerification?: string;
   maxAdvanceOrderDays: number;
   showReviewsOnHomepage: boolean;
   heroTagline?: string;

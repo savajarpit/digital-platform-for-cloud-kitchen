@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { Status } from '../../generated/prisma';
 
@@ -17,7 +18,10 @@ const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1']);
  */
 @Injectable()
 export class TenantResolverService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   /**
    * @param host The raw `Host` request header (may include a port, e.g. `localhost:3001`).
@@ -31,9 +35,26 @@ export class TenantResolverService {
     });
     if (tenant) return tenant;
 
-    // No client has this exact domain mapped yet. In local dev (or before a
-    // tenant sets up their domain) fall back to the sole provisioned tenant
-    // rather than failing outright — matches Phase 0's single-tenant seed.
+    // No custom domain mapped to this exact host. A tenant that hasn't set
+    // one up yet is still reachable at {slug}.{platformRootDomain} — every
+    // tenant gets this the moment they're created, no DNS work required per
+    // tenant (one wildcard record covers all of them).
+    const rootDomain = this.config
+      .get<string>('app.platformRootDomain')
+      ?.toLowerCase();
+    if (rootDomain && hostname !== rootDomain && hostname.endsWith(`.${rootDomain}`)) {
+      const slug = hostname.slice(0, hostname.length - rootDomain.length - 1);
+      const bySlug = await this.prisma.tenant.findUnique({
+        where: { slug },
+        select: { id: true, status: true },
+      });
+      if (bySlug) return bySlug;
+      throw new NotFoundException(`No tenant is configured for "${slug}"`);
+    }
+
+    // In local dev (or before a tenant sets up their domain/root-domain
+    // config) fall back to the sole provisioned tenant rather than failing
+    // outright — matches Phase 0's single-tenant seed.
     if (LOCAL_HOSTNAMES.has(hostname)) {
       return this.resolveSoleTenant();
     }

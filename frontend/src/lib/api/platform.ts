@@ -12,6 +12,13 @@ export interface PlatformSubscriptionSummary {
   cancelAtPeriodEnd: boolean;
 }
 
+export interface PlatformSubscriptionDetail extends PlatformSubscriptionSummary {
+  planCode: string;
+  amountInPaise: number;
+  scheduledPlanChangeAt: string | null;
+  scheduledPlan: { name: string } | null;
+}
+
 export interface TenantListItem {
   id: string;
   name: string;
@@ -59,6 +66,7 @@ export interface TenantDetail extends TenantListItem {
     razorpayKeySecretConfigured: boolean;
     razorpayWebhookSecretConfigured: boolean;
   } | null;
+  platformSubscription: PlatformSubscriptionDetail | null;
 }
 
 export interface CreateTenantInput {

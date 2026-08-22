@@ -7,6 +7,8 @@ import { getPublicConfig } from "@/lib/api/settings";
 import { getPublishedPages } from "@/lib/api/content";
 import { getPublicSocialLinks } from "@/lib/api/social-links";
 import { buildThemeStyle } from "@/lib/theme/build-theme-style";
+import { getSiteOrigin } from "@/lib/seo/get-site-origin";
+import { StructuredData } from "@/components/seo/StructuredData";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/session-cookies";
@@ -27,11 +29,33 @@ const geistMono = Geist_Mono({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const config = await getPublicConfig();
+  const [config, { origin }] = await Promise.all([getPublicConfig(), getSiteOrigin()]);
+  const description = config.description ?? `Order fresh meals from ${config.displayName}.`;
+  const image = config.logoUrl ?? config.heroImageUrl ?? config.heroImageUrls?.[0];
+
   return {
+    metadataBase: new URL(origin),
     title: config.displayName,
-    description: `Order fresh meals from ${config.displayName}.`,
+    description,
     icons: config.faviconUrl ? [{ url: config.faviconUrl }] : undefined,
+    alternates: { canonical: "/" },
+    other: config.searchConsoleVerification
+      ? { "google-site-verification": config.searchConsoleVerification }
+      : undefined,
+    openGraph: {
+      title: config.displayName,
+      description,
+      url: "/",
+      siteName: config.displayName,
+      images: image ? [{ url: image }] : undefined,
+      type: "website",
+    },
+    twitter: {
+      card: image ? "summary_large_image" : "summary",
+      title: config.displayName,
+      description,
+      images: image ? [image] : undefined,
+    },
   };
 }
 
@@ -40,12 +64,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [config, pages, socialLinks, locale, cookieStore] = await Promise.all([
+  const [config, pages, socialLinks, locale, cookieStore, { origin }] = await Promise.all([
     getPublicConfig(),
     getPublishedPages(),
     getPublicSocialLinks(),
     getLocale(),
     cookies(),
+    getSiteOrigin(),
   ]);
   const themeStyle = buildThemeStyle(config.themeConfig);
   const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
@@ -64,6 +89,7 @@ export default async function RootLayout({
         <style id="brand-theme" dangerouslySetInnerHTML={{ __html: themeStyle }} />
         {/* Resolves light/dark before first paint — see theme-mode.ts. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <StructuredData config={config} origin={origin} />
       </head>
       <body className="min-h-full flex flex-col">
         <NextIntlClientProvider>

@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   ApiError,
   getActivationInvite,
@@ -74,6 +75,9 @@ export default function ActivateTenantPage({
             <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
               Your business is now live on the platform.
             </p>
+            <Link href="/login" className="btn-primary mt-6 w-full">
+              Go to login
+            </Link>
           </div>
         ) : error && !invite ? (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">

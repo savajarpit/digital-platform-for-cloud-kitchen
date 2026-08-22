@@ -54,6 +54,7 @@ export default function BusinessProfilePage() {
           defaultLocale: p.defaultLocale,
           themeConfig: p.themeConfig,
           showReviewsOnHomepage: p.showReviewsOnHomepage,
+          searchConsoleVerification: p.searchConsoleVerification ?? undefined,
         });
       })
       .catch(() => setError("Couldn't load business profile."));
@@ -363,6 +364,25 @@ export default function BusinessProfilePage() {
               onChange={(checked) => field("showReviewsOnHomepage", checked)}
             />
           </label>
+        </div>
+
+        <div className="card flex flex-col gap-4 p-6">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">SEO</h3>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Google Search Console verification
+              <span className="block text-xs font-normal text-zinc-400">
+                Paste just the <code>content</code> value from the verification meta tag Search
+                Console gives you — not the whole tag.
+              </span>
+            </label>
+            <input
+              type="text"
+              value={form.searchConsoleVerification ?? ""}
+              onChange={(e) => field("searchConsoleVerification", e.target.value)}
+              className="input w-full"
+            />
+          </div>
         </div>
 
         <button type="submit" disabled={saving} className="btn-primary w-fit">

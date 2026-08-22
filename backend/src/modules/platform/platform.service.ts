@@ -30,6 +30,20 @@ const OWNER_EXCLUDED_PERMISSIONS_BY_DEFAULT = new Set([
   'settings.notifications.edit',
 ]);
 
+// A tenant's slug doubles as its {slug}.{platformRootDomain} subdomain
+// (see TenantResolverService) — never let one of these words be squatted,
+// the platform itself may need them as real subdomains later.
+const RESERVED_SLUGS = new Set([
+  'admin',
+  'api',
+  'app',
+  'www',
+  'platform',
+  'mail',
+  'static',
+  'cdn',
+]);
+
 @Injectable()
 export class PlatformService {
   constructor(
@@ -162,7 +176,10 @@ export class PlatformService {
     const base = slugify(businessName);
     let candidate = base;
     let suffix = 1;
-    while (await this.platformRepo.findBySlug(candidate)) {
+    while (
+      RESERVED_SLUGS.has(candidate) ||
+      (await this.platformRepo.findBySlug(candidate))
+    ) {
       candidate = `${base}-${++suffix}`;
     }
     return candidate;

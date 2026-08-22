@@ -9,6 +9,9 @@ export default registerAs('app', () => ({
   // Hostname for the SUPER_ADMIN platform console — recognized by
   // TenantContextMiddleware and let through without a tenant match.
   platformAdminHost: process.env.PLATFORM_ADMIN_HOST || undefined,
+  // The platform's own shared domain — a tenant with no customDomain yet is
+  // reachable at {slug}.{platformRootDomain} (see TenantResolverService).
+  platformRootDomain: process.env.PLATFORM_ROOT_DOMAIN || undefined,
   // Used by CryptoUtil to encrypt per-tenant secrets at rest (WhatsApp/email
   // provider credentials, Razorpay keys).
   encryptionKey: process.env.ENCRYPTION_KEY,

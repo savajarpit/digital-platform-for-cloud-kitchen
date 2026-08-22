@@ -244,45 +244,49 @@ model User {
 // ─── Business configuration (white-label, per tenant) ────
 
 model BusinessProfile {
-  id                      String   @id @default(uuid())
-  tenantId                String   @unique
-  displayName             String
-  description             String?
-  logoUrl                 String?
-  faviconUrl              String?
-  heroImageUrl            String?
-  supportEmail            String?
-  supportPhone            String?
-  whatsappBusinessNumber  String?
-  addressLine1            String?
-  addressLine2            String?
-  city                    String?
-  state                   String?
-  country                 String?
-  pincode                 String?
-  timezone                String   @default("Asia/Kolkata")
-  currency                String   @default("INR")
-  gstNumber               String?
-  themeConfig             Json     @default("{}")
-  defaultLocale           String   @default("en")
+  id                        String   @id @default(uuid())
+  tenantId                  String   @unique
+  displayName               String
+  description               String?
+  logoUrl                   String?
+  faviconUrl                String?
+  heroImageUrl              String?
+  supportEmail              String?
+  supportPhone              String?
+  whatsappBusinessNumber    String?
+  addressLine1              String?
+  addressLine2              String?
+  city                      String?
+  state                     String?
+  country                   String?
+  pincode                   String?
+  timezone                  String   @default("Asia/Kolkata")
+  currency                  String   @default("INR")
+  gstNumber                 String?
+  themeConfig               Json     @default("{}")
+  defaultLocale             String   @default("en")
   // Geo-radius serviceability (Blinkit-style): when kitchenLat/kitchenLng and
   // deliveryRadiusMeters are all set, AddressesService prefers a real
   // distance-from-kitchen check over the ServiceablePincode table.
-  kitchenLat              Float?
-  kitchenLng              Float?
-  deliveryRadiusMeters    Int?
-  deliveryFee             Int?
-  minOrderAmount          Int?
-  freeDeliveryAboveAmount Int?
+  kitchenLat                Float?
+  kitchenLng                Float?
+  deliveryRadiusMeters      Int?
+  deliveryFee               Int?
+  minOrderAmount            Int?
+  freeDeliveryAboveAmount   Int?
   // How many days ahead a customer may pick for delivery (0 = today only,
   // 2 = today/tomorrow/day-after). Checkout's day dropdown is bounded by
   // this, enforced again server-side in OrdersService.
-  maxAdvanceOrderDays     Int      @default(2)
+  maxAdvanceOrderDays       Int      @default(2)
   // Home page testimonials block — only rendered if true AND at least one
   // published Review exists.
-  showReviewsOnHomepage   Boolean  @default(false)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  showReviewsOnHomepage     Boolean  @default(false)
+  // Google Search Console's HTML-tag verification content (the value of
+  // <meta name="google-site-verification" content="...">) — lets a tenant
+  // prove domain ownership without needing DNS/file-upload access.
+  searchConsoleVerification String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 

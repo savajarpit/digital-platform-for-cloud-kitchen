@@ -13,6 +13,7 @@ import {
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
@@ -192,6 +193,7 @@ export default function NotificationsPage() {
                   type="tel"
                   value={whatsappSenderNumber}
                   onChange={(e) => setWhatsappSenderNumber(e.target.value)}
+                  placeholder="e.g. +14155238886 for Twilio sandbox, or your WhatsApp Business number"
                   className="input w-full"
                 />
               </div>
@@ -199,12 +201,7 @@ export default function NotificationsPage() {
                 <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   Owner alert number
                 </label>
-                <input
-                  type="tel"
-                  value={ownerWhatsappNumber}
-                  onChange={(e) => setOwnerWhatsappNumber(e.target.value)}
-                  className="input w-full"
-                />
+                <PhoneInput value={ownerWhatsappNumber} onChange={setOwnerWhatsappNumber} />
               </div>
             </div>
           )}

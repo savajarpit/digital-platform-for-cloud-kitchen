@@ -73,15 +73,7 @@ export default function SignupPage() {
                 <FormField id="lastName" name="lastName" label={t("lastName")} autoComplete="family-name" />
               </div>
               <FormField id="email" name="email" type="email" label={t("email")} required autoComplete="email" />
-              <FormField
-                id="phone"
-                name="phone"
-                type="tel"
-                label={t("phone")}
-                autoComplete="tel"
-                placeholder="+919876543210"
-                hint={t("phoneHint")}
-              />
+              <FormField id="phone" name="phone" type="tel" label={t("phone")} autoComplete="tel" />
               <FormField
                 id="password"
                 name="password"

@@ -27,6 +27,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { PLATFORM_ROOT_DOMAIN } from "@/lib/config/env";
 import { TenantLimitsCard } from "@/components/admin/TenantLimitsCard";
@@ -534,12 +535,10 @@ function NotificationCredentialsCard({
             placeholder="Sender number"
             className="input w-full"
           />
-          <input
-            type="tel"
+          <PhoneInput
             value={ownerWhatsappNumber}
-            onChange={(e) => setOwnerWhatsappNumber(e.target.value)}
-            placeholder="Owner alert number"
-            className="input w-full"
+            onChange={setOwnerWhatsappNumber}
+            placeholder="Owner alert no."
           />
         </div>
       )}

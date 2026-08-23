@@ -1,4 +1,5 @@
 import { PasswordInput } from "@/components/ui/PasswordInput";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 
 export function FormField({
   id,
@@ -36,6 +37,8 @@ export function FormField({
           placeholder={placeholder}
           className="input"
         />
+      ) : type === "tel" ? (
+        <PhoneInput id={id} name={name} required={required} autoComplete={autoComplete} />
       ) : (
         <input
           id={id}

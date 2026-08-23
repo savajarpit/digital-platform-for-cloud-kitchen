@@ -10,6 +10,7 @@ import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageHeader } from "@/components/account/PageHeader";
 import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 
 export default function ProfilePage() {
   const t = useTranslations("profile");
@@ -145,13 +146,7 @@ export default function ProfilePage() {
               <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 {t("phone")}
               </label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+919876543210"
-                className="input w-full"
-              />
+              <PhoneInput value={phone} onChange={setPhone} autoComplete="tel" />
             </div>
 
             <button type="submit" disabled={saving} className="btn-primary mt-2 w-fit">

@@ -5,11 +5,16 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Matches,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  INDIA_PHONE_MESSAGE,
+  INDIA_PHONE_REGEX,
+} from '../../../common/constants/phone.constant';
 
 export class ThemeConfigInputDto {
   @ApiPropertyOptional({ example: '#16A34A' })
@@ -61,16 +66,14 @@ export class UpdateBusinessProfileDto {
   @IsEmail()
   supportEmail?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: '+919876543210' })
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @Matches(INDIA_PHONE_REGEX, { message: INDIA_PHONE_MESSAGE })
   supportPhone?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: '+919876543210' })
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @Matches(INDIA_PHONE_REGEX, { message: INDIA_PHONE_MESSAGE })
   whatsappBusinessNumber?: string;
 
   @ApiPropertyOptional()
@@ -150,7 +153,7 @@ export class UpdateBusinessProfileDto {
 
   @ApiPropertyOptional({
     description:
-      "Google Search Console's HTML-tag verification content — the `content` attribute value from the <meta name=\"google-site-verification\"> tag Search Console gives you, not the whole tag.",
+      'Google Search Console\'s HTML-tag verification content — the `content` attribute value from the <meta name="google-site-verification"> tag Search Console gives you, not the whole tag.',
   })
   @IsOptional()
   @IsString()

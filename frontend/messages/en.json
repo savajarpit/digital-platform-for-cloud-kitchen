@@ -175,7 +175,6 @@
     "firstName": "First name",
     "lastName": "Last name",
     "phone": "Phone (WhatsApp, optional)",
-    "phoneHint": "We'll send your verification code here too, in E.164 format e.g. +919876543210",
     "forgotPassword": "Forgot password?",
     "loginSubtitle": "Log in to your account",
     "signupSubtitle": "Create your account",

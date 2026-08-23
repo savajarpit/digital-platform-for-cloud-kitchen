@@ -10,6 +10,7 @@ import {
   type AddressInput,
 } from "@/lib/api/addresses";
 import { useToast } from "@/context/ToastContext";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 
 const LABEL_PRESETS = ["Home", "Office"] as const;
 
@@ -90,14 +91,17 @@ export function AddressForm({
         />
       </div>
 
-      <Field
-        id="contactPhone"
-        name="contactPhone"
-        label={t("contactPhone")}
-        required
-        placeholder="+919876543210"
-        defaultValue={address?.contactPhone}
-      />
+      <div className="flex flex-col gap-1">
+        <label htmlFor="contactPhone" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          {t("contactPhone")}
+        </label>
+        <PhoneInput
+          id="contactPhone"
+          name="contactPhone"
+          required
+          defaultValue={address?.contactPhone}
+        />
+      </div>
       <Field
         id="pincode"
         name="pincode"

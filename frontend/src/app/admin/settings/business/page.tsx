@@ -17,6 +17,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { ImageUploadInput } from "@/components/admin/ImageUploadInput";
 import { SocialLinksCard } from "@/components/admin/SocialLinksCard";
+import { PhoneInput } from "@/components/ui/PhoneInput";
 
 type FormState = UpdateBusinessProfileInput;
 
@@ -181,22 +182,18 @@ export default function BusinessProfilePage() {
               <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 Support phone
               </label>
-              <input
-                type="tel"
+              <PhoneInput
                 value={form.supportPhone ?? ""}
-                onChange={(e) => field("supportPhone", e.target.value)}
-                className="input w-full"
+                onChange={(v) => field("supportPhone", v)}
               />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 WhatsApp business number
               </label>
-              <input
-                type="tel"
+              <PhoneInput
                 value={form.whatsappBusinessNumber ?? ""}
-                onChange={(e) => field("whatsappBusinessNumber", e.target.value)}
-                className="input w-full"
+                onChange={(v) => field("whatsappBusinessNumber", v)}
               />
             </div>
           </div>

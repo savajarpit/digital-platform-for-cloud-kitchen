@@ -5,10 +5,15 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { EmailProvider, WhatsappProvider } from '../../../generated/prisma';
+import {
+  INDIA_PHONE_MESSAGE,
+  INDIA_PHONE_REGEX,
+} from '../../../common/constants/phone.constant';
 
 export class UpdateNotificationSettingsDto {
   @ApiPropertyOptional()
@@ -29,16 +34,21 @@ export class UpdateNotificationSettingsDto {
   @IsString()
   whatsappApiKey?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description:
+      "The WhatsApp Business sender number/ID — not always an Indian number (e.g. Twilio's sandbox uses a US number), so this isn't format-restricted.",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(20)
   whatsappSenderNumber?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    example: '+919876543210',
+    description: "The tenant owner's own number for order alerts.",
+  })
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
+  @Matches(INDIA_PHONE_REGEX, { message: INDIA_PHONE_MESSAGE })
   ownerWhatsappNumber?: string;
 
   @ApiPropertyOptional()

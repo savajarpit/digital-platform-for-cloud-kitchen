@@ -11,6 +11,10 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
+import {
+  INDIA_PHONE_MESSAGE,
+  INDIA_PHONE_REGEX,
+} from '../../../common/constants/phone.constant';
 
 export class RegisterDto {
   @ApiProperty({ example: 'john@example.com' })
@@ -42,12 +46,10 @@ export class RegisterDto {
   @ApiPropertyOptional({
     example: '+919876543210',
     description:
-      'WhatsApp-reachable phone number, in E.164 format. Optional — OTP always also goes to email.',
+      'WhatsApp-reachable Indian mobile number, in E.164 format. Optional — OTP always also goes to email.',
   })
   @IsOptional()
-  @Matches(/^\+[1-9]\d{7,14}$/, {
-    message: 'Phone must be in E.164 format, e.g. +919876543210',
-  })
+  @Matches(INDIA_PHONE_REGEX, { message: INDIA_PHONE_MESSAGE })
   phone?: string;
 
   @ApiProperty({

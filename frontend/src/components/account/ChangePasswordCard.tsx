@@ -1,10 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Lock } from "lucide-react";
 import { ApiError, changeMyPassword } from "@/lib/api/users";
 import { useToast } from "@/context/ToastContext";
+import { PasswordInput } from "@/components/ui/PasswordInput";
+
+// Mirrors the backend's @IsStrongPassword rule (min 8 chars, 1 uppercase, 1
+// number, 1 symbol) so a weak new password is caught before it's submitted.
+const STRONG_PASSWORD_PATTERN = "(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}";
 
 export function ChangePasswordCard() {
   const t = useTranslations("profile");
@@ -14,6 +19,13 @@ export function ChangePasswordCard() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const mismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
+
+  const canSubmit = useMemo(
+    () => currentPassword && newPassword && confirmPassword && !mismatch,
+    [currentPassword, newPassword, confirmPassword, mismatch],
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -55,8 +67,7 @@ export function ChangePasswordCard() {
         <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
           {t("currentPassword")}
         </label>
-        <input
-          type="password"
+        <PasswordInput
           value={currentPassword}
           onChange={(e) => setCurrentPassword(e.target.value)}
           autoComplete="current-password"
@@ -70,12 +81,12 @@ export function ChangePasswordCard() {
           <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             {t("newPassword")}
           </label>
-          <input
-            type="password"
+          <PasswordInput
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             autoComplete="new-password"
             minLength={8}
+            pattern={STRONG_PASSWORD_PATTERN}
             required
             className="input w-full"
           />
@@ -84,20 +95,20 @@ export function ChangePasswordCard() {
           <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             {t("confirmPassword")}
           </label>
-          <input
-            type="password"
+          <PasswordInput
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             autoComplete="new-password"
             minLength={8}
             required
-            className="input w-full"
+            className={`input w-full ${mismatch ? "border-red-400 dark:border-red-700" : ""}`}
           />
+          {mismatch && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t("passwordMismatch")}</p>}
         </div>
       </div>
       <p className="text-xs text-zinc-400">{t("passwordHint")}</p>
 
-      <button type="submit" disabled={saving} className="btn-primary mt-2 w-fit">
+      <button type="submit" disabled={saving || !canSubmit} className="btn-primary mt-2 w-fit">
         {saving ? t("changingPassword") : t("changePassword")}
       </button>
     </form>

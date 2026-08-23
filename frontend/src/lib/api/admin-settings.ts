@@ -40,6 +40,8 @@ export interface BusinessProfile {
   maxAdvanceOrderDays: number;
   showReviewsOnHomepage: boolean;
   searchConsoleVerification: string | null;
+  fssaiLicenseNumber: string | null;
+  showFssaiLicense: boolean;
 }
 
 export type UpdateBusinessProfileInput = Partial<
@@ -65,6 +67,8 @@ export type UpdateBusinessProfileInput = Partial<
     | "defaultLocale"
     | "showReviewsOnHomepage"
     | "searchConsoleVerification"
+    | "fssaiLicenseNumber"
+    | "showFssaiLicense"
   >
 > & { themeConfig?: ThemeConfig };
 

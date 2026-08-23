@@ -92,6 +92,13 @@ export class PublicConfigResponseDto {
   gstNumber?: string;
 
   @ApiPropertyOptional({
+    description:
+      'FSSAI license number — only present when the tenant has both set a number and enabled showFssaiLicense',
+  })
+  @Expose()
+  fssaiLicenseNumber?: string;
+
+  @ApiPropertyOptional({
     description: 'Kitchen latitude, for LocalBusiness structured data',
   })
   @Expose()

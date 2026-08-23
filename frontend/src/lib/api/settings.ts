@@ -26,6 +26,7 @@ export interface PublicConfig {
   pincode?: string;
   whatsappBusinessNumber?: string;
   gstNumber?: string;
+  fssaiLicenseNumber?: string;
   kitchenLat?: number;
   kitchenLng?: number;
   searchConsoleVerification?: string;

@@ -285,6 +285,14 @@ model BusinessProfile {
   // <meta name="google-site-verification" content="...">) — lets a tenant
   // prove domain ownership without needing DNS/file-upload access.
   searchConsoleVerification String?
+  // FSSAI (Food Safety and Standards Authority of India) license — a
+  // number alone doesn't mean "show this publicly": showFssaiLicense is a
+  // separate switch, off by default, so adding the number doesn't
+  // immediately publish it to the footer/invoices. The logo itself is one
+  // shared static asset (frontend `components/icons/FssaiBadge.tsx`), not
+  // per-tenant uploadable — every tenant displaying it uses the same mark.
+  fssaiLicenseNumber        String?
+  showFssaiLicense          Boolean  @default(false)
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 

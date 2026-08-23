@@ -97,6 +97,11 @@ export default function SubscriptionInvoicePage({ params }: { params: Promise<{ 
                 {config.supportEmail}
               </p>
             )}
+            {config.fssaiLicenseNumber && (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
+                FSSAI Lic. No: {config.fssaiLicenseNumber}
+              </p>
+            )}
           </div>
           <div className="text-right">
             <h1 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100 print:text-black">

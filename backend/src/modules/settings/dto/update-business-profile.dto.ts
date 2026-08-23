@@ -156,4 +156,19 @@ export class UpdateBusinessProfileDto {
   @IsString()
   @MaxLength(200)
   searchConsoleVerification?: string;
+
+  @ApiPropertyOptional({ description: 'FSSAI food business license number' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  fssaiLicenseNumber?: string;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'Show the FSSAI badge/license number in the storefront footer and on invoices — only takes effect once fssaiLicenseNumber is also set',
+  })
+  @IsOptional()
+  @IsBoolean()
+  showFssaiLicense?: boolean;
 }

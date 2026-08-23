@@ -79,6 +79,12 @@ export class SettingsService {
       pincode: profile.pincode ?? undefined,
       whatsappBusinessNumber: profile.whatsappBusinessNumber ?? undefined,
       gstNumber: profile.gstNumber ?? undefined,
+      // Gated on the switch, not just presence — adding a number doesn't
+      // immediately publish it (see BusinessProfile.showFssaiLicense).
+      fssaiLicenseNumber:
+        profile.showFssaiLicense && profile.fssaiLicenseNumber
+          ? profile.fssaiLicenseNumber
+          : undefined,
       kitchenLat: profile.kitchenLat ?? undefined,
       kitchenLng: profile.kitchenLng ?? undefined,
       searchConsoleVerification:

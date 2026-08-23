@@ -51,6 +51,8 @@ export default function BusinessProfilePage() {
           timezone: p.timezone,
           currency: p.currency,
           gstNumber: p.gstNumber ?? undefined,
+          fssaiLicenseNumber: p.fssaiLicenseNumber ?? undefined,
+          showFssaiLicense: p.showFssaiLicense,
           defaultLocale: p.defaultLocale,
           themeConfig: p.themeConfig,
           showReviewsOnHomepage: p.showReviewsOnHomepage,
@@ -320,6 +322,32 @@ export default function BusinessProfilePage() {
                 className="input w-full"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 items-end gap-4 border-t border-zinc-100 pt-4 sm:grid-cols-4 dark:border-zinc-800">
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                FSSAI license number
+              </label>
+              <input
+                type="text"
+                value={form.fssaiLicenseNumber ?? ""}
+                onChange={(e) => field("fssaiLicenseNumber", e.target.value)}
+                className="input w-full"
+              />
+            </div>
+            <label className="flex items-center justify-between gap-3 sm:col-span-2">
+              <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                Show FSSAI badge on storefront & invoices
+                <span className="block text-xs text-zinc-400">
+                  Only takes effect once a license number is also set above.
+                </span>
+              </span>
+              <Toggle
+                checked={form.showFssaiLicense ?? false}
+                onChange={(checked) => field("showFssaiLicense", checked)}
+              />
+            </label>
           </div>
         </div>
 

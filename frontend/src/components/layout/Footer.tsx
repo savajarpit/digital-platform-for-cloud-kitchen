@@ -5,6 +5,7 @@ import type { PublicConfig } from "@/lib/api/settings";
 import type { StaticPageSummary } from "@/lib/api/content";
 import type { PublicSocialLink } from "@/lib/api/social-links";
 import { SocialIcon } from "@/components/icons/SocialIcon";
+import { FssaiBadge } from "@/components/icons/FssaiBadge";
 
 export async function Footer({
   config,
@@ -130,6 +131,14 @@ export async function Footer({
           <p>
             &copy; {year} {config.displayName}. All rights reserved.
           </p>
+          {config.fssaiLicenseNumber && (
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <span className="flex h-7 shrink-0 items-center rounded bg-white px-1.5">
+                <FssaiBadge className="h-4 w-auto" />
+              </span>
+              <span>FSSAI Lic. No: {config.fssaiLicenseNumber}</span>
+            </div>
+          )}
           <p className="text-xs text-zinc-600">
             Powered by {process.env.NEXT_PUBLIC_PLATFORM_NAME ?? "our platform"} — orders and content
             on this site are provided by {config.displayName}.

@@ -72,6 +72,11 @@ enum CouponDiscountType {
   FLAT
 }
 
+enum MealWeightUnit {
+  G
+  KG
+}
+
 enum PromotionType {
   BOGO
   FREE_ITEM_ON_MINIMUM
@@ -559,6 +564,10 @@ model Meal {
   // a storefront badge and the menu page's Popular filter; not computed from
   // real order analytics.
   isPopular          Boolean   @default(false)
+  // Both null unless the admin explicitly sets a weight — the menu card
+  // only shows a weight badge when both are present.
+  weightValue        Float?
+  weightUnit         MealWeightUnit?
   dailyQuantityLimit Int?
   sortOrder          Int       @default(0)
   deletedAt          DateTime?
@@ -1127,6 +1136,11 @@ model SubscriptionDayOverride {
 model SubscriptionSettings {
   id                          String   @id @default(uuid())
   tenantId                    String   @unique
+  // Master switch — OWNER's own choice to pause the subscriptions program
+  // entirely. When false, the storefront hides /plans (nav, footer, home
+  // page block) and blocks direct navigation to it; customers who already
+  // have a subscription can still manage it from "My Subscriptions".
+  isEnabled                   Boolean  @default(true)
   isAcceptingNewSubscriptions Boolean  @default(true)
   closureReason               String?
   noticeHoursBeforeDelivery   Int      @default(24)

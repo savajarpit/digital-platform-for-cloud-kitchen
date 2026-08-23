@@ -44,6 +44,8 @@ export interface MealNutrition {
   fat?: string;
 }
 
+export type MealWeightUnit = "G" | "KG";
+
 export interface Meal {
   id: string;
   categoryId: string | null;
@@ -55,6 +57,8 @@ export interface Meal {
   isVegetarian: boolean;
   isAvailable: boolean;
   isPopular: boolean;
+  weightValue: number | null;
+  weightUnit: MealWeightUnit | null;
   dailyQuantityLimit: number | null;
   sortOrder: number;
 }
@@ -72,6 +76,8 @@ export interface MealInput {
   isVegetarian?: boolean;
   isAvailable?: boolean;
   isPopular?: boolean;
+  weightValue?: number;
+  weightUnit?: MealWeightUnit;
   dailyQuantityLimit?: number;
   sortOrder?: number;
 }

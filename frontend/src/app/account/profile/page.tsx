@@ -9,6 +9,7 @@ import { ApiError, getMyProfile, updateMyProfile, type Profile } from "@/lib/api
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { PageHeader } from "@/components/account/PageHeader";
+import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
 
 export default function ProfilePage() {
   const t = useTranslations("profile");
@@ -85,77 +86,81 @@ export default function ProfilePage() {
       <PageHeader icon={UserIcon} title={t("title")} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <form onSubmit={handleSubmit} className="card flex flex-col gap-4 p-6 lg:col-span-2">
-          <div className="flex items-center gap-2 text-primary-600">
-            <UserIcon className="h-5 w-5" />
-            <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">{t("personalInfo")}</h2>
-          </div>
+        <div className="flex flex-col gap-6 lg:col-span-2">
+          <form onSubmit={handleSubmit} className="card flex flex-col gap-4 p-6">
+            <div className="flex items-center gap-2 text-primary-600">
+              <UserIcon className="h-5 w-5" />
+              <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">{t("personalInfo")}</h2>
+            </div>
 
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
-              {error}
-            </p>
-          )}
+            {error && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+                {error}
+              </p>
+            )}
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              {t("email")}
-            </label>
-            <input
-              type="email"
-              value={profile.email}
-              disabled
-              className="input w-full cursor-not-allowed opacity-60"
-            />
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{t("emailLockedHint")}</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                {t("firstName")}
+                {t("email")}
               </label>
               <input
-                type="text"
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-                required
-                minLength={2}
-                maxLength={50}
+                type="email"
+                value={profile.email}
+                disabled
+                className="input w-full cursor-not-allowed opacity-60"
+              />
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{t("emailLockedHint")}</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  {t("firstName")}
+                </label>
+                <input
+                  type="text"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                  minLength={2}
+                  maxLength={50}
+                  className="input w-full"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  {t("lastName")}
+                </label>
+                <input
+                  type="text"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  maxLength={50}
+                  className="input w-full"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                {t("phone")}
+              </label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+919876543210"
                 className="input w-full"
               />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                {t("lastName")}
-              </label>
-              <input
-                type="text"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                maxLength={50}
-                className="input w-full"
-              />
-            </div>
-          </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              {t("phone")}
-            </label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+919876543210"
-              className="input w-full"
-            />
-          </div>
+            <button type="submit" disabled={saving} className="btn-primary mt-2 w-fit">
+              {saving ? t("saving") : t("save")}
+            </button>
+          </form>
 
-          <button type="submit" disabled={saving} className="btn-primary mt-2 w-fit">
-            {saving ? t("saving") : t("save")}
-          </button>
-        </form>
+          <ChangePasswordCard />
+        </div>
 
         <div className="flex flex-col gap-4">
           <Link

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { UsersRepository } from './users.repository';
 import { PaginationService } from '../../common/services/pagination.service';
@@ -9,6 +10,7 @@ import { HashUtil } from '../../common/utils/hash.util';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
 import { OffsetPaginationDto } from '../../common/dto/pagination.dto';
 import { User } from '../../generated/prisma';
@@ -103,5 +105,22 @@ export class UsersService {
   ): Promise<User> {
     await this.findOne(userId, tenantId);
     return this.usersRepo.updateProfile(userId, dto);
+  }
+
+  async changePassword(
+    userId: string,
+    tenantId: string,
+    dto: ChangePasswordDto,
+  ): Promise<void> {
+    const user = await this.findOne(userId, tenantId);
+    const matches = await HashUtil.compare(
+      dto.currentPassword,
+      user.passwordHash,
+    );
+    if (!matches) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+    const passwordHash = await HashUtil.hash(dto.newPassword);
+    await this.usersRepo.updatePassword(userId, passwordHash);
   }
 }

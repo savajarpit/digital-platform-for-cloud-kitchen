@@ -25,6 +25,9 @@ export interface Meal {
   isVegetarian: boolean;
   isAvailable: boolean;
   isPopular: boolean;
+  // Both null unless the admin set a weight — only render a badge when both are present.
+  weightValue: number | null;
+  weightUnit: "G" | "KG" | null;
   dailyQuantityLimit: number | null;
   sortOrder: number;
   category: MenuCategory | null;

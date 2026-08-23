@@ -93,6 +93,14 @@ export function getPlan(id: string): Promise<PlanDetail> {
   return proxyFetch<PlanDetail>(`/subscriptions/plans/${id}`);
 }
 
+/** Client-safe check for the tenant's subscriptions-enabled master switch —
+ * used to bounce a direct visit to a plan detail page while it's disabled. */
+export function getSubscriptionsEnabled(): Promise<boolean> {
+  return proxyFetch<{ isEnabled: boolean }>("/subscriptions/settings/public").then(
+    (settings) => settings.isEnabled,
+  );
+}
+
 export function subscribe(input: {
   planId: string;
   addressId: string;

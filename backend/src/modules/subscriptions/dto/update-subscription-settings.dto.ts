@@ -10,6 +10,15 @@ import {
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateSubscriptionSettingsDto {
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'Master switch — when false, /plans is hidden everywhere on the storefront (nav, footer, home page) and direct navigation to it redirects away. Existing subscribers keep access to "My Subscriptions".',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isEnabled?: boolean;
+
   @ApiPropertyOptional({ example: true })
   @IsOptional()
   @IsBoolean()
@@ -48,7 +57,8 @@ export class UpdateSubscriptionSettingsDto {
   homepageTitle?: string;
 
   @ApiPropertyOptional({
-    example: 'Pick a plan that fits your lifestyle — skip, pause, or cancel anytime',
+    example:
+      'Pick a plan that fits your lifestyle — skip, pause, or cancel anytime',
   })
   @IsOptional()
   @IsString()
@@ -70,17 +80,26 @@ export class UpdateSubscriptionSettingsDto {
   @MaxLength(300)
   plansPageSubtitle?: string;
 
-  @ApiPropertyOptional({ example: true, description: '"Why subscribe?" section on /plans' })
+  @ApiPropertyOptional({
+    example: true,
+    description: '"Why subscribe?" section on /plans',
+  })
   @IsOptional()
   @IsBoolean()
   whySubscribeEnabled?: boolean;
 
-  @ApiPropertyOptional({ example: true, description: 'FAQ accordion on /plans' })
+  @ApiPropertyOptional({
+    example: true,
+    description: 'FAQ accordion on /plans',
+  })
   @IsOptional()
   @IsBoolean()
   faqEnabled?: boolean;
 
-  @ApiPropertyOptional({ example: true, description: '"Still have questions?" CTA on /plans' })
+  @ApiPropertyOptional({
+    example: true,
+    description: '"Still have questions?" CTA on /plans',
+  })
   @IsOptional()
   @IsBoolean()
   contactCtaEnabled?: boolean;
@@ -91,7 +110,9 @@ export class UpdateSubscriptionSettingsDto {
   @MaxLength(120)
   contactCtaTitle?: string;
 
-  @ApiPropertyOptional({ example: 'Our team is happy to help you find the right plan.' })
+  @ApiPropertyOptional({
+    example: 'Our team is happy to help you find the right plan.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(300)

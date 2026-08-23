@@ -26,6 +26,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { UserResponseDto } from './dto/user-response.dto';
 import { CustomerResponseDto } from './dto/customer-response.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
@@ -103,6 +104,19 @@ export class UsersController {
     return new UserResponseDto(
       await this.usersService.updateOwnProfile(userId, tenantId, dto),
     );
+  }
+
+  @Patch('me/password')
+  @ResponseMessage('Password changed successfully')
+  @ApiOperation({ summary: "Change the current user's own password" })
+  @ApiBadRequestResponse({ description: 'Current password is incorrect' })
+  async changeOwnPassword(
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('tenantId') tenantId: string,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    await this.usersService.changePassword(userId, tenantId, dto);
+    return null;
   }
 
   // Must come before @Get(':id') — otherwise "customers" would be parsed as a user id.

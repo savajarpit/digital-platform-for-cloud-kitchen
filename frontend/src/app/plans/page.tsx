@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CalendarClock } from "lucide-react";
 import { getPublicConfig } from "@/lib/api/settings";
 import {
@@ -20,6 +21,10 @@ export default async function PlansPage() {
     getPlanFeatures(),
     getPlanFaqs(),
   ]);
+
+  if (!pageSettings.isEnabled) {
+    redirect("/");
+  }
 
   if (plans.length === 0) {
     return (

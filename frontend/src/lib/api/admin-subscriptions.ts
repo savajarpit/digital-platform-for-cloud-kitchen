@@ -119,6 +119,7 @@ export interface AdminSubscription {
 }
 
 export interface SubscriptionSettings {
+  isEnabled: boolean;
   isAcceptingNewSubscriptions: boolean;
   closureReason: string | null;
   noticeHoursBeforeDelivery: number;

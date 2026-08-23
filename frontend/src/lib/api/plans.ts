@@ -34,6 +34,7 @@ export async function getPublishedPlans(): Promise<PublicPlan[]> {
 }
 
 export interface PlansHomeSettings {
+  isEnabled: boolean;
   showOnHomepage: boolean;
   homepageTitle: string;
   homepageDescription?: string;
@@ -48,6 +49,7 @@ export interface PlansHomeSettings {
 }
 
 const DEFAULT_PLANS_HOME_SETTINGS: PlansHomeSettings = {
+  isEnabled: true,
   showOnHomepage: true,
   homepageTitle: "Meal Plans",
   plansPageTitle: "Choose Your Plan",

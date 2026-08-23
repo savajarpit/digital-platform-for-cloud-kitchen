@@ -360,6 +360,7 @@ export class SubscriptionsRepository {
   upsertSettings(
     tenantId: string,
     data: {
+      isEnabled?: boolean;
       isAcceptingNewSubscriptions?: boolean;
       closureReason?: string | null;
       noticeHoursBeforeDelivery?: number;

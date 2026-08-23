@@ -136,7 +136,16 @@
     "myOrders": "My Orders",
     "myOrdersHint": "View your order history",
     "myAddresses": "My Addresses",
-    "myAddressesHint": "Manage delivery addresses"
+    "myAddressesHint": "Manage delivery addresses",
+    "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "passwordHint": "At least 8 characters, with an uppercase letter, a number, and a symbol.",
+    "passwordMismatch": "New password and confirm password don't match.",
+    "changingPassword": "Changing…",
+    "passwordChanged": "Password changed",
+    "passwordChangeError": "Couldn't change password."
   },
   "invoice": {
     "title": "Tax Invoice",

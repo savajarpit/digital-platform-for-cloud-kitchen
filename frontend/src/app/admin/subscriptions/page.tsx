@@ -1018,6 +1018,21 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
 
   return (
     <form onSubmit={handleSave} className="card flex max-w-lg flex-col gap-4 p-6">
+      <label className="flex items-center justify-between gap-3 border-b border-zinc-100 pb-4 dark:border-zinc-800">
+        <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Show plans page to customers
+          <span className="block text-xs font-normal text-zinc-400">
+            Off hides /plans everywhere — nav, footer, home page — and blocks direct links to it.
+            Customers with an existing subscription can still manage it from &quot;My
+            Subscriptions&quot;.
+          </span>
+        </span>
+        <Toggle
+          checked={settings.isEnabled}
+          onChange={(checked) => setSettings({ ...settings, isEnabled: checked })}
+          disabled={!canEdit}
+        />
+      </label>
       <label className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
           Accepting new subscriptions

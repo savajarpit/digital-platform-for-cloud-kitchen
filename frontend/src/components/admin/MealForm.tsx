@@ -125,6 +125,39 @@ export function MealForm({
       </div>
       <div>
         <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+          Weight (optional — only shown on the menu card if filled in)
+        </label>
+        <div className="grid grid-cols-[1fr_auto] gap-3">
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={form.weightValue ?? ""}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                weightValue: e.target.value ? Number(e.target.value) : undefined,
+              }))
+            }
+            placeholder="e.g. 250"
+            className="input w-full"
+          />
+          <Select
+            value={form.weightUnit ?? "G"}
+            onValueChange={(v) => setForm((f) => ({ ...f, weightUnit: v as "G" | "KG" }))}
+          >
+            <SelectTrigger className="w-24">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="G">g</SelectItem>
+              <SelectItem value="KG">kg</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div>
+        <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
           Nutrition (optional — only shown on the meal card if filled in)
         </label>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

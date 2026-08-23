@@ -18,7 +18,8 @@ export default async function Home() {
     getPlansHomeSettings(),
     getPublicReviews(),
   ]);
-  const showPlansBlock = plansHomeSettings.showOnHomepage && plans.length > 0;
+  const showPlansBlock =
+    plansHomeSettings.isEnabled && plansHomeSettings.showOnHomepage && plans.length > 0;
   const showReviewsBlock = config.showReviewsOnHomepage && reviews.length > 0;
   const reviewAvg = reviews.length
     ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
@@ -30,6 +31,7 @@ export default async function Home() {
         config={config}
         heroCtaLabel={t("heroCta")}
         viewPlansLabel={t("viewPlans")}
+        showPlansCta={plansHomeSettings.isEnabled}
         reviewAvg={reviewAvg}
         reviewCount={reviews.length}
       />

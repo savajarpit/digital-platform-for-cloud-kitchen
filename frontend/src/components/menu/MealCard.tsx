@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { ImageOff, Star } from "lucide-react";
 import type { Meal } from "@/lib/api/menu";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { formatMealWeight } from "@/lib/format/weight";
 import { AddToCartButton } from "./AddToCartButton";
 
 const MACRO_KEYS = ["calories", "protein", "carbs", "fat"] as const;
@@ -93,9 +94,16 @@ export function MealCard({
       </div>
 
       <div className="flex flex-1 flex-col p-4">
-        <h3 className="mb-1 text-base leading-snug font-bold text-zinc-900 dark:text-zinc-100">
-          {meal.name}
-        </h3>
+        <div className="mb-1 flex items-start justify-between gap-2">
+          <h3 className="text-base leading-snug font-bold text-zinc-900 dark:text-zinc-100">
+            {meal.name}
+          </h3>
+          {meal.weightValue != null && meal.weightUnit && (
+            <span className="mt-0.5 shrink-0 text-xs font-medium text-zinc-400 dark:text-zinc-500">
+              {formatMealWeight(meal.weightValue, meal.weightUnit)}
+            </span>
+          )}
+        </div>
         {meal.description && (
           <p className="mb-3 line-clamp-2 flex-1 text-sm text-zinc-500 dark:text-zinc-400">
             {meal.description}

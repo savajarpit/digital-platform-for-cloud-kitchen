@@ -1,6 +1,8 @@
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
@@ -9,6 +11,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { MealWeightUnit } from '../../../generated/prisma';
 
 export class CreateMealDto {
   @ApiProperty({ example: 'Mediterranean Quinoa Bowl' })
@@ -60,6 +63,21 @@ export class CreateMealDto {
   @IsOptional()
   @IsBoolean()
   isPopular?: boolean;
+
+  @ApiPropertyOptional({
+    example: 250,
+    description:
+      'Item weight, e.g. 250 for "250 g" — omit to hide the weight badge on the menu card',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  weightValue?: number;
+
+  @ApiPropertyOptional({ enum: MealWeightUnit, example: MealWeightUnit.G })
+  @IsOptional()
+  @IsEnum(MealWeightUnit)
+  weightUnit?: MealWeightUnit;
 
   @ApiPropertyOptional({ example: 50 })
   @IsOptional()

@@ -8,7 +8,13 @@ import { CalendarClock, LayoutDashboard, LogOut, MapPin, Package, User as UserIc
 import { logout } from "@/lib/api/auth";
 import { useToast } from "@/context/ToastContext";
 
-export function UserMenu({ isAdmin }: { isAdmin?: boolean }) {
+export function UserMenu({
+  isAdmin,
+  hasSubscriptions,
+}: {
+  isAdmin?: boolean;
+  hasSubscriptions?: boolean;
+}) {
   const t = useTranslations("nav");
   const router = useRouter();
   const { showToast } = useToast();
@@ -48,7 +54,9 @@ export function UserMenu({ isAdmin }: { isAdmin?: boolean }) {
     { href: "/account/profile", label: t("profile"), icon: UserIcon },
     { href: "/orders", label: t("myOrders"), icon: Package },
     { href: "/account/addresses", label: t("myAddresses"), icon: MapPin },
-    { href: "/account/subscriptions", label: t("mySubscriptions"), icon: CalendarClock },
+    ...(hasSubscriptions
+      ? [{ href: "/account/subscriptions", label: t("mySubscriptions"), icon: CalendarClock }]
+      : []),
     ...(isAdmin ? [{ href: "/admin", label: t("admin"), icon: LayoutDashboard }] : []),
   ];
 

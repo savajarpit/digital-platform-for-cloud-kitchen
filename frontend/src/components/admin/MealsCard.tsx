@@ -194,6 +194,8 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
                     isVegetarian: meal.isVegetarian,
                     isAvailable: meal.isAvailable,
                     isPopular: meal.isPopular,
+                    weightValue: meal.weightValue ?? undefined,
+                    weightUnit: meal.weightUnit ?? undefined,
                     dailyQuantityLimit: meal.dailyQuantityLimit ?? undefined,
                   }}
                   onCancel={() => setEditingId(null)}

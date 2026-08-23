@@ -125,6 +125,7 @@ export class SubscriptionsService {
     const settings = await this.subscriptionsRepo.findSettings(tenantId);
     return (
       settings ?? {
+        isEnabled: true,
         isAcceptingNewSubscriptions: true,
         closureReason: null,
         noticeHoursBeforeDelivery: 24,
@@ -143,6 +144,7 @@ export class SubscriptionsService {
     const settings = await this.subscriptionsRepo.findSettings(tenantId);
     const defaults = defaultSubscriptionSettings();
     return {
+      isEnabled: settings?.isEnabled ?? true,
       showOnHomepage: settings?.showOnHomepage ?? true,
       homepageTitle: settings?.homepageTitle ?? defaults.homepageTitle,
       homepageDescription:
@@ -285,6 +287,11 @@ export class SubscriptionsService {
 
   async subscribe(tenantId: string, userId: string, dto: SubscribeDto) {
     const settings = await this.subscriptionsRepo.findSettings(tenantId);
+    if (settings && !settings.isEnabled) {
+      throw new BadRequestException(
+        'Subscriptions are not available for this business right now.',
+      );
+    }
     if (settings && !settings.isAcceptingNewSubscriptions) {
       throw new BadRequestException(
         settings.closureReason ||

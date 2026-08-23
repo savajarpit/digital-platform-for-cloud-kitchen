@@ -6,6 +6,7 @@ import { getLocale } from "next-intl/server";
 import { getPublicConfig } from "@/lib/api/settings";
 import { getPublishedPages } from "@/lib/api/content";
 import { getPublicSocialLinks } from "@/lib/api/social-links";
+import { getPlansHomeSettings } from "@/lib/api/plans";
 import { buildThemeStyle } from "@/lib/theme/build-theme-style";
 import { getSiteOrigin } from "@/lib/seo/get-site-origin";
 import { StructuredData } from "@/components/seo/StructuredData";
@@ -64,14 +65,16 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [config, pages, socialLinks, locale, cookieStore, { origin }] = await Promise.all([
-    getPublicConfig(),
-    getPublishedPages(),
-    getPublicSocialLinks(),
-    getLocale(),
-    cookies(),
-    getSiteOrigin(),
-  ]);
+  const [config, pages, socialLinks, plansHomeSettings, locale, cookieStore, { origin }] =
+    await Promise.all([
+      getPublicConfig(),
+      getPublishedPages(),
+      getPublicSocialLinks(),
+      getPlansHomeSettings(),
+      getLocale(),
+      cookies(),
+      getSiteOrigin(),
+    ]);
   const themeStyle = buildThemeStyle(config.themeConfig);
   const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
   const isAuthenticated = Boolean(accessToken);
@@ -100,9 +103,15 @@ export default async function RootLayout({
                 logoUrl={config.logoUrl}
                 isAuthenticated={isAuthenticated}
                 isAdmin={isAdmin}
+                subscriptionsEnabled={plansHomeSettings.isEnabled}
               />
               <div className="flex flex-1 flex-col">{children}</div>
-              <Footer config={config} pages={pages} socialLinks={socialLinks} />
+              <Footer
+                config={config}
+                pages={pages}
+                socialLinks={socialLinks}
+                subscriptionsEnabled={plansHomeSettings.isEnabled}
+              />
             </ConfirmProvider>
           </ToastProvider>
         </NextIntlClientProvider>

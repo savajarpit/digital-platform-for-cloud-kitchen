@@ -6,12 +6,14 @@ export function Hero({
   config,
   heroCtaLabel,
   viewPlansLabel,
+  showPlansCta,
   reviewAvg,
   reviewCount,
 }: {
   config: PublicConfig;
   heroCtaLabel: string;
   viewPlansLabel: string;
+  showPlansCta: boolean;
   reviewAvg: number | null;
   reviewCount: number;
 }) {
@@ -44,9 +46,11 @@ export function Hero({
               {heroCtaLabel}
               <ArrowRight className="h-5 w-5" />
             </Link>
-            <Link href="/plans" className="btn-outline btn-lg">
-              {viewPlansLabel}
-            </Link>
+            {showPlansCta && (
+              <Link href="/plans" className="btn-outline btn-lg">
+                {viewPlansLabel}
+              </Link>
+            )}
           </div>
 
           <div className="mt-2 flex flex-wrap items-center justify-center gap-5 lg:justify-start">

@@ -8,6 +8,7 @@ import { CalendarClock, Leaf, LayoutDashboard, LogOut, MapPin, Menu, Package, Sh
 import { logout } from "@/lib/api/auth";
 import { useToast } from "@/context/ToastContext";
 import { useCartCount } from "@/lib/store/cart-store";
+import { useHasSubscriptions } from "@/lib/hooks/useHasSubscriptions";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserMenu } from "./UserMenu";
 
@@ -16,11 +17,13 @@ export function Header({
   logoUrl,
   isAuthenticated,
   isAdmin,
+  subscriptionsEnabled,
 }: {
   displayName: string;
   logoUrl?: string;
   isAuthenticated: boolean;
   isAdmin?: boolean;
+  subscriptionsEnabled: boolean;
 }) {
   const t = useTranslations("nav");
   const router = useRouter();
@@ -29,11 +32,12 @@ export function Header({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const cartCount = useCartCount();
+  const hasSubscriptions = useHasSubscriptions(isAuthenticated);
 
   const navLinks = [
     { href: "/", label: t("home") },
     { href: "/menu", label: t("menu") },
-    { href: "/plans", label: t("plans") },
+    ...(subscriptionsEnabled ? [{ href: "/plans", label: t("plans") }] : []),
   ];
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
@@ -94,7 +98,7 @@ export function Header({
             )}
           </Link>
           {isAuthenticated ? (
-            <UserMenu isAdmin={isAdmin} />
+            <UserMenu isAdmin={isAdmin} hasSubscriptions={hasSubscriptions} />
           ) : (
             <>
               <Link
@@ -180,14 +184,16 @@ export function Header({
                   <MapPin className="h-4 w-4" />
                   {t("myAddresses")}
                 </Link>
-                <Link
-                  href="/account/subscriptions"
-                  className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <CalendarClock className="h-4 w-4" />
-                  {t("mySubscriptions")}
-                </Link>
+                {hasSubscriptions && (
+                  <Link
+                    href="/account/subscriptions"
+                    className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <CalendarClock className="h-4 w-4" />
+                    {t("mySubscriptions")}
+                  </Link>
+                )}
                 {isAdmin && (
                   <Link
                     href="/admin"

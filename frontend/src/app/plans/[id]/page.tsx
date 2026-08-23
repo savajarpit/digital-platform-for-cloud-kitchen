@@ -7,6 +7,7 @@ import { CalendarClock, Clock, ImageOff, Tag } from "lucide-react";
 import {
   ApiError,
   getPlan,
+  getSubscriptionsEnabled,
   listMySubscriptions,
   subscribe,
   verifySubscriptionPayment,
@@ -45,6 +46,11 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
   const [hasActiveForThisPlan, setHasActiveForThisPlan] = useState(false);
 
   useEffect(() => {
+    getSubscriptionsEnabled()
+      .then((enabled) => {
+        if (!enabled) router.replace("/");
+      })
+      .catch(() => {});
     getPlan(id)
       .then(setPlan)
       .catch(() => setNotFound(true));
@@ -63,7 +69,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
     listMySubscriptions()
       .then((subs) => setHasActiveForThisPlan(subs.some((s) => s.planId === id && s.status === "ACTIVE")))
       .catch(() => setHasActiveForThisPlan(false));
-  }, [id]);
+  }, [id, router]);
 
   function handleSubscribeClick() {
     if (hasActiveForThisPlan) {

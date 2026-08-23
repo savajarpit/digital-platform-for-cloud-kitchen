@@ -11,10 +11,12 @@ export async function Footer({
   config,
   pages,
   socialLinks,
+  subscriptionsEnabled,
 }: {
   config: PublicConfig;
   pages: StaticPageSummary[];
   socialLinks: PublicSocialLink[];
+  subscriptionsEnabled: boolean;
 }) {
   const t = await getTranslations("nav");
   const year = new Date().getFullYear();
@@ -73,11 +75,13 @@ export async function Footer({
                   {t("menu")}
                 </Link>
               </li>
-              <li>
-                <Link href="/plans" className="transition-colors hover:text-primary-400">
-                  {t("plans")}
-                </Link>
-              </li>
+              {subscriptionsEnabled && (
+                <li>
+                  <Link href="/plans" className="transition-colors hover:text-primary-400">
+                    {t("plans")}
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
 

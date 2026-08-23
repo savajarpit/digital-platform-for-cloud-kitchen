@@ -15,6 +15,7 @@ import { AddressForm } from "@/components/addresses/AddressForm";
 import { AddressCardSkeleton } from "@/components/addresses/AddressCardSkeleton";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
+import { PageHeader } from "@/components/account/PageHeader";
 
 export default function AddressesPage() {
   const t = useTranslations("address");
@@ -70,15 +71,18 @@ export default function AddressesPage() {
 
   return (
     <main className="container-app flex-1 py-10">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="section-title text-zinc-900 dark:text-zinc-100">{t("title")}</h1>
-        {!showForm && (
-          <button type="button" onClick={() => setShowForm(true)} className="btn-primary btn-sm">
-            <Plus className="h-4 w-4" />
-            {t("save")}
-          </button>
-        )}
-      </div>
+      <PageHeader
+        icon={MapPin}
+        title={t("title")}
+        action={
+          !showForm && (
+            <button type="button" onClick={() => setShowForm(true)} className="btn-primary btn-sm">
+              <Plus className="h-4 w-4" />
+              {t("save")}
+            </button>
+          )
+        }
+      />
 
       {showForm && (
         <div className="card mt-6 p-6">

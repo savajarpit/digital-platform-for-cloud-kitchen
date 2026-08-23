@@ -226,9 +226,19 @@ export class SubscriptionsRepository {
     });
   }
 
+  /**
+   * Excludes PENDING_PAYMENT — same "abandoned checkout" reasoning as
+   * findAllForTenantAdmin: a subscription only ever leaves PENDING_PAYMENT
+   * by turning ACTIVE on successful payment, so one still stuck there is a
+   * closed/failed checkout, not a real subscription to show the customer.
+   */
   findMySubscriptions(tenantId: string, userId: string) {
     return this.prisma.subscription.findMany({
-      where: { tenantId, userId },
+      where: {
+        tenantId,
+        userId,
+        status: { not: SubscriptionStatus.PENDING_PAYMENT },
+      },
       include: { plan: { select: { name: true, type: true } } },
       orderBy: { createdAt: 'desc' },
     });

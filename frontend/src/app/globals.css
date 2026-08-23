@@ -153,6 +153,14 @@
   --foreground: #ededed;
 }
 
+/* Safety net against accidental horizontal scroll (a stray wide flex row,
+   an unconstrained image, etc.) on mobile/tablet. `clip` (not `hidden`)
+   so it never turns html into a scroll container and break `sticky`
+   header/footer positioning down the tree. */
+html {
+  overflow-x: clip;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

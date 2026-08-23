@@ -8,6 +8,7 @@ import { MapPin, Package, User as UserIcon } from "lucide-react";
 import { ApiError, getMyProfile, updateMyProfile, type Profile } from "@/lib/api/users";
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { PageHeader } from "@/components/account/PageHeader";
 
 export default function ProfilePage() {
   const t = useTranslations("profile");
@@ -81,7 +82,7 @@ export default function ProfilePage() {
 
   return (
     <main className="container-app flex-1 py-10">
-      <h1 className="section-title text-zinc-900 dark:text-zinc-100">{t("title")}</h1>
+      <PageHeader icon={UserIcon} title={t("title")} />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <form onSubmit={handleSubmit} className="card flex flex-col gap-4 p-6 lg:col-span-2">

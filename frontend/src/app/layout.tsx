@@ -91,7 +91,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <StructuredData config={config} origin={origin} />
       </head>
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-dvh flex flex-col">
         <NextIntlClientProvider>
           <ToastProvider>
             <ConfirmProvider>

@@ -29,6 +29,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
+import { SUBSCRIPTION_STATUS_STYLES } from "@/lib/format/status-styles";
 
 const SLOT_LABELS: Record<string, string> = {
   BREAKFAST: "Breakfast",
@@ -162,14 +163,17 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
 
       <div className="card flex flex-wrap items-center justify-between gap-3 p-6">
         <div>
-          <div className="flex items-center gap-2 text-primary-600">
+          <div className="flex flex-wrap items-center gap-2 text-primary-600">
             <CalendarClock className="h-5 w-5" />
             <h1 className="font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">
               {subscription.planNameSnapshot}
             </h1>
+            <span className={`badge ${SUBSCRIPTION_STATUS_STYLES[subscription.status]}`}>
+              {subscription.status.replace("_", " ")}
+            </span>
           </div>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            {formatPriceFromPaise(subscription.priceInPaiseSnapshot)} · Status: {subscription.status}
+            {formatPriceFromPaise(subscription.priceInPaiseSnapshot)}
             {subscription.cycleEnd &&
               ` · Active through ${new Date(subscription.cycleEnd).toLocaleDateString()}`}
             {subscription.bankedDays > 0 && ` · ${subscription.bankedDays} day(s) banked`}

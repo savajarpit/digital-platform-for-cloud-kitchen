@@ -4,10 +4,11 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, Clock, FileText, MapPin, Package, Phone } from "lucide-react";
+import { CheckCircle2, ChevronLeft, Clock, FileText, MapPin, Package, Phone } from "lucide-react";
 import { ApiError, getOrder, type Order } from "@/lib/api/orders";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
+import { ORDER_STATUS_STYLES } from "@/lib/format/status-styles";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -57,6 +58,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <main className="container-app flex-1 py-16">
+      <Link
+        href="/orders"
+        className="mx-auto mb-4 flex max-w-xl items-center gap-1 text-sm text-zinc-500 hover:text-primary-600 dark:text-zinc-400"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        {t("viewOrders")}
+      </Link>
+
       <div className="card mx-auto max-w-xl p-8 text-center">
         {isPaid ? (
           <>
@@ -74,6 +83,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </h1>
           </>
         )}
+
+        <div className="mt-3 flex items-center justify-center gap-2">
+          <span className={`badge ${ORDER_STATUS_STYLES[order.status] ?? ORDER_STATUS_STYLES.CONFIRMED}`}>
+            {order.status.replace(/_/g, " ")}
+          </span>
+        </div>
 
         <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
           {t("orderNumber")}: <span className="font-mono">{order.orderNumber}</span>

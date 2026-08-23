@@ -7,7 +7,9 @@ import { useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight, FileText, Package } from "lucide-react";
 import { ApiError, listOrders, type Order, type OrdersMeta } from "@/lib/api/orders";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { ORDER_STATUS_STYLES } from "@/lib/format/status-styles";
 import { OrderCardSkeleton } from "@/components/orders/OrderCardSkeleton";
+import { PageHeader } from "@/components/account/PageHeader";
 
 export default function OrdersPage() {
   const t = useTranslations("order");
@@ -15,7 +17,7 @@ export default function OrdersPage() {
 
   return (
     <main className="container-app flex-1 py-10">
-      <h1 className="section-title text-zinc-900 dark:text-zinc-100">{t("viewOrders")}</h1>
+      <PageHeader icon={Package} title={t("viewOrders")} />
       {/* Keyed by page so switching pages remounts fresh (starts at null
           again) instead of a synchronous setState-to-null in an effect. */}
       <OrdersList key={page} page={page} onPageChange={setPage} />
@@ -96,7 +98,9 @@ function OrdersList({
               <p className="font-semibold text-zinc-900 dark:text-zinc-100">
                 {formatPriceFromPaise(order.totalInPaise)}
               </p>
-              <span className="badge mt-1 bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
+              <span
+                className={`badge mt-1 ${ORDER_STATUS_STYLES[order.status] ?? ORDER_STATUS_STYLES.CONFIRMED}`}
+              >
                 {order.status.replace(/_/g, " ")}
               </span>
             </div>

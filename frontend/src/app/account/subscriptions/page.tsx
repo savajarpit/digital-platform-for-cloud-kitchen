@@ -7,13 +7,8 @@ import { CalendarClock } from "lucide-react";
 import { ApiError, listMySubscriptions, type SubscriptionSummary } from "@/lib/api/subscriptions";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
-
-const STATUS_STYLES: Record<SubscriptionSummary["status"], string> = {
-  PENDING_PAYMENT: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
-  ACTIVE: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
-  EXPIRED: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500",
-  CANCELLED: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400",
-};
+import { SUBSCRIPTION_STATUS_STYLES } from "@/lib/format/status-styles";
+import { PageHeader } from "@/components/account/PageHeader";
 
 export default function MySubscriptionsPage() {
   const router = useRouter();
@@ -33,12 +28,7 @@ export default function MySubscriptionsPage() {
 
   return (
     <main className="container-app flex-1 py-10">
-      <div className="mb-6 flex items-center gap-2 text-primary-600">
-        <CalendarClock className="h-5 w-5" />
-        <h1 className="font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">
-          My Subscriptions
-        </h1>
-      </div>
+      <PageHeader icon={CalendarClock} title="My Subscriptions" />
 
       {!subscriptions ? (
         <div className="flex flex-col gap-3">
@@ -68,7 +58,7 @@ export default function MySubscriptionsPage() {
                   <span className="font-medium text-zinc-900 dark:text-zinc-100">
                     {sub.planNameSnapshot}
                   </span>
-                  <span className={`badge ${STATUS_STYLES[sub.status]}`}>
+                  <span className={`badge ${SUBSCRIPTION_STATUS_STYLES[sub.status]}`}>
                     {sub.status.replace("_", " ")}
                   </span>
                 </div>

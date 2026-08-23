@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Clock, FileText, MapPin, Phone, User } from "lucide-react";
 import { getAdminSubscription, type AdminSubscriptionDetail } from "@/lib/api/admin-subscriptions";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { MapLink } from "@/components/ui/MapLink";
 import { PlanDayBreakdown } from "@/components/admin/PlanDayBreakdown";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
@@ -111,11 +112,14 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
           {sub.address ? (
             <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-              <span>
-                {sub.address.line1}
-                {sub.address.line2 ? `, ${sub.address.line2}` : ""}, {sub.address.city}, {sub.address.state} —{" "}
-                {sub.address.pincode}
-              </span>
+              <div>
+                <span>
+                  {sub.address.line1}
+                  {sub.address.line2 ? `, ${sub.address.line2}` : ""}, {sub.address.city}, {sub.address.state} —{" "}
+                  {sub.address.pincode}
+                </span>
+                <MapLink lat={sub.address.lat} lng={sub.address.lng} className="mt-0.5 block text-xs" />
+              </div>
             </div>
           ) : (
             <p className="text-zinc-500 dark:text-zinc-400">No address on file.</p>

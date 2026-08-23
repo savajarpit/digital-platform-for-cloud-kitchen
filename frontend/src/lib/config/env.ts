@@ -9,3 +9,8 @@ export const PUBLIC_API_URL =
  * reachable at {slug}.{PLATFORM_ROOT_DOMAIN}. Must match the backend's
  * PLATFORM_ROOT_DOMAIN (see TenantResolverService). Undefined until set. */
 export const PLATFORM_ROOT_DOMAIN = process.env.NEXT_PUBLIC_PLATFORM_ROOT_DOMAIN;
+
+/** Needs the Maps JavaScript API + Places API enabled on the same key.
+ * Undefined until set — every map-picker component falls back to a plain
+ * manual-entry form instead of crashing when this is missing. */
+export const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;

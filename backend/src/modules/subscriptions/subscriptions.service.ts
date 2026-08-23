@@ -205,6 +205,8 @@ export class SubscriptionsService {
       customerEmail: order.user.email,
       planName: order.subscription?.planNameSnapshot ?? 'Subscription',
       address: `${order.address.line1}, ${order.address.city}`,
+      addressLat: order.address.lat,
+      addressLng: order.address.lng,
       deliverySlotName: order.deliverySlotName,
       deliveryWindowStart: order.deliveryWindowStart,
       deliveryWindowEnd: order.deliveryWindowEnd,

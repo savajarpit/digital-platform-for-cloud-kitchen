@@ -15,6 +15,7 @@ import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { MapLink } from "@/components/ui/MapLink";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -189,11 +190,14 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Delivery</h3>
             <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-              <span>
-                {order.address.line1}
-                {order.address.line2 ? `, ${order.address.line2}` : ""}, {order.address.city},{" "}
-                {order.address.state} — {order.address.pincode}
-              </span>
+              <div>
+                <span>
+                  {order.address.line1}
+                  {order.address.line2 ? `, ${order.address.line2}` : ""}, {order.address.city},{" "}
+                  {order.address.state} — {order.address.pincode}
+                </span>
+                <MapLink lat={order.address.lat} lng={order.address.lng} className="mt-0.5 block text-xs" />
+              </div>
             </div>
             <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
               <Phone className="h-4 w-4 shrink-0 text-primary-600" />

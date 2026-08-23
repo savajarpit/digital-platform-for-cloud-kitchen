@@ -97,7 +97,16 @@ export interface AdminSubscriptionDetail {
   plan: Plan;
   skips: SubscriptionSkip[];
   dayOverrides: SubscriptionDayOverride[];
-  address: { line1: string; line2: string | null; city: string; state: string; pincode: string; contactPhone: string } | null;
+  address: {
+    line1: string;
+    line2: string | null;
+    city: string;
+    state: string;
+    pincode: string;
+    contactPhone: string;
+    lat: number | null;
+    lng: number | null;
+  } | null;
   deliverySlot: { name: string; startTime: string; endTime: string } | null;
   user: { firstName: string; lastName: string | null; email: string; phone: string | null };
   invoice: SubscriptionInvoice | null;
@@ -145,6 +154,8 @@ export interface TodaysDeliveries {
     customerEmail: string;
     planName: string;
     address: string;
+    addressLat: number | null;
+    addressLng: number | null;
     deliverySlotName: string;
     deliveryWindowStart: string;
     deliveryWindowEnd: string;

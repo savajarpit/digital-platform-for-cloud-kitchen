@@ -26,6 +26,7 @@ import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
+import { LocationPickerMap } from "@/components/maps/LocationPickerMap";
 
 const paiseToRupees = (paise: number | null | undefined) =>
   paise === null || paise === undefined ? "" : String(paise / 100);
@@ -139,6 +140,14 @@ function GeoZoneForm({
         </p>
       )}
       <fieldset disabled={!canEdit} className="flex flex-col gap-4 disabled:opacity-70">
+        <LocationPickerMap
+          lat={form.kitchenLat === "" ? null : Number(form.kitchenLat)}
+          lng={form.kitchenLng === "" ? null : Number(form.kitchenLng)}
+          radiusMeters={form.deliveryRadiusMeters === "" ? undefined : Number(form.deliveryRadiusMeters)}
+          onChange={(lat, lng) =>
+            setForm((f) => ({ ...f, kitchenLat: String(lat), kitchenLng: String(lng) }))
+          }
+        />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">

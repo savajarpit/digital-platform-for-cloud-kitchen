@@ -45,6 +45,7 @@ import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { MapLink } from "@/components/ui/MapLink";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { PrepPlannerView } from "@/components/admin/PrepPlannerView";
@@ -973,7 +974,10 @@ function TodaysDeliveriesTab() {
                   {d.deliverySlotName} ({formatTime12h(d.deliveryWindowStart)}–{formatTime12h(d.deliveryWindowEnd)})
                 </span>
               </div>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">{d.planName} · {d.address}</p>
+              <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                <span>{d.planName} · {d.address}</span>
+                <MapLink lat={d.addressLat} lng={d.addressLng} />
+              </div>
               <p className="text-xs text-zinc-400">{d.meals.join(", ")}</p>
             </div>
           ))}

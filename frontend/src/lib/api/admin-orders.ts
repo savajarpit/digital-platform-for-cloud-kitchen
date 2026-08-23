@@ -17,6 +17,8 @@ export interface AdminOrderAddress {
   city: string;
   state: string;
   pincode: string;
+  lat: number | null;
+  lng: number | null;
 }
 
 export interface AdminOrder {

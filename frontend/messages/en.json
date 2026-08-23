@@ -81,6 +81,7 @@
   },
   "address": {
     "title": "Delivery Addresses",
+    "pickOnMap": "Pin your location",
     "label": "Label",
     "labelHint": "e.g. Home, Work",
     "contactPhone": "Contact phone",

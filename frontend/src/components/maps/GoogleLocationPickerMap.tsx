@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Autocomplete, Circle, GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { LocateFixed, Search } from "lucide-react";
 import { GOOGLE_MAPS_API_KEY } from "@/lib/config/env";
+import { extractGoogleAddressParts } from "@/lib/format/google-address";
 import type { LocationPickerMapProps } from "./LocationPickerMap";
 
 const LIBRARIES: "places"[] = ["places"];
@@ -29,8 +30,8 @@ export function GoogleLocationPickerMap({
   const mapRef = useRef<google.maps.Map | null>(null);
   const hasPin = lat != null && lng != null;
 
-  function moveTo(nextLat: number, nextLng: number) {
-    onChange(nextLat, nextLng);
+  function moveTo(nextLat: number, nextLng: number, hint?: Parameters<typeof onChange>[2]) {
+    onChange(nextLat, nextLng, hint);
     mapRef.current?.panTo({ lat: nextLat, lng: nextLng });
     mapRef.current?.setZoom(17);
   }
@@ -45,9 +46,16 @@ export function GoogleLocationPickerMap({
   }
 
   function handlePlaceChanged() {
-    const location = autocomplete?.getPlace()?.geometry?.location;
+    const place = autocomplete?.getPlace();
+    const location = place?.geometry?.location;
     if (!location) return;
-    moveTo(location.lat(), location.lng());
+    // Autocomplete already returns the full address breakdown — use it
+    // directly instead of a separate reverse-geocode call, and prefer the
+    // place's own name (e.g. a business/landmark) over its street address.
+    const hint = place.address_components
+      ? extractGoogleAddressParts(place.name, place.address_components)
+      : undefined;
+    moveTo(location.lat(), location.lng(), hint);
   }
 
   if (!GOOGLE_MAPS_API_KEY) {
@@ -78,7 +86,10 @@ export function GoogleLocationPickerMap({
   }
 
   return (
-    <div className="flex flex-col gap-2">
+    // `isolate` sandboxes the autocomplete dropdown's stacking below this
+    // box, so it never competes with page-level chrome like the sticky
+    // header once this component scrolls under it.
+    <div className="isolate flex flex-col gap-2">
       <div className="flex flex-wrap gap-2">
         <div className="relative min-w-48 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 z-10 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />

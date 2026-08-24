@@ -60,21 +60,19 @@ export class CreateAddressDto {
   @MaxLength(200)
   landmark?: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: 23.0225,
-    description: 'Captured from the map picker, if used',
+    description: 'Captured from the map picker — required on creation',
   })
-  @IsOptional()
   @IsLatitude()
-  lat?: number;
+  lat: number;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: 72.5714,
-    description: 'Captured from the map picker, if used',
+    description: 'Captured from the map picker — required on creation',
   })
-  @IsOptional()
   @IsLongitude()
-  lng?: number;
+  lng: number;
 
   @ApiPropertyOptional({ example: false })
   @IsOptional()

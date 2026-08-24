@@ -1,73 +1,39 @@
 "use client";
 
 import { useState } from "react";
-import { LocationPickerMap } from "@/components/maps/LocationPickerMap";
+import { LocationPickerMap, type AddressHint } from "@/components/maps/LocationPickerMap";
+import { extractGoogleAddressParts } from "@/lib/format/google-address";
+import { extractNominatimAddressParts } from "@/lib/format/nominatim-address";
 import { MAPS_PROVIDER } from "@/lib/config/env";
 
-export interface PickedAddress {
+export interface PickedAddress extends AddressHint {
   lat: number;
   lng: number;
-  line1?: string;
-  city?: string;
-  state?: string;
-  pincode?: string;
 }
 
-function extractGoogleAddressParts(
-  components: google.maps.GeocoderAddressComponent[],
-): Omit<PickedAddress, "lat" | "lng"> {
-  const get = (type: string) => components.find((c) => c.types.includes(type))?.long_name;
-  const line1 =
-    [get("street_number"), get("route")].filter(Boolean).join(" ") ||
-    get("sublocality_level_1") ||
-    get("sublocality");
-  const city = get("locality") || get("administrative_area_level_2") || get("sublocality_level_1");
-  const state = get("administrative_area_level_1");
-  const pincode = get("postal_code");
-  return { line1, city, state, pincode };
-}
-
-interface NominatimAddress {
-  road?: string;
-  house_number?: string;
-  suburb?: string;
-  neighbourhood?: string;
-  city?: string;
-  town?: string;
-  village?: string;
-  county?: string;
-  state?: string;
-  postcode?: string;
-}
-
-function extractNominatimAddressParts(address: NominatimAddress): Omit<PickedAddress, "lat" | "lng"> {
-  const line1 =
-    [address.house_number, address.road].filter(Boolean).join(" ") ||
-    address.suburb ||
-    address.neighbourhood;
-  const city = address.city || address.town || address.village || address.county;
-  return { line1, city, state: address.state, pincode: address.postcode };
-}
-
-async function reverseGeocodeGoogle(lat: number, lng: number): Promise<Omit<PickedAddress, "lat" | "lng">> {
+async function reverseGeocodeGoogle(lat: number, lng: number): Promise<AddressHint> {
   return new Promise((resolve) => {
     if (typeof google === "undefined") {
       resolve({});
       return;
     }
     new google.maps.Geocoder().geocode({ location: { lat, lng } }, (results, status) => {
-      resolve(status === "OK" && results?.[0] ? extractGoogleAddressParts(results[0].address_components) : {});
+      resolve(
+        status === "OK" && results?.[0]
+          ? extractGoogleAddressParts(undefined, results[0].address_components)
+          : {},
+      );
     });
   });
 }
 
-async function reverseGeocodeNominatim(lat: number, lng: number): Promise<Omit<PickedAddress, "lat" | "lng">> {
+async function reverseGeocodeNominatim(lat: number, lng: number): Promise<AddressHint> {
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
     );
-    const data = (await res.json()) as { address?: NominatimAddress };
-    return data.address ? extractNominatimAddressParts(data.address) : {};
+    const data = (await res.json()) as { name?: string; address?: Parameters<typeof extractNominatimAddressParts>[1] };
+    return extractNominatimAddressParts(data.name, data.address);
   } catch {
     return {};
   }
@@ -76,7 +42,9 @@ async function reverseGeocodeNominatim(lat: number, lng: number): Promise<Omit<P
 /** Wraps {@link LocationPickerMap} with reverse-geocoding — every pin
  * move/search/current-location resolves the real street/city/state/pincode
  * at that point (Blinkit/Zomato-style "confirm your location" flow), so the
- * text fields auto-fill but stay editable rather than being locked. Uses
+ * text fields auto-fill but stay editable rather than being locked. A
+ * search-result pick already carries its own address breakdown (`hint`) —
+ * used directly, skipping a redundant reverse-geocode round trip. Uses
  * whichever provider `NEXT_PUBLIC_MAPS_PROVIDER` selects. */
 export function AddressLocationPicker({
   lat,
@@ -89,7 +57,11 @@ export function AddressLocationPicker({
 }) {
   const [geocoding, setGeocoding] = useState(false);
 
-  async function handleChange(nextLat: number, nextLng: number) {
+  async function handleChange(nextLat: number, nextLng: number, hint?: AddressHint) {
+    if (hint) {
+      onPicked({ lat: nextLat, lng: nextLng, ...hint });
+      return;
+    }
     setGeocoding(true);
     const parts =
       MAPS_PROVIDER === "google"

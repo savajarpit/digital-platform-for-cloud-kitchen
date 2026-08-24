@@ -48,6 +48,10 @@ export function AddressForm({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (lat == null || lng == null) {
+      showToast(t("pickOnMapRequired"), "error");
+      return;
+    }
     const form = new FormData(event.currentTarget);
     const input: AddressInput = {
       label: label.trim() || undefined,
@@ -81,9 +85,10 @@ export function AddressForm({
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          {t("pickOnMap")}
+          {t("pickOnMap")} <span className="text-red-500">*</span>
         </label>
         <AddressLocationPicker lat={lat} lng={lng} onPicked={handleLocationPicked} />
+        {lat == null && <p className="text-xs text-zinc-400">{t("pickOnMapHint")}</p>}
       </div>
 
       <div className="flex flex-col gap-1.5">

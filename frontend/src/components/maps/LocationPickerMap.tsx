@@ -3,10 +3,23 @@
 import dynamic from "next/dynamic";
 import { MAPS_PROVIDER } from "@/lib/config/env";
 
+/** Address parts a provider can hand back alongside lat/lng when it already
+ * knows them (a search-result pick) — lets the caller skip a redundant
+ * reverse-geocode call and avoids losing a specific place name (e.g. "Madhuvan
+ * Green Party Plot") to a reverse lookup's more generic area match. */
+export interface AddressHint {
+  line1?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+}
+
 export interface LocationPickerMapProps {
   lat: number | null;
   lng: number | null;
-  onChange: (lat: number, lng: number) => void;
+  /** `hint` is only ever passed for a search-result pick — click/drag/current-location
+   * genuinely have no address data beyond the coordinate, so the caller reverse-geocodes those itself. */
+  onChange: (lat: number, lng: number, hint?: AddressHint) => void;
   /** Draws a translucent circle around the pin — used for the kitchen's delivery radius. */
   radiusMeters?: number;
   height?: number;

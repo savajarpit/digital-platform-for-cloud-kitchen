@@ -6,6 +6,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { LocateFixed, Search } from "lucide-react";
 import type { LocationPickerMapProps } from "./LocationPickerMap";
+import { extractNominatimAddressParts, type NominatimAddress } from "@/lib/format/nominatim-address";
 
 // Leaflet's default marker icon references relative image paths that never
 // resolve under a bundler (Turbopack/webpack) — point them at the CDN copies
@@ -24,8 +25,12 @@ const DEFAULT_CENTER: [number, number] = [20.5937, 78.9629];
 
 interface NominatimResult {
   display_name: string;
+  /** The specific place/POI name (e.g. "Madhuvan Green Party Plot") — present
+   * whenever the result is a named feature, not just a bare road/area. */
+  name?: string;
   lat: string;
   lon: string;
+  address?: NominatimAddress;
 }
 
 function ClickHandler({ onChange }: { onChange: (lat: number, lng: number) => void }) {
@@ -59,15 +64,32 @@ export function OsmLocationPickerMap({
   height = 320,
 }: LocationPickerMapProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<NominatimResult[]>([]);
+  // Tagged with the query they belong to, so a stale result set from a
+  // previous search term is never mistaken for the current one — avoids
+  // needing an extra effect just to clear state when `query` changes.
+  const [searched, setSearched] = useState<{
+    query: string;
+    results: NominatimResult[] | null;
+    error: boolean;
+  }>({ query: "", results: null, error: false });
   const [searching, setSearching] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set right before setQuery() in handlePickResult — lets that one query
+  // change skip re-searching, since it's a selection being written back
+  // into the box, not the user typing a new term to look up.
+  const skipNextSearchRef = useRef(false);
   const hasPin = lat != null && lng != null;
 
   const queryTooShort = query.trim().length < 3;
+  const results = searched.query === query ? searched.results : null;
+  const searchError = searched.query === query && searched.error;
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (skipNextSearchRef.current) {
+      skipNextSearchRef.current = false;
+      return;
+    }
     if (queryTooShort) return;
     // Nominatim's usage policy caps free public use at ~1 request/sec —
     // debounce well past that instead of searching on every keystroke.
@@ -75,12 +97,13 @@ export function OsmLocationPickerMap({
       setSearching(true);
       try {
         const res = await fetch(
-          `https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=in&q=${encodeURIComponent(query)}`,
+          `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=in&q=${encodeURIComponent(query)}`,
         );
+        if (!res.ok) throw new Error(`Nominatim search failed: ${res.status}`);
         const data = (await res.json()) as NominatimResult[];
-        setResults(data);
+        setSearched({ query, results: data, error: false });
       } catch {
-        setResults([]);
+        setSearched({ query, results: null, error: true });
       } finally {
         setSearching(false);
       }
@@ -100,14 +123,32 @@ export function OsmLocationPickerMap({
   }
 
   function handlePickResult(result: NominatimResult) {
-    onChange(Number(result.lat), Number(result.lon));
+    // Use the search result's own name/address breakdown directly instead of
+    // a separate reverse-geocode call — a reverse lookup on a park/POI often
+    // only resolves the surrounding suburb, losing the actual place name.
+    onChange(
+      Number(result.lat),
+      Number(result.lon),
+      extractNominatimAddressParts(result.name, result.address),
+    );
+    // Changing `query` here is what hides the dropdown — `results` is
+    // derived from whether `searched.query` still matches `query`, and a
+    // display name is never the same string as what was typed to find it.
+    // Also skip the search effect this one time: without it, writing the
+    // long formatted display name back into the box would re-trigger a
+    // search for that whole string, which Nominatim can't match — showing
+    // "No matches" right after a successful pick.
+    skipNextSearchRef.current = true;
     setQuery(result.display_name);
-    setResults([]);
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
+    // `isolate` sandboxes the z-[2000] below inside this box — it only needs
+    // to beat Leaflet's own controls (z-index up to 1000), never the page's
+    // sticky header/nav; without this, z-[2000] would escape and render on
+    // top of that header too once this component scrolls under it.
+    <div className="isolate flex flex-col gap-2">
+      <div className="relative z-[2000] flex flex-wrap gap-2">
         <div className="relative min-w-48 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 z-10 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
           <input
@@ -117,17 +158,26 @@ export function OsmLocationPickerMap({
             placeholder="Search for an address"
             className="input w-full pl-8"
           />
-          {!queryTooShort && (results.length > 0 || searching) && (
-            <div className="absolute top-full right-0 left-0 z-20 mt-1 max-h-56 overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
+          {!queryTooShort && !searching && searchError && (
+            <div className="absolute top-full right-0 left-0 z-[2000] mt-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 shadow-lg dark:border-red-900 dark:bg-red-950 dark:text-red-400">
+              Couldn&apos;t search right now — check your connection and try again.
+            </div>
+          )}
+          {!queryTooShort && !searchError && (searching || results !== null) && (
+            <div className="absolute top-full right-0 left-0 z-[2000] mt-1 max-h-80 overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
               {searching ? (
                 <p className="px-3 py-2 text-xs text-zinc-400">Searching…</p>
+              ) : results !== null && results.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-zinc-400">
+                  No matches — try a shorter or more general search (e.g. just the area name).
+                </p>
               ) : (
-                results.map((r, i) => (
+                (results ?? []).map((r, i) => (
                   <button
                     key={i}
                     type="button"
                     onClick={() => handlePickResult(r)}
-                    className="block w-full truncate px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    className="block w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   >
                     {r.display_name}
                   </button>

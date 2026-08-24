@@ -84,35 +84,47 @@ export class AddressesService {
     await this.addressesRepo.delete(id);
   }
 
+  /**
+   * OR, not override: geo-radius and the pincode list are two independent
+   * ways to be serviceable, not a priority chain — a location only needs to
+   * match one. Lets a tenant cover their main radius by geo-distance while
+   * adding extra pincode "pockets" further out (or vice versa), instead of
+   * geo-radius silently shadowing every pincode entry once it's configured.
+   */
   async checkServiceability(
     tenantId: string,
     query: ServiceabilityQuery,
   ): Promise<ServiceabilityResult> {
     const geoResult = await this.checkGeoServiceability(tenantId, query);
-    if (geoResult) return geoResult;
+    if (geoResult?.serviceable) return geoResult;
 
-    if (!query.pincode) return { serviceable: false };
+    if (query.pincode) {
+      const record = await this.addressesRepo.findServiceablePincode(
+        tenantId,
+        query.pincode,
+      );
+      if (record?.isActive) {
+        return {
+          serviceable: true,
+          deliveryFeeInPaise: record.deliveryFee,
+          minOrderAmountInPaise: record.minOrderAmount,
+          freeDeliveryAboveAmountInPaise:
+            record.freeDeliveryAboveAmount ?? undefined,
+        };
+      }
+    }
 
-    const record = await this.addressesRepo.findServiceablePincode(
-      tenantId,
-      query.pincode,
-    );
-    if (!record || !record.isActive) return { serviceable: false };
-    return {
-      serviceable: true,
-      deliveryFeeInPaise: record.deliveryFee,
-      minOrderAmountInPaise: record.minOrderAmount,
-      freeDeliveryAboveAmountInPaise:
-        record.freeDeliveryAboveAmount ?? undefined,
-    };
+    return geoResult ?? { serviceable: false };
   }
 
   /**
-   * Returns a result only when the tenant has geo-radius mode fully
-   * configured (kitchen location + radius) AND the caller supplied a
-   * lat/lng — otherwise returns null so checkServiceability falls back to
-   * the pincode table. This is the "geo primary, pincode fallback" mode:
-   * lets tenants migrate to real geo-radius serviceability gradually.
+   * Returns a result only when the tenant has at least one active kitchen
+   * zone AND the caller supplied a lat/lng — otherwise returns null so
+   * checkServiceability falls back to the pincode table. A tenant can have
+   * several outlets; a location is serviceable if it falls within ANY
+   * active zone's radius — when more than one matches, the nearest zone's
+   * fee/min-order/free-delivery terms win, since that's the outlet that
+   * would realistically fulfill the order.
    */
   private async checkGeoServiceability(
     tenantId: string,
@@ -120,31 +132,34 @@ export class AddressesService {
   ): Promise<ServiceabilityResult | null> {
     if (query.lat === undefined || query.lng === undefined) return null;
 
-    const geo = await this.addressesRepo.findKitchenGeoSettings(tenantId);
-    if (
-      !geo ||
-      geo.kitchenLat === null ||
-      geo.kitchenLng === null ||
-      geo.deliveryRadiusMeters === null
-    ) {
-      return null;
+    const zones = await this.addressesRepo.findActiveKitchenZones(tenantId);
+    if (zones.length === 0) return null;
+
+    let nearestMatch: {
+      zone: (typeof zones)[number];
+      distanceMeters: number;
+    } | null = null;
+    for (const zone of zones) {
+      const distanceMeters = haversineDistanceMeters(
+        zone.lat,
+        zone.lng,
+        query.lat,
+        query.lng,
+      );
+      if (distanceMeters > zone.radiusMeters) continue;
+      if (!nearestMatch || distanceMeters < nearestMatch.distanceMeters) {
+        nearestMatch = { zone, distanceMeters };
+      }
     }
 
-    const distanceMeters = haversineDistanceMeters(
-      geo.kitchenLat,
-      geo.kitchenLng,
-      query.lat,
-      query.lng,
-    );
-    if (distanceMeters > geo.deliveryRadiusMeters) {
-      return { serviceable: false };
-    }
+    if (!nearestMatch) return { serviceable: false };
 
+    const { zone } = nearestMatch;
     return {
       serviceable: true,
-      deliveryFeeInPaise: geo.deliveryFee ?? 0,
-      minOrderAmountInPaise: geo.minOrderAmount ?? 0,
-      freeDeliveryAboveAmountInPaise: geo.freeDeliveryAboveAmount ?? undefined,
+      deliveryFeeInPaise: zone.deliveryFee,
+      minOrderAmountInPaise: zone.minOrderAmount,
+      freeDeliveryAboveAmountInPaise: zone.freeDeliveryAboveAmount ?? undefined,
     };
   }
 

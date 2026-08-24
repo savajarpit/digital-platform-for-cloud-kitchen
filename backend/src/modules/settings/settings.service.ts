@@ -10,6 +10,7 @@ import {
   DeliverySlot,
   HomePageContent,
   InstantDeliverySettings,
+  KitchenZone,
   NotificationSettings,
   OrderAcceptanceSettings,
   PaymentSettings,
@@ -28,6 +29,8 @@ import { UpdateInstantDeliverySettingsDto } from './dto/update-instant-delivery-
 import { UpdateDeliveryZonesDto } from './dto/update-delivery-zones.dto';
 import { CreateServiceablePincodeDto } from './dto/create-serviceable-pincode.dto';
 import { UpdateServiceablePincodeDto } from './dto/update-serviceable-pincode.dto';
+import { CreateKitchenZoneDto } from './dto/create-kitchen-zone.dto';
+import { UpdateKitchenZoneDto } from './dto/update-kitchen-zone.dto';
 import { CreateDeliverySlotDto } from './dto/create-delivery-slot.dto';
 import { UpdateDeliverySlotDto } from './dto/update-delivery-slot.dto';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
@@ -87,8 +90,7 @@ export class SettingsService {
           : undefined,
       kitchenLat: profile.kitchenLat ?? undefined,
       kitchenLng: profile.kitchenLng ?? undefined,
-      searchConsoleVerification:
-        profile.searchConsoleVerification ?? undefined,
+      searchConsoleVerification: profile.searchConsoleVerification ?? undefined,
       maxAdvanceOrderDays: profile.maxAdvanceOrderDays,
       showReviewsOnHomepage: profile.showReviewsOnHomepage,
       heroTagline: homePageContent?.heroTagline ?? heroDefaults.heroTagline,
@@ -96,16 +98,19 @@ export class SettingsService {
       heroSubtitle: homePageContent?.heroSubtitle ?? heroDefaults.heroSubtitle,
       heroImageUrls: homePageContent?.heroImageUrls ?? [],
       reviewsSectionTitle:
-        homePageContent?.reviewsSectionTitle ?? heroDefaults.reviewsSectionTitle,
+        homePageContent?.reviewsSectionTitle ??
+        heroDefaults.reviewsSectionTitle,
       reviewsSectionDescription:
         homePageContent?.reviewsSectionDescription ??
         heroDefaults.reviewsSectionDescription,
       ctaEnabled: homePageContent?.ctaEnabled ?? heroDefaults.ctaEnabled,
       ctaTitle: homePageContent?.ctaTitle ?? heroDefaults.ctaTitle,
-      ctaDescription: homePageContent?.ctaDescription ?? heroDefaults.ctaDescription,
+      ctaDescription:
+        homePageContent?.ctaDescription ?? heroDefaults.ctaDescription,
       ctaPrimaryLabel:
         homePageContent?.ctaPrimaryLabel ?? heroDefaults.ctaPrimaryLabel,
-      ctaPrimaryLink: homePageContent?.ctaPrimaryLink ?? heroDefaults.ctaPrimaryLink,
+      ctaPrimaryLink:
+        homePageContent?.ctaPrimaryLink ?? heroDefaults.ctaPrimaryLink,
       ctaSecondaryLabel:
         homePageContent?.ctaSecondaryLabel ?? heroDefaults.ctaSecondaryLabel,
       ctaSecondaryLink:
@@ -261,6 +266,33 @@ export class SettingsService {
     );
     if (!existing) throw new NotFoundException('Serviceable pincode not found');
     await this.settingsRepo.deleteServiceablePincode(id);
+  }
+
+  getKitchenZones(tenantId: string): Promise<KitchenZone[]> {
+    return this.settingsRepo.findAllKitchenZones(tenantId);
+  }
+
+  createKitchenZone(
+    tenantId: string,
+    dto: CreateKitchenZoneDto,
+  ): Promise<KitchenZone> {
+    return this.settingsRepo.createKitchenZone(tenantId, dto);
+  }
+
+  async updateKitchenZone(
+    tenantId: string,
+    id: string,
+    dto: UpdateKitchenZoneDto,
+  ): Promise<KitchenZone> {
+    const existing = await this.settingsRepo.findKitchenZoneById(tenantId, id);
+    if (!existing) throw new NotFoundException('Kitchen zone not found');
+    return this.settingsRepo.updateKitchenZone(id, dto);
+  }
+
+  async deleteKitchenZone(tenantId: string, id: string): Promise<void> {
+    const existing = await this.settingsRepo.findKitchenZoneById(tenantId, id);
+    if (!existing) throw new NotFoundException('Kitchen zone not found');
+    await this.settingsRepo.deleteKitchenZone(id);
   }
 
   getAllDeliverySlots(tenantId: string): Promise<DeliverySlot[]> {

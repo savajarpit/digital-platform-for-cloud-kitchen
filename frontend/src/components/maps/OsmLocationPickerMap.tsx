@@ -22,6 +22,12 @@ const markerIcon = new L.Icon({
 });
 
 const DEFAULT_CENTER: [number, number] = [20.5937, 78.9629];
+// Locks panning to India (incl. J&K, NE states, Andaman/Nicobar) —
+// `maxBoundsViscosity={1.0}` makes the edge solid instead of elastic.
+const INDIA_BOUNDS: [[number, number], [number, number]] = [
+  [6.0, 68.0],
+  [37.6, 97.5],
+];
 
 interface NominatimResult {
   display_name: string;
@@ -194,6 +200,9 @@ export function OsmLocationPickerMap({
       <MapContainer
         center={hasPin ? [lat, lng] : DEFAULT_CENTER}
         zoom={hasPin ? 16 : 5}
+        minZoom={5}
+        maxBounds={INDIA_BOUNDS}
+        maxBoundsViscosity={1.0}
         style={{ height, width: "100%", borderRadius: "0.75rem", overflow: "hidden" }}
       >
         <TileLayer

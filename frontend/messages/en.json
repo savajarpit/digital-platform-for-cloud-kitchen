@@ -84,6 +84,8 @@
     "pickOnMap": "Pin your location",
     "pickOnMapHint": "Search, use your current location, or tap the map to set an exact delivery point.",
     "pickOnMapRequired": "Please pin your location on the map before saving this address.",
+    "checkingServiceability": "Checking if we deliver here…",
+    "notServiceableError": "Sorry, we don't currently deliver to this location.",
     "label": "Label",
     "labelHint": "e.g. Home, Work",
     "contactPhone": "Contact phone",

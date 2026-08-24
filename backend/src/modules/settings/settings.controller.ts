@@ -33,6 +33,8 @@ import { UpdateInstantDeliverySettingsDto } from './dto/update-instant-delivery-
 import { UpdateDeliveryZonesDto } from './dto/update-delivery-zones.dto';
 import { CreateServiceablePincodeDto } from './dto/create-serviceable-pincode.dto';
 import { UpdateServiceablePincodeDto } from './dto/update-serviceable-pincode.dto';
+import { CreateKitchenZoneDto } from './dto/create-kitchen-zone.dto';
+import { UpdateKitchenZoneDto } from './dto/update-kitchen-zone.dto';
 import { CreateDeliverySlotDto } from './dto/create-delivery-slot.dto';
 import { UpdateDeliverySlotDto } from './dto/update-delivery-slot.dto';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
@@ -211,7 +213,7 @@ export class SettingsController {
   @ApiBearerAuth('access-token')
   @ResponseMessage('Delivery zone settings updated successfully')
   @ApiOperation({
-    summary: 'Admin: update kitchen location/radius/fees/advance-order window',
+    summary: 'Admin: update the max-advance-order-days delivery window',
   })
   updateDeliveryZones(
     @CurrentTenantId() tenantId: string,
@@ -267,6 +269,55 @@ export class SettingsController {
     @Param('id') id: string,
   ) {
     await this.settingsService.deleteServiceablePincode(tenantId, id);
+  }
+
+  @Get('kitchen-zones')
+  @Roles(...ADMIN_ROLES)
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Kitchen zones retrieved successfully')
+  @ApiOperation({ summary: 'Admin: list kitchen/outlet zones' })
+  getKitchenZones(@CurrentTenantId() tenantId: string) {
+    return this.settingsService.getKitchenZones(tenantId);
+  }
+
+  @Post('kitchen-zones')
+  @Roles(...ADMIN_ROLES)
+  @RequirePermission('settings.delivery-zones.edit')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Kitchen zone created successfully')
+  @ApiOperation({ summary: 'Admin: add a kitchen/outlet zone' })
+  createKitchenZone(
+    @CurrentTenantId() tenantId: string,
+    @Body() dto: CreateKitchenZoneDto,
+  ) {
+    return this.settingsService.createKitchenZone(tenantId, dto);
+  }
+
+  @Patch('kitchen-zones/:id')
+  @Roles(...ADMIN_ROLES)
+  @RequirePermission('settings.delivery-zones.edit')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Kitchen zone updated successfully')
+  @ApiOperation({ summary: 'Admin: update a kitchen/outlet zone' })
+  updateKitchenZone(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: UpdateKitchenZoneDto,
+  ) {
+    return this.settingsService.updateKitchenZone(tenantId, id, dto);
+  }
+
+  @Delete('kitchen-zones/:id')
+  @Roles(...ADMIN_ROLES)
+  @RequirePermission('settings.delivery-zones.edit')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Admin: remove a kitchen/outlet zone' })
+  async deleteKitchenZone(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    await this.settingsService.deleteKitchenZone(tenantId, id);
   }
 
   @Get('delivery-slots/admin')

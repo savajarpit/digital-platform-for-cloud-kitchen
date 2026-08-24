@@ -1,15 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
-import { Address, Prisma, ServiceablePincode } from '../../generated/prisma';
-
-export interface KitchenGeoSettings {
-  kitchenLat: number | null;
-  kitchenLng: number | null;
-  deliveryRadiusMeters: number | null;
-  deliveryFee: number | null;
-  minOrderAmount: number | null;
-  freeDeliveryAboveAmount: number | null;
-}
+import {
+  Address,
+  KitchenZone,
+  Prisma,
+  ServiceablePincode,
+} from '../../generated/prisma';
 
 @Injectable()
 export class AddressesRepository {
@@ -74,17 +70,11 @@ export class AddressesRepository {
     });
   }
 
-  findKitchenGeoSettings(tenantId: string): Promise<KitchenGeoSettings | null> {
-    return this.prisma.businessProfile.findUnique({
-      where: { tenantId },
-      select: {
-        kitchenLat: true,
-        kitchenLng: true,
-        deliveryRadiusMeters: true,
-        deliveryFee: true,
-        minOrderAmount: true,
-        freeDeliveryAboveAmount: true,
-      },
+  /** A tenant may have several outlets — a location is serviceable if it
+   * falls within ANY active zone's radius (nearest match wins on fee). */
+  findActiveKitchenZones(tenantId: string): Promise<KitchenZone[]> {
+    return this.prisma.kitchenZone.findMany({
+      where: { tenantId, isActive: true },
     });
   }
 }

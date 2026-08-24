@@ -156,15 +156,11 @@ export function updateInstantDeliverySettings(
   });
 }
 
-// ── Delivery zones (kitchen geo, fees, advance window) ────────
+// ── Delivery window ─────────────────────────────────────────────
+// Kitchen location/radius/fees moved to the kitchen-zone CRUD below
+// (multi-outlet support) — this now only carries the advance-order window.
 
 export interface UpdateDeliveryZonesInput {
-  kitchenLat?: number;
-  kitchenLng?: number;
-  deliveryRadiusMeters?: number;
-  deliveryFee?: number;
-  minOrderAmount?: number;
-  freeDeliveryAboveAmount?: number;
   maxAdvanceOrderDays?: number;
 }
 
@@ -175,6 +171,56 @@ export function updateDeliveryZones(
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+// ── Kitchen zones (multi-outlet geo-radius serviceability) ─────
+
+export interface KitchenZone {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  radiusMeters: number;
+  deliveryFee: number;
+  minOrderAmount: number;
+  freeDeliveryAboveAmount: number | null;
+  isActive: boolean;
+}
+
+export interface KitchenZoneInput {
+  name: string;
+  lat: number;
+  lng: number;
+  radiusMeters: number;
+  deliveryFee?: number;
+  minOrderAmount?: number;
+  freeDeliveryAboveAmount?: number;
+  isActive?: boolean;
+}
+
+export function listKitchenZones(): Promise<KitchenZone[]> {
+  return proxyFetch<KitchenZone[]>("/settings/kitchen-zones");
+}
+
+export function createKitchenZone(input: KitchenZoneInput): Promise<KitchenZone> {
+  return proxyFetch<KitchenZone>("/settings/kitchen-zones", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateKitchenZone(
+  id: string,
+  input: Partial<KitchenZoneInput>,
+): Promise<KitchenZone> {
+  return proxyFetch<KitchenZone>(`/settings/kitchen-zones/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteKitchenZone(id: string): Promise<void> {
+  return proxyFetch<void>(`/settings/kitchen-zones/${id}`, { method: "DELETE" });
 }
 
 // ── Serviceable pincodes ───────────────────────────────────────

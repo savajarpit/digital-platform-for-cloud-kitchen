@@ -5,6 +5,7 @@ import {
   DeliverySlot,
   HomePageContent,
   InstantDeliverySettings,
+  KitchenZone,
   NotificationSettings,
   OrderAcceptanceSettings,
   PaymentSettings,
@@ -187,5 +188,37 @@ export class SettingsRepository {
 
   deleteServiceablePincode(id: string): Promise<ServiceablePincode> {
     return this.prisma.serviceablePincode.delete({ where: { id } });
+  }
+
+  findAllKitchenZones(tenantId: string): Promise<KitchenZone[]> {
+    return this.prisma.kitchenZone.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  findKitchenZoneById(
+    tenantId: string,
+    id: string,
+  ): Promise<KitchenZone | null> {
+    return this.prisma.kitchenZone.findFirst({ where: { id, tenantId } });
+  }
+
+  createKitchenZone(
+    tenantId: string,
+    data: Omit<Prisma.KitchenZoneUncheckedCreateInput, 'tenantId'>,
+  ): Promise<KitchenZone> {
+    return this.prisma.kitchenZone.create({ data: { ...data, tenantId } });
+  }
+
+  updateKitchenZone(
+    id: string,
+    data: Prisma.KitchenZoneUncheckedUpdateInput,
+  ): Promise<KitchenZone> {
+    return this.prisma.kitchenZone.update({ where: { id }, data });
+  }
+
+  deleteKitchenZone(id: string): Promise<KitchenZone> {
+    return this.prisma.kitchenZone.delete({ where: { id } });
   }
 }

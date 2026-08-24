@@ -11,6 +11,19 @@ const LIBRARIES: "places"[] = ["places"];
 // India's rough centroid — only used as the map's starting view when no
 // location has been picked yet.
 const DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 };
+// Locks panning to India (incl. J&K, NE states, Andaman/Nicobar) and biases/
+// restricts Autocomplete predictions the same way.
+const INDIA_BOUNDS: google.maps.LatLngBoundsLiteral = {
+  south: 6.0,
+  west: 68.0,
+  north: 37.6,
+  east: 97.5,
+};
+const AUTOCOMPLETE_OPTIONS: google.maps.places.AutocompleteOptions = {
+  componentRestrictions: { country: "in" },
+  bounds: INDIA_BOUNDS,
+  strictBounds: false,
+};
 
 /** Search box + draggable pin + "use my current location", backed by the
  * Maps JavaScript API + Places API. Falls back to a plain notice (never a
@@ -93,7 +106,11 @@ export function GoogleLocationPickerMap({
       <div className="flex flex-wrap gap-2">
         <div className="relative min-w-48 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 z-10 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-          <Autocomplete onLoad={setAutocomplete} onPlaceChanged={handlePlaceChanged}>
+          <Autocomplete
+            onLoad={setAutocomplete}
+            onPlaceChanged={handlePlaceChanged}
+            options={AUTOCOMPLETE_OPTIONS}
+          >
             <input type="text" placeholder="Search for an address" className="input w-full pl-8" />
           </Autocomplete>
         </div>
@@ -112,7 +129,13 @@ export function GoogleLocationPickerMap({
         onClick={(e) => {
           if (e.latLng) onChange(e.latLng.lat(), e.latLng.lng());
         }}
-        options={{ streetViewControl: false, mapTypeControl: false, fullscreenControl: false }}
+        options={{
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+          restriction: { latLngBounds: INDIA_BOUNDS, strictBounds: true },
+          minZoom: 5,
+        }}
       >
         {hasPin && (
           <Marker

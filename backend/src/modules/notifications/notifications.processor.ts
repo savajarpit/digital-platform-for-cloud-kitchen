@@ -2,6 +2,7 @@ import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
 import type { Job } from 'bull';
 import { Logger } from '@nestjs/common';
 import { NotificationsService } from './notifications.service';
+import { buildGoogleMapsLink } from './templates/email/order-confirmation-customer.template';
 import { NotificationLogsRepository } from './notification-logs.repository';
 import { OrdersRepository } from '../orders/orders.repository';
 import { SettingsRepository } from '../settings/settings.repository';
@@ -51,6 +52,20 @@ export class NotificationsProcessor {
           name: item.nameSnapshot,
           quantity: item.quantity,
         })),
+        deliveryAddress: [
+          order.address.line1,
+          order.address.line2,
+          order.address.city,
+          order.address.state,
+          order.address.pincode,
+        ]
+          .filter(Boolean)
+          .join(', '),
+        deliveryContactPhone: order.address.contactPhone,
+        mapLink:
+          order.address.lat != null && order.address.lng != null
+            ? buildGoogleMapsLink(order.address.lat, order.address.lng)
+            : undefined,
       },
     );
 

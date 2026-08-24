@@ -4,10 +4,12 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   ApiError,
+  checkServiceability,
   createAddress,
   updateAddress,
   type Address,
   type AddressInput,
+  type ServiceabilityResult,
 } from "@/lib/api/addresses";
 import { useToast } from "@/context/ToastContext";
 import { PhoneInput } from "@/components/ui/PhoneInput";
@@ -35,21 +37,37 @@ export function AddressForm({
   const [city, setCity] = useState(address?.city ?? "");
   const [state, setState] = useState(address?.state ?? "");
   const [pincode, setPincode] = useState(address?.pincode ?? "");
+  const [serviceability, setServiceability] = useState<ServiceabilityResult | null>(null);
+  const [checkingServiceability, setCheckingServiceability] = useState(false);
   const isEditing = Boolean(address);
+  const notServiceable = serviceability?.serviceable === false;
 
-  function handleLocationPicked(picked: PickedAddress) {
+  async function handleLocationPicked(picked: PickedAddress) {
     setLat(picked.lat);
     setLng(picked.lng);
     if (picked.line1) setLine1(picked.line1);
     if (picked.city) setCity(picked.city);
     if (picked.state) setState(picked.state);
     if (picked.pincode) setPincode(picked.pincode);
+
+    setCheckingServiceability(true);
+    try {
+      setServiceability(await checkServiceability({ lat: picked.lat, lng: picked.lng }));
+    } catch {
+      setServiceability(null);
+    } finally {
+      setCheckingServiceability(false);
+    }
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (lat == null || lng == null) {
       showToast(t("pickOnMapRequired"), "error");
+      return;
+    }
+    if (notServiceable) {
+      showToast(t("notServiceableError"), "error");
       return;
     }
     const form = new FormData(event.currentTarget);
@@ -89,6 +107,14 @@ export function AddressForm({
         </label>
         <AddressLocationPicker lat={lat} lng={lng} onPicked={handleLocationPicked} />
         {lat == null && <p className="text-xs text-zinc-400">{t("pickOnMapHint")}</p>}
+        {checkingServiceability && (
+          <p className="text-xs text-zinc-400">{t("checkingServiceability")}</p>
+        )}
+        {!checkingServiceability && notServiceable && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-950 dark:text-red-400">
+            {t("notServiceableError")}
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -164,7 +190,11 @@ export function AddressForm({
       </label>
 
       <div className="flex gap-3">
-        <button type="submit" disabled={isSubmitting} className="btn-primary">
+        <button
+          type="submit"
+          disabled={isSubmitting || checkingServiceability || notServiceable}
+          className="btn-primary"
+        >
           {isSubmitting ? t("saving") : isEditing ? t("update") : t("save")}
         </button>
         {onCancel && (

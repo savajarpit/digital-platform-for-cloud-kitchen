@@ -10,12 +10,14 @@ import {
   deleteServiceablePincode,
   getBusinessProfile,
   listAllDeliverySlots,
+  listKitchenZones,
   listServiceablePincodes,
   updateDeliveryZones,
   updateDeliverySlot,
   updateServiceablePincode,
   type BusinessProfile,
   type DeliverySlot,
+  type KitchenZone,
   type ServiceablePincode,
   type UpdateDeliveryZonesInput,
 } from "@/lib/api/admin-settings";
@@ -26,10 +28,8 @@ import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
-import { LocationPickerMap } from "@/components/maps/LocationPickerMap";
+import { KitchenZonesCard } from "@/components/admin/KitchenZonesCard";
 
-const paiseToRupees = (paise: number | null | undefined) =>
-  paise === null || paise === undefined ? "" : String(paise / 100);
 const rupeesToPaise = (rupees: string): number | undefined =>
   rupees === "" ? undefined : Math.round(Number(rupees) * 100);
 
@@ -37,21 +37,28 @@ export default function DeliveryZonesPage() {
   const canEdit = usePermission(PERMISSIONS.DELIVERY_ZONES_EDIT);
 
   const [profile, setProfile] = useState<BusinessProfile | null>(null);
+  const [zones, setZones] = useState<KitchenZone[] | null>(null);
   const [pincodes, setPincodes] = useState<ServiceablePincode[] | null>(null);
   const [slots, setSlots] = useState<DeliverySlot[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getBusinessProfile(), listServiceablePincodes(), listAllDeliverySlots()])
-      .then(([p, pc, sl]) => {
+    Promise.all([
+      getBusinessProfile(),
+      listKitchenZones(),
+      listServiceablePincodes(),
+      listAllDeliverySlots(),
+    ])
+      .then(([p, kz, pc, sl]) => {
         setProfile(p);
+        setZones(kz);
         setPincodes(pc);
         setSlots(sl.sort((a, b) => a.sortOrder - b.sortOrder));
       })
       .catch(() => setLoadError("Couldn't load delivery zone settings."));
   }, []);
 
-  if (!profile || !pincodes || !slots) {
+  if (!profile || !zones || !pincodes || !slots) {
     return (
       <div className="card p-6">
         <Skeleton className="h-6 w-40" />
@@ -71,14 +78,15 @@ export default function DeliveryZonesPage() {
       </div>
       {!canEdit && <ViewOnlyNotice />}
 
-      <GeoZoneForm profile={profile} canEdit={canEdit} onSaved={setProfile} />
+      <KitchenZonesCard zones={zones} canEdit={canEdit} onChange={setZones} />
       <PincodesCard pincodes={pincodes} canEdit={canEdit} onChange={setPincodes} />
+      <AdvanceOrderWindowForm profile={profile} canEdit={canEdit} onSaved={setProfile} />
       <SlotsCard slots={slots} canEdit={canEdit} onChange={setSlots} />
     </div>
   );
 }
 
-function GeoZoneForm({
+function AdvanceOrderWindowForm({
   profile,
   canEdit,
   onSaved,
@@ -88,15 +96,9 @@ function GeoZoneForm({
   onSaved: (p: BusinessProfile) => void;
 }) {
   const { showToast } = useToast();
-  const [form, setForm] = useState({
-    kitchenLat: profile.kitchenLat !== null ? String(profile.kitchenLat) : "",
-    kitchenLng: profile.kitchenLng !== null ? String(profile.kitchenLng) : "",
-    deliveryRadiusMeters: profile.deliveryRadiusMeters !== null ? String(profile.deliveryRadiusMeters) : "",
-    deliveryFee: paiseToRupees(profile.deliveryFee),
-    minOrderAmount: paiseToRupees(profile.minOrderAmount),
-    freeDeliveryAboveAmount: paiseToRupees(profile.freeDeliveryAboveAmount),
-    maxAdvanceOrderDays: String(profile.maxAdvanceOrderDays),
-  });
+  const [maxAdvanceOrderDays, setMaxAdvanceOrderDays] = useState(
+    String(profile.maxAdvanceOrderDays),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,18 +108,11 @@ function GeoZoneForm({
     setSaving(true);
     try {
       const input: UpdateDeliveryZonesInput = {
-        kitchenLat: form.kitchenLat === "" ? undefined : Number(form.kitchenLat),
-        kitchenLng: form.kitchenLng === "" ? undefined : Number(form.kitchenLng),
-        deliveryRadiusMeters:
-          form.deliveryRadiusMeters === "" ? undefined : Number(form.deliveryRadiusMeters),
-        deliveryFee: rupeesToPaise(form.deliveryFee),
-        minOrderAmount: rupeesToPaise(form.minOrderAmount),
-        freeDeliveryAboveAmount: rupeesToPaise(form.freeDeliveryAboveAmount),
-        maxAdvanceOrderDays: Number(form.maxAdvanceOrderDays),
+        maxAdvanceOrderDays: Number(maxAdvanceOrderDays),
       };
       const updated = await updateDeliveryZones(input);
       onSaved(updated);
-      showToast("Delivery zone saved", "success");
+      showToast("Delivery window saved", "success");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't save changes.");
     } finally {
@@ -128,113 +123,25 @@ function GeoZoneForm({
   return (
     <form onSubmit={handleSubmit} className="card flex flex-col gap-4 p-6">
       <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-        Kitchen location & geo-radius delivery
+        Advance order window
       </h3>
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        When kitchen coordinates and a delivery radius are set, serviceability is checked by
-        real distance from your kitchen instead of the pincode list below.
-      </p>
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
           {error}
         </p>
       )}
       <fieldset disabled={!canEdit} className="flex flex-col gap-4 disabled:opacity-70">
-        <LocationPickerMap
-          lat={form.kitchenLat === "" ? null : Number(form.kitchenLat)}
-          lng={form.kitchenLng === "" ? null : Number(form.kitchenLng)}
-          radiusMeters={form.deliveryRadiusMeters === "" ? undefined : Number(form.deliveryRadiusMeters)}
-          onChange={(lat, lng) =>
-            setForm((f) => ({ ...f, kitchenLat: String(lat), kitchenLng: String(lng) }))
-          }
-        />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Kitchen latitude
-            </label>
-            <input
-              type="number"
-              step="any"
-              value={form.kitchenLat}
-              onChange={(e) => setForm((f) => ({ ...f, kitchenLat: e.target.value }))}
-              className="input w-full"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Kitchen longitude
-            </label>
-            <input
-              type="number"
-              step="any"
-              value={form.kitchenLng}
-              onChange={(e) => setForm((f) => ({ ...f, kitchenLng: e.target.value }))}
-              className="input w-full"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Delivery radius (meters)
-            </label>
-            <input
-              type="number"
-              min={0}
-              value={form.deliveryRadiusMeters}
-              onChange={(e) => setForm((f) => ({ ...f, deliveryRadiusMeters: e.target.value }))}
-              className="input w-full"
-            />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Delivery fee (₹)
-            </label>
-            <input
-              type="number"
-              min={0}
-              value={form.deliveryFee}
-              onChange={(e) => setForm((f) => ({ ...f, deliveryFee: e.target.value }))}
-              className="input w-full"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Min order amount (₹)
-            </label>
-            <input
-              type="number"
-              min={0}
-              value={form.minOrderAmount}
-              onChange={(e) => setForm((f) => ({ ...f, minOrderAmount: e.target.value }))}
-              className="input w-full"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Free delivery above (₹)
-            </label>
-            <input
-              type="number"
-              min={0}
-              value={form.freeDeliveryAboveAmount}
-              onChange={(e) => setForm((f) => ({ ...f, freeDeliveryAboveAmount: e.target.value }))}
-              className="input w-full"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              Max advance order days
-            </label>
-            <input
-              type="number"
-              min={0}
-              value={form.maxAdvanceOrderDays}
-              onChange={(e) => setForm((f) => ({ ...f, maxAdvanceOrderDays: e.target.value }))}
-              className="input w-full"
-            />
-          </div>
+        <div className="max-w-xs">
+          <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Max advance order days
+          </label>
+          <input
+            type="number"
+            min={0}
+            value={maxAdvanceOrderDays}
+            onChange={(e) => setMaxAdvanceOrderDays(e.target.value)}
+            className="input w-full"
+          />
         </div>
         <button type="submit" disabled={saving} className="btn-primary w-fit">
           {saving ? "Saving…" : "Save changes"}

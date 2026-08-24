@@ -178,6 +178,7 @@ model Tenant {
   notificationSettings     NotificationSettings?
   paymentSettings          PaymentSettings?
   serviceablePincodes      ServiceablePincode[]
+  kitchenZones             KitchenZone[]
   rolePermissions          RolePermission[]
   tenantFeatures           TenantFeature[]
   categories               Category[]
@@ -270,9 +271,10 @@ model BusinessProfile {
   gstNumber                 String?
   themeConfig               Json     @default("{}")
   defaultLocale             String   @default("en")
-  // Geo-radius serviceability (Blinkit-style): when kitchenLat/kitchenLng and
-  // deliveryRadiusMeters are all set, AddressesService prefers a real
-  // distance-from-kitchen check over the ServiceablePincode table.
+  // Superseded by the KitchenZone list (multi-outlet support) — kept as
+  // columns rather than dropped so existing data isn't destroyed, but
+  // AddressesService no longer reads these; a migration copies any
+  // already-configured value into a KitchenZone row on first deploy.
   kitchenLat                Float?
   kitchenLng                Float?
   deliveryRadiusMeters      Int?
@@ -360,6 +362,34 @@ model ServiceablePincode {
   @@unique([tenantId, pincode])
   @@index([tenantId])
   @@map("serviceable_pincodes")
+}
+
+/// One of a tenant's kitchen/outlet locations for geo-radius serviceability.
+/// Replaces BusinessProfile's old single kitchenLat/kitchenLng/deliveryRadiusMeters
+/// (kept in place, unused by new checks, rather than a destructive column drop) —
+/// a tenant can now have several, each with its own pin/radius/fee. A location is
+/// serviceable if it falls within ANY active zone's radius (nearest match wins on
+/// fee), OR'd with the separate ServiceablePincode list, never AND'd — see
+/// AddressesService.checkServiceability.
+model KitchenZone {
+  id                      String   @id @default(uuid())
+  tenantId                String
+  // Admin-facing label only (e.g. "Nikol Branch") — never shown to customers.
+  name                    String
+  lat                     Float
+  lng                     Float
+  radiusMeters            Int
+  deliveryFee             Int      @default(0)
+  minOrderAmount          Int      @default(0)
+  freeDeliveryAboveAmount Int?
+  isActive                Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@map("kitchen_zones")
 }
 
 model DeliverySlot {

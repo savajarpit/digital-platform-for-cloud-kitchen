@@ -51,6 +51,7 @@ export interface UpcomingPreviewDay {
   addressId: string;
   deliverySlotId: string | null;
   isOverridden: boolean;
+  note: string | null;
   /** Too close to delivery to skip/pause/override — hide the controls and explain why instead of letting the request fail. */
   locked: boolean;
 }
@@ -165,8 +166,8 @@ export function pauseSubscription(id: string, dateFrom: string, dateTo: string):
 
 export function setDayOverride(
   id: string,
-  input: { date: string; addressId?: string; deliverySlotId?: string },
-): Promise<{ date: string; addressId: string | null; deliverySlotId: string | null }> {
+  input: { date: string; addressId?: string; deliverySlotId?: string; note?: string },
+): Promise<{ date: string; addressId: string | null; deliverySlotId: string | null; note?: string | null }> {
   return proxyFetch(`/subscriptions/mine/${id}/day-override`, {
     method: "POST",
     body: JSON.stringify(input),

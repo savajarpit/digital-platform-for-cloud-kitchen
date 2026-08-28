@@ -108,6 +108,8 @@ export function KitchenZonesCard({
                 deliveryFee: zone.deliveryFee,
                 minOrderAmount: zone.minOrderAmount,
                 freeDeliveryAboveAmount: zone.freeDeliveryAboveAmount ?? undefined,
+                pickupEnabled: zone.pickupEnabled,
+                pickupAddress: zone.pickupAddress ?? undefined,
               }}
               onCancel={() => setEditingId(null)}
               onSave={async (input) => {
@@ -135,6 +137,7 @@ export function KitchenZonesCard({
                   {zone.minOrderAmount / 100}
                   {zone.freeDeliveryAboveAmount != null &&
                     ` · Free above ₹${zone.freeDeliveryAboveAmount / 100}`}
+                  {zone.pickupEnabled && " · Pickup enabled"}
                 </p>
               </div>
               <div className="flex items-center gap-3">
@@ -194,6 +197,8 @@ function KitchenZoneForm({
       ? String(initial.freeDeliveryAboveAmount / 100)
       : "",
   );
+  const [pickupEnabled, setPickupEnabled] = useState(initial.pickupEnabled ?? false);
+  const [pickupAddress, setPickupAddress] = useState(initial.pickupAddress ?? "");
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -214,6 +219,8 @@ function KitchenZoneForm({
         freeDeliveryAboveAmount: freeDeliveryAboveAmount
           ? Math.round(Number(freeDeliveryAboveAmount) * 100)
           : undefined,
+        pickupEnabled,
+        pickupAddress: pickupEnabled ? pickupAddress.trim() || undefined : undefined,
       });
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't save kitchen zone.", "error");
@@ -296,6 +303,29 @@ function KitchenZoneForm({
           />
         </div>
       </div>
+
+      <div className="flex flex-col gap-2 border-t border-primary-200 pt-3 dark:border-primary-900">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Pickup from this zone</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Only takes effect once pickup is also enabled in Business Settings.
+            </p>
+          </div>
+          <Toggle checked={pickupEnabled} onChange={setPickupEnabled} />
+        </div>
+        {pickupEnabled && (
+          <input
+            type="text"
+            value={pickupAddress}
+            onChange={(e) => setPickupAddress(e.target.value)}
+            placeholder="Customer-facing pickup address"
+            required
+            className="input w-full"
+          />
+        )}
+      </div>
+
       <div className="flex gap-2">
         <button type="submit" disabled={saving} className="btn-primary btn-sm">
           {saving ? "Saving…" : "Save"}

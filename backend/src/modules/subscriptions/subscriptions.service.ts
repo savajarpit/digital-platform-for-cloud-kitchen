@@ -31,6 +31,7 @@ import { SetDayOverrideDto } from './dto/set-day-override.dto';
 import { UpdateSubscriptionSettingsDto } from './dto/update-subscription-settings.dto';
 import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 import { defaultSubscriptionSettings } from '../../common/constants/tenant-default-content';
+import { SubscriptionMaterializationService } from './subscription-materialization.service';
 
 const PREVIEW_DAYS_AHEAD = 14;
 const CANCEL_FEATURE_KEY = 'subscription-self-cancel';
@@ -51,6 +52,7 @@ export class SubscriptionsService {
     private readonly razorpayClient: RazorpayClientService,
     private readonly pagination: PaginationService,
     private readonly tenantLimits: TenantLimitsService,
+    private readonly materializationService: SubscriptionMaterializationService,
   ) {}
 
   // ─── Admin plan CRUD ─────────────────────────────────────
@@ -251,6 +253,7 @@ export class SubscriptionsService {
         isAcceptingNewSubscriptions: true,
         closureReason: null,
         noticeHoursBeforeDelivery: 24,
+        startDateLeadDays: 1,
         showOnHomepage: true,
         ...defaultSubscriptionSettings(),
       }
@@ -332,20 +335,24 @@ export class SubscriptionsService {
       // day-accurate delivery address — this is the actual materialized
       // Order's own address, which already reflects whatever day-override
       // won for this specific date, not just the subscription's default.
+      // Non-null assert: subscriptions never do pickup (Order.address is
+      // only optional for a one-off PICKUP order, which materialization
+      // never creates).
       address: {
-        line1: order.address.line1,
-        line2: order.address.line2,
-        city: order.address.city,
-        state: order.address.state,
-        pincode: order.address.pincode,
-        contactPhone: order.address.contactPhone,
-        lat: order.address.lat,
-        lng: order.address.lng,
+        line1: order.address!.line1,
+        line2: order.address!.line2,
+        city: order.address!.city,
+        state: order.address!.state,
+        pincode: order.address!.pincode,
+        contactPhone: order.address!.contactPhone,
+        lat: order.address!.lat,
+        lng: order.address!.lng,
       },
       deliverySlotName: order.deliverySlotName,
       deliveryWindowStart: order.deliveryWindowStart,
       deliveryWindowEnd: order.deliveryWindowEnd,
       meals: order.items.map((i) => `${i.nameSnapshot} x${i.quantity}`),
+      notes: order.notes,
     }));
 
     return { date: todayStr, prepSheet, dispatch };
@@ -628,12 +635,14 @@ export class SubscriptionsService {
       dto.razorpayPaymentId,
     );
 
-    // Day 1 is always the next day, never today — materialization is a
-    // once-nightly batch job, so "today" has either already run (and this
-    // subscription didn't exist yet) or won't run again until tonight.
-    // Trying to allow same-day delivery based on a notice-hours cutoff
-    // would be misleading: the cron wouldn't actually pick it up anyway.
-    const startDate = DateUtil.addDays(DateUtil.now(), 1);
+    // Days out from today, tenant-controlled (SubscriptionSettings.
+    // startDateLeadDays, default 1 — matches the platform's original
+    // always-tomorrow behavior). A tenant that opts into 0 (same-day) is
+    // opting into the inline materialization call below, since the nightly
+    // cron already ran/won't run again today.
+    const settings = await this.subscriptionsRepo.findSettings(tenantId);
+    const startDateLeadDays = settings?.startDateLeadDays ?? 1;
+    const startDate = DateUtil.addDays(DateUtil.now(), startDateLeadDays);
     const cycleEnd = DateUtil.addDays(
       startDate,
       subscription.durationDaysSnapshot - 1,
@@ -642,6 +651,16 @@ export class SubscriptionsService {
       startDate,
       cycleEnd,
     });
+
+    if (startDateLeadDays === 0) {
+      const materializable =
+        await this.subscriptionsRepo.findSubscriptionForMaterialization(
+          subscription.id,
+        );
+      if (materializable) {
+        await this.materializationService.materializeOne(materializable);
+      }
+    }
 
     return { confirmed: true };
   }
@@ -778,9 +797,9 @@ export class SubscriptionsService {
       id,
     );
     await this.assertWithinNoticeWindow(tenantId, dto.date);
-    if (!dto.addressId && !dto.deliverySlotId) {
+    if (!dto.addressId && !dto.deliverySlotId && dto.note === undefined) {
       throw new BadRequestException(
-        'Provide at least an addressId or a deliverySlotId to override',
+        'Provide at least an addressId, a deliverySlotId, or a note to override',
       );
     }
     if (dto.addressId) {
@@ -805,6 +824,7 @@ export class SubscriptionsService {
     return this.subscriptionsRepo.upsertDayOverride(subscription.id, dto.date, {
       addressId: dto.addressId,
       deliverySlotId: dto.deliverySlotId,
+      note: dto.note,
     });
   }
 
@@ -965,6 +985,9 @@ export interface UpcomingPreviewDay {
   addressId: string;
   deliverySlotId: string | null;
   isOverridden: boolean;
+  /** This day's prep/customization note, if the customer set one — surfaced
+   * here so the account page can pre-fill it when the day card reopens. */
+  note: string | null;
   /** Too close to delivery to skip/pause/override — the notice window has
    * already passed. The frontend should hide those controls and explain
    * why instead of letting the customer submit and hit a rejection. */
@@ -991,6 +1014,7 @@ function buildUpcomingPreview(
       date: string;
       addressId: string | null;
       deliverySlotId: string | null;
+      note: string | null;
     }[];
     plan: {
       schedulingMode: SubscriptionPlanSchedulingMode;
@@ -1053,6 +1077,7 @@ function buildUpcomingPreview(
         addressId,
         deliverySlotId,
         isOverridden: Boolean(override),
+        note: override?.note ?? null,
         locked,
       });
     } else {
@@ -1077,6 +1102,7 @@ function buildUpcomingPreview(
         addressId,
         deliverySlotId,
         isOverridden: Boolean(override),
+        note: override?.note ?? null,
         locked,
       });
       counter += 1;

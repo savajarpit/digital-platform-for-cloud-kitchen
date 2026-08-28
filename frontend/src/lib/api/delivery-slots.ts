@@ -35,3 +35,24 @@ export async function getInstantDeliveryStatus(): Promise<InstantDeliveryStatus>
   });
   return parseOrThrow<InstantDeliveryStatus>(res);
 }
+
+export interface PickupZone {
+  id: string;
+  pickupAddress: string;
+  lat: number;
+  lng: number;
+}
+
+export interface PickupInfo {
+  available: boolean;
+  zones: PickupZone[];
+}
+
+/** Public, client-side — whether pickup is currently offered (tenant master
+ * switch + at least one eligible kitchen zone) and the list to choose from. */
+export async function getPickupInfo(): Promise<PickupInfo> {
+  const res = await fetch(`${PUBLIC_API_URL}/settings/pickup`, {
+    headers: { "X-Tenant-Domain": window.location.host },
+  });
+  return parseOrThrow<PickupInfo>(res);
+}

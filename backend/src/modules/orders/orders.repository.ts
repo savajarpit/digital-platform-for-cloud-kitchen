@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import {
   Order,
+  OrderFulfillmentType,
   OrderStatus,
   PaymentStatus,
   Prisma,
@@ -18,7 +19,9 @@ export interface OrderItemInput {
 export interface CreateOrderInput {
   tenantId: string;
   userId: string;
-  addressId: string;
+  fulfillmentType: OrderFulfillmentType;
+  addressId?: string;
+  pickupKitchenZoneId?: string;
   orderNumber: string;
   subtotalInPaise: number;
   discountInPaise: number;
@@ -40,6 +43,7 @@ export interface CreateOrderInput {
 const ORDER_INCLUDE = {
   items: true,
   address: true,
+  pickupKitchenZone: true,
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithDetails = Prisma.OrderGetPayload<{
@@ -52,8 +56,9 @@ export type OrderWithDetails = Prisma.OrderGetPayload<{
 const ORDER_NOTIFICATION_INCLUDE = {
   items: true,
   address: true,
+  pickupKitchenZone: true,
   user: {
-    select: { email: true, firstName: true, lastName: true },
+    select: { email: true, firstName: true, lastName: true, phone: true },
   },
 } satisfies Prisma.OrderInclude;
 
@@ -67,6 +72,7 @@ export type OrderWithNotificationDetails = Prisma.OrderGetPayload<{
 const ORDER_ADMIN_INCLUDE = {
   items: true,
   address: true,
+  pickupKitchenZone: true,
   user: { select: { firstName: true, lastName: true, email: true } },
 } satisfies Prisma.OrderInclude;
 
@@ -84,7 +90,9 @@ export class OrdersRepository {
         data: {
           tenantId: input.tenantId,
           userId: input.userId,
+          fulfillmentType: input.fulfillmentType,
           addressId: input.addressId,
+          pickupKitchenZoneId: input.pickupKitchenZoneId,
           orderNumber: input.orderNumber,
           subtotalInPaise: input.subtotalInPaise,
           discountInPaise: input.discountInPaise,
@@ -211,10 +219,12 @@ export class OrdersRepository {
     skip: number,
     take: number,
     status?: OrderStatus,
+    fulfillmentType?: OrderFulfillmentType,
   ): Promise<[OrderWithAdminDetails[], number]> {
     const where = {
       tenantId,
       status: status ?? { not: OrderStatus.PENDING_PAYMENT },
+      ...(fulfillmentType ? { fulfillmentType } : {}),
     };
     return this.prisma.$transaction([
       this.prisma.order.findMany({

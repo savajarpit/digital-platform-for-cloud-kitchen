@@ -42,6 +42,7 @@ export interface BusinessProfile {
   searchConsoleVerification: string | null;
   fssaiLicenseNumber: string | null;
   showFssaiLicense: boolean;
+  pickupEnabled: boolean;
 }
 
 export type UpdateBusinessProfileInput = Partial<
@@ -69,6 +70,7 @@ export type UpdateBusinessProfileInput = Partial<
     | "searchConsoleVerification"
     | "fssaiLicenseNumber"
     | "showFssaiLicense"
+    | "pickupEnabled"
   >
 > & { themeConfig?: ThemeConfig };
 
@@ -185,6 +187,8 @@ export interface KitchenZone {
   minOrderAmount: number;
   freeDeliveryAboveAmount: number | null;
   isActive: boolean;
+  pickupEnabled: boolean;
+  pickupAddress: string | null;
 }
 
 export interface KitchenZoneInput {
@@ -196,6 +200,8 @@ export interface KitchenZoneInput {
   minOrderAmount?: number;
   freeDeliveryAboveAmount?: number;
   isActive?: boolean;
+  pickupEnabled?: boolean;
+  pickupAddress?: string;
 }
 
 export function listKitchenZones(): Promise<KitchenZone[]> {

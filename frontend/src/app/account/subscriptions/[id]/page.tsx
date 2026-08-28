@@ -94,13 +94,19 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     }
   }
 
-  async function handleDayOverrideSave(date: string, addressId: string, deliverySlotId: string) {
+  async function handleDayOverrideSave(
+    date: string,
+    addressId: string,
+    deliverySlotId: string,
+    note: string,
+  ) {
     setBusy(true);
     try {
       await setDayOverride(id, {
         date,
         addressId: addressId || undefined,
         deliverySlotId: deliverySlotId || undefined,
+        note,
       });
       showToast("Delivery updated for that day.", "success");
       reload();
@@ -205,8 +211,8 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                     busy={busy}
                     onToggle={() => setExpandedDate(expandedDate === day.date ? null : day.date)}
                     onSkip={() => handleSkip(day.date)}
-                    onSaveOverride={(addressId, slotId) =>
-                      handleDayOverrideSave(day.date, addressId, slotId)
+                    onSaveOverride={(addressId, slotId, note) =>
+                      handleDayOverrideSave(day.date, addressId, slotId, note)
                     }
                   />
                 ))
@@ -296,10 +302,11 @@ function DayCard({
   busy: boolean;
   onToggle: () => void;
   onSkip: () => void;
-  onSaveOverride: (addressId: string, deliverySlotId: string) => void;
+  onSaveOverride: (addressId: string, deliverySlotId: string, note: string) => void;
 }) {
   const [addressId, setAddressId] = useState(day.addressId);
   const [slotId, setSlotId] = useState(day.deliverySlotId ?? "");
+  const [note, setNote] = useState(day.note ?? "");
 
   const address = subscription.addresses.find((a) => a.id === day.addressId);
   const slot = subscription.deliverySlots.find((s) => s.id === day.deliverySlotId);
@@ -413,58 +420,81 @@ function DayCard({
           </div>
 
           {day.locked ? (
-            <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-              Too close to delivery to change — this day is locked.
-            </p>
+            <>
+              <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                Too close to delivery to change — this day is locked.
+              </p>
+              {day.note && (
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <span className="font-medium text-zinc-700 dark:text-zinc-300">Note: </span>
+                  {day.note}
+                </p>
+              )}
+            </>
           ) : (
-            <div
-              className={`grid grid-cols-1 gap-2 sm:items-end ${
-                canChangeTime ? "sm:grid-cols-[1fr_1fr_auto]" : "sm:grid-cols-[1fr_auto]"
-              }`}
-            >
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  Change address for this day
-                </label>
-                <Select value={addressId} onValueChange={setAddressId}>
-                  <SelectTrigger className="py-1.5 text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {subscription.addresses.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.label ? `${a.label} — ` : ""}
-                        {a.line1}, {a.city}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {canChangeTime && (
+            <div className="flex flex-col gap-3">
+              <div
+                className={`grid grid-cols-1 gap-2 sm:items-end ${
+                  canChangeTime ? "sm:grid-cols-[1fr_1fr]" : "sm:grid-cols-1"
+                }`}
+              >
                 <div className="flex flex-col gap-1">
                   <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                    Change time for this day
+                    Change address for this day
                   </label>
-                  <Select value={slotId} onValueChange={setSlotId}>
+                  <Select value={addressId} onValueChange={setAddressId}>
                     <SelectTrigger className="py-1.5 text-sm">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No preference</SelectItem>
-                      {subscription.deliverySlots.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name} ({formatTime12h(s.startTime)}–{formatTime12h(s.endTime)})
+                      {subscription.addresses.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.label ? `${a.label} — ` : ""}
+                          {a.line1}, {a.city}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
+                {canChangeTime && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                      Change time for this day
+                    </label>
+                    <Select value={slotId} onValueChange={setSlotId}>
+                      <SelectTrigger className="py-1.5 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">No preference</SelectItem>
+                        {subscription.deliverySlots.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name} ({formatTime12h(s.startTime)}–{formatTime12h(s.endTime)})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Note for this delivery (optional)
+                </label>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={500}
+                  rows={2}
+                  placeholder="No onions, leave at gate…"
+                  className="input w-full resize-none text-sm"
+                />
+              </div>
               <button
                 type="button"
-                onClick={() => onSaveOverride(addressId, canChangeTime ? slotId : "")}
+                onClick={() => onSaveOverride(addressId, canChangeTime ? slotId : "", note)}
                 disabled={busy}
-                className="btn-primary btn-sm"
+                className="btn-primary btn-sm self-start"
               >
                 Save
               </button>

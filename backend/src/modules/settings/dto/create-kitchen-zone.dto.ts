@@ -57,4 +57,22 @@ export class CreateKitchenZoneDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      "This zone's own pickup opt-in — only takes effect once the tenant's Business Profile pickupEnabled master switch is also on",
+  })
+  @IsOptional()
+  @IsBoolean()
+  pickupEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    example: '221B Baker Street, Ahmedabad — 380001',
+    description: 'Customer-facing pickup address — name above is admin-only',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  pickupAddress?: string;
 }

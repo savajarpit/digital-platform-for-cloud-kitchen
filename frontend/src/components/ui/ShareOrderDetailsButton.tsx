@@ -19,7 +19,15 @@ export interface ShareableOrderDetails {
   deliveryWindowEnd?: string | null;
   deliveryDateLabel?: string | null;
   totalLabel?: string | null;
-  address: ShareableAddress;
+  /** Customer prep/customization note, if any — e.g. "no onions." */
+  note?: string | null;
+  /** Omit for a pickup order (nothing to deliver to) and use pickupAddress
+   * instead — exactly one of the two should be set. */
+  address?: ShareableAddress;
+  /** A pickup order's zone address, when there's no customer address at all. */
+  pickupAddress?: string | null;
+  pickupLat?: number | null;
+  pickupLng?: number | null;
 }
 
 function formatOrderText(details: ShareableOrderDetails): string {
@@ -31,6 +39,14 @@ function formatOrderText(details: ShareableOrderDetails): string {
     .filter(Boolean)
     .join(" · ");
 
+  const locationLines = details.address
+    ? [
+        "Deliver to:",
+        `${details.address.line1}${details.address.line2 ? `, ${details.address.line2}` : ""}, ${details.address.city}, ${details.address.state} — ${details.address.pincode}`,
+        details.address.contactPhone ? `Phone: ${details.address.contactPhone}` : null,
+      ]
+    : ["Pickup at:", details.pickupAddress ?? "Pickup location"];
+
   return [
     details.heading,
     details.customerName ? `Customer: ${details.customerName}` : null,
@@ -40,10 +56,10 @@ function formatOrderText(details: ShareableOrderDetails): string {
     ...details.itemLines.map((line) => `- ${line}`),
     details.totalLabel ? "" : null,
     details.totalLabel ? `Total: ${details.totalLabel}` : null,
+    details.note ? "" : null,
+    details.note ? `Note: ${details.note}` : null,
     "",
-    "Deliver to:",
-    `${details.address.line1}${details.address.line2 ? `, ${details.address.line2}` : ""}, ${details.address.city}, ${details.address.state} — ${details.address.pincode}`,
-    details.address.contactPhone ? `Phone: ${details.address.contactPhone}` : null,
+    ...locationLines,
   ]
     .filter((line) => line !== null)
     .join("\n");
@@ -64,10 +80,9 @@ export function ShareOrderDetailsButton({
   const { showToast } = useToast();
 
   async function handleShare() {
-    const mapUrl =
-      details.address.lat != null && details.address.lng != null
-        ? buildGoogleMapsLink(details.address.lat, details.address.lng)
-        : undefined;
+    const lat = details.address ? details.address.lat : details.pickupLat;
+    const lng = details.address ? details.address.lng : details.pickupLng;
+    const mapUrl = lat != null && lng != null ? buildGoogleMapsLink(lat, lng) : undefined;
     await shareOrCopy({ title: details.heading, text: formatOrderText(details), url: mapUrl }, { showToast });
   }
 

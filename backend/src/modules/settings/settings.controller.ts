@@ -86,6 +86,19 @@ export class SettingsController {
   }
 
   @Public()
+  @Get('pickup')
+  @ResponseMessage('Pickup availability retrieved successfully')
+  @ApiOperation({
+    summary:
+      "Whether pickup is offered right now, and the tenant's pickup-eligible kitchen zones",
+  })
+  getPickupInfo(@CurrentTenant('id') tenantId: string | undefined) {
+    if (!tenantId)
+      throw new NotFoundException('No tenant context for this request');
+    return this.settingsService.getPickupInfo(tenantId);
+  }
+
+  @Public()
   @Get('instant-delivery/status')
   @ResponseMessage('Instant delivery status retrieved successfully')
   @ApiOperation({

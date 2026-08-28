@@ -104,7 +104,14 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 day: "numeric",
               }),
               totalLabel: formatPriceFromPaise(order.totalInPaise),
-              address: order.address,
+              note: order.notes,
+              ...(order.fulfillmentType === "PICKUP"
+                ? {
+                    pickupAddress: order.pickupKitchenZone?.pickupAddress,
+                    pickupLat: order.pickupKitchenZone?.lat,
+                    pickupLng: order.pickupKitchenZone?.lng,
+                  }
+                : { address: order.address! }),
             }}
           />
           <Link href={`/admin/orders/${order.id}/invoice`} className="btn-outline btn-sm">
@@ -208,25 +215,43 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           </div>
 
           <div className="card flex flex-col gap-2 p-6 text-sm">
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Delivery</h3>
-            <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-              <div>
-                <span>
-                  {order.address.line1}
-                  {order.address.line2 ? `, ${order.address.line2}` : ""}, {order.address.city},{" "}
-                  {order.address.state} — {order.address.pincode}
-                </span>
-                <div className="mt-0.5 flex items-center gap-3 text-xs">
-                  <MapLink lat={order.address.lat} lng={order.address.lng} />
-                  <ShareAddressButton address={order.address} className="text-xs" />
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {order.fulfillmentType === "PICKUP" ? "Pickup" : "Delivery"}
+            </h3>
+            {order.fulfillmentType === "PICKUP" ? (
+              <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                <div>
+                  <span>{order.pickupKitchenZone?.pickupAddress ?? "Pickup location unavailable"}</span>
+                  {order.pickupKitchenZone && (
+                    <div className="mt-0.5">
+                      <MapLink lat={order.pickupKitchenZone.lat} lng={order.pickupKitchenZone.lng} />
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-            <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-              <Phone className="h-4 w-4 shrink-0 text-primary-600" />
-              <span>{order.address.contactPhone}</span>
-            </div>
+            ) : (
+              <>
+                <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                  <div>
+                    <span>
+                      {order.address!.line1}
+                      {order.address!.line2 ? `, ${order.address!.line2}` : ""}, {order.address!.city},{" "}
+                      {order.address!.state} — {order.address!.pincode}
+                    </span>
+                    <div className="mt-0.5 flex items-center gap-3 text-xs">
+                      <MapLink lat={order.address!.lat} lng={order.address!.lng} />
+                      <ShareAddressButton address={order.address!} className="text-xs" />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
+                  <Phone className="h-4 w-4 shrink-0 text-primary-600" />
+                  <span>{order.address!.contactPhone}</span>
+                </div>
+              </>
+            )}
             <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
               <Clock className="h-4 w-4 shrink-0 text-primary-600" />
               <span>

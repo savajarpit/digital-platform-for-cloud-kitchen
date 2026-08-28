@@ -174,4 +174,13 @@ export class UpdateBusinessProfileDto {
   @IsOptional()
   @IsBoolean()
   showFssaiLicense?: boolean;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'Tenant-wide pickup master switch — checkout only actually offers pickup once at least one kitchen zone also has its own pickup enabled',
+  })
+  @IsOptional()
+  @IsBoolean()
+  pickupEnabled?: boolean;
 }

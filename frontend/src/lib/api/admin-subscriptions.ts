@@ -148,6 +148,7 @@ export interface SubscriptionSettings {
   isAcceptingNewSubscriptions: boolean;
   closureReason: string | null;
   noticeHoursBeforeDelivery: number;
+  startDateLeadDays: number;
   showOnHomepage: boolean;
   homepageTitle?: string | null;
   homepageDescription?: string | null;
@@ -184,6 +185,7 @@ export interface TodaysDeliveries {
     deliveryWindowStart: string;
     deliveryWindowEnd: string;
     meals: string[];
+    notes: string | null;
   }[];
 }
 

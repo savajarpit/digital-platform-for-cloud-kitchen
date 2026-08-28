@@ -170,23 +170,55 @@ export class OrdersService {
   ): Promise<CreatedOrder> {
     await this.orderAcceptanceService.assertAcceptingOrders(tenantId);
 
-    const address = await this.addressesService.findOne(
-      tenantId,
-      userId,
-      dto.addressId,
-    );
-    const serviceability = await this.addressesService.checkServiceability(
-      tenantId,
-      {
-        pincode: address.pincode,
-        lat: address.lat ?? undefined,
-        lng: address.lng ?? undefined,
-      },
-    );
-    if (!serviceability.serviceable) {
+    const isPickup = dto.fulfillmentType === 'PICKUP';
+    if (isPickup && dto.isInstant) {
       throw new BadRequestException(
-        `We don't currently deliver to pincode ${address.pincode}`,
+        'Instant delivery is not available for pickup orders.',
       );
+    }
+
+    const profile = await this.settingsRepo.findBusinessProfile(tenantId);
+
+    // Pickup skips address/serviceability/min-order entirely and never
+    // charges a delivery fee — re-validated server-side, never trusted from
+    // the client alone, since the tenant may have disabled pickup (or this
+    // specific zone) since the checkout page loaded.
+    let deliveryFeeInPaise = 0;
+    let minOrderAmountInPaise = 0;
+    let freeDeliveryAboveAmountInPaise: number | undefined;
+    if (isPickup) {
+      const zone = await this.settingsRepo.findKitchenZoneById(
+        tenantId,
+        dto.pickupKitchenZoneId!,
+      );
+      if (!profile?.pickupEnabled || !zone?.isActive || !zone.pickupEnabled) {
+        throw new BadRequestException(
+          'Pickup is not available for this business right now.',
+        );
+      }
+    } else {
+      const address = await this.addressesService.findOne(
+        tenantId,
+        userId,
+        dto.addressId!,
+      );
+      const serviceability = await this.addressesService.checkServiceability(
+        tenantId,
+        {
+          pincode: address.pincode,
+          lat: address.lat ?? undefined,
+          lng: address.lng ?? undefined,
+        },
+      );
+      if (!serviceability.serviceable) {
+        throw new BadRequestException(
+          `We don't currently deliver to pincode ${address.pincode}`,
+        );
+      }
+      deliveryFeeInPaise = serviceability.deliveryFeeInPaise ?? 0;
+      minOrderAmountInPaise = serviceability.minOrderAmountInPaise ?? 0;
+      freeDeliveryAboveAmountInPaise =
+        serviceability.freeDeliveryAboveAmountInPaise;
     }
 
     // Prices and names are always recomputed server-side from the current
@@ -198,33 +230,31 @@ export class OrdersService {
       dto.couponCode,
     );
 
-    // Minimum order amount is checked against the raw cart value, before any
-    // discount — a coupon or freebie should never let someone duck under it.
-    const minOrderAmountInPaise = serviceability.minOrderAmountInPaise ?? 0;
-    if (pricing.rawSubtotalInPaise < minOrderAmountInPaise) {
-      throw new BadRequestException(
-        `Minimum order amount is ₹${(minOrderAmountInPaise / 100).toFixed(0)}.`,
-      );
-    }
-
     // Discounts apply to the subtotal before the free-delivery-threshold
     // check runs, so a coupon/promo can still push a borderline order under
-    // the free-delivery line — same principle as the min-order check above,
-    // just the opposite direction.
+    // the free-delivery line — same principle the min-order check below
+    // uses, just the opposite direction. Needed regardless of fulfillment
+    // type, since it also feeds totalInPaise further down.
     const effectiveSubtotalInPaise = Math.max(
       0,
       pricing.subtotalInPaise - pricing.discountInPaise,
     );
-    const freeDeliveryAboveAmountInPaise =
-      serviceability.freeDeliveryAboveAmountInPaise;
-    const qualifiesForFreeDelivery =
-      freeDeliveryAboveAmountInPaise !== undefined &&
-      effectiveSubtotalInPaise >= freeDeliveryAboveAmountInPaise;
-    const deliveryFeeInPaise = qualifiesForFreeDelivery
-      ? 0
-      : (serviceability.deliveryFeeInPaise ?? 0);
 
-    const profile = await this.settingsRepo.findBusinessProfile(tenantId);
+    if (!isPickup) {
+      // Minimum order amount is checked against the raw cart value, before
+      // any discount — a coupon or freebie should never let someone duck
+      // under it. Pickup orders have no minimum.
+      if (pricing.rawSubtotalInPaise < minOrderAmountInPaise) {
+        throw new BadRequestException(
+          `Minimum order amount is ₹${(minOrderAmountInPaise / 100).toFixed(0)}.`,
+        );
+      }
+      const qualifiesForFreeDelivery =
+        freeDeliveryAboveAmountInPaise !== undefined &&
+        effectiveSubtotalInPaise >= freeDeliveryAboveAmountInPaise;
+      if (qualifiesForFreeDelivery) deliveryFeeInPaise = 0;
+    }
+
     const timezone = profile?.timezone ?? 'Asia/Kolkata';
     const { dateStr: todayStr, minutesSinceMidnight: nowMinutes } =
       DateUtil.getTenantNow(timezone);
@@ -311,7 +341,9 @@ export class OrdersService {
     const order = await this.ordersRepo.create({
       tenantId,
       userId,
-      addressId: dto.addressId,
+      fulfillmentType: dto.fulfillmentType ?? 'DELIVERY',
+      addressId: isPickup ? undefined : dto.addressId,
+      pickupKitchenZoneId: isPickup ? dto.pickupKitchenZoneId : undefined,
       orderNumber,
       subtotalInPaise: pricing.subtotalInPaise,
       discountInPaise: pricing.discountInPaise,
@@ -373,6 +405,7 @@ export class OrdersService {
       skip,
       query.limit,
       query.status,
+      query.fulfillmentType,
     );
     return {
       data,

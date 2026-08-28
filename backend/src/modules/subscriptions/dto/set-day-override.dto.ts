@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsUUID } from 'class-validator';
+import { IsDateString, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SetDayOverrideDto {
@@ -22,4 +22,13 @@ export class SetDayOverrideDto {
   @IsOptional()
   @IsUUID()
   deliverySlotId?: string;
+
+  @ApiPropertyOptional({
+    example: 'No onions please',
+    description: 'A prep/customization note for this one delivery',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
 }

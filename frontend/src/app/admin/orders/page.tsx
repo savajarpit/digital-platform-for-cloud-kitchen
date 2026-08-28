@@ -9,6 +9,7 @@ import {
   listAdminOrders,
   updateOrderStatus,
   type AdminOrder,
+  type AdminOrderFulfillmentType,
   type AdminOrdersMeta,
 } from "@/lib/api/admin-orders";
 import { usePermission } from "@/context/PermissionsContext";
@@ -36,49 +37,75 @@ const STATUS_STYLES: Record<string, string> = {
   CANCELLED: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400",
 };
 
+const FULFILLMENT_STYLES: Record<AdminOrderFulfillmentType, string> = {
+  DELIVERY: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
+  PICKUP: "bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400",
+};
+
 export default function AdminOrdersPage() {
   const canEdit = usePermission(PERMISSIONS.ORDERS_MANAGE);
   const [status, setStatus] = useState<string>("");
+  const [fulfillmentType, setFulfillmentType] = useState<string>("");
   const [page, setPage] = useState(1);
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-primary-600">
           <Package className="h-5 w-5" />
           <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
             Orders
           </h2>
         </div>
-        <Select
-          value={status}
-          onValueChange={(v) => {
-            setStatus(v);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-48">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">All statuses</SelectItem>
-            {ALL_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s.replace(/_/g, " ")}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select
+            value={fulfillmentType}
+            onValueChange={(v) => {
+              setFulfillmentType(v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Delivery & pickup</SelectItem>
+              <SelectItem value="DELIVERY">Delivery only</SelectItem>
+              <SelectItem value="PICKUP">Pickup only</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select
+            value={status}
+            onValueChange={(v) => {
+              setStatus(v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All statuses</SelectItem>
+              {ALL_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s.replace(/_/g, " ")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {!canEdit && <ViewOnlyNotice />}
 
-      {/* Keyed by page+status so switching either remounts fresh (starts at
-          null again) instead of a synchronous setState-to-null in an effect. */}
+      {/* Keyed by page+status+fulfillmentType so switching any of them
+          remounts fresh (starts at null again) instead of a synchronous
+          setState-to-null in an effect. */}
       <OrdersTable
-        key={`${page}-${status}`}
+        key={`${page}-${status}-${fulfillmentType}`}
         page={page}
         status={status}
+        fulfillmentType={fulfillmentType}
         canEdit={canEdit}
         onPageChange={setPage}
       />
@@ -89,11 +116,13 @@ export default function AdminOrdersPage() {
 function OrdersTable({
   page,
   status,
+  fulfillmentType,
   canEdit,
   onPageChange,
 }: {
   page: number;
   status: string;
+  fulfillmentType: string;
   canEdit: boolean;
   onPageChange: (page: number) => void;
 }) {
@@ -103,13 +132,17 @@ function OrdersTable({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listAdminOrders({ page, status: status || undefined })
+    listAdminOrders({
+      page,
+      status: status || undefined,
+      fulfillmentType: (fulfillmentType || undefined) as AdminOrderFulfillmentType | undefined,
+    })
       .then(({ data, meta }) => {
         setOrders(data);
         setMeta(meta ?? null);
       })
       .catch(() => setError("Couldn't load orders."));
-  }, [page, status]);
+  }, [page, status, fulfillmentType]);
 
   async function handleStatusChange(order: AdminOrder, newStatus: string) {
     const prevOrders = orders;
@@ -149,7 +182,7 @@ function OrdersTable({
           <tr className="border-b border-zinc-100 text-left text-xs font-semibold tracking-wide text-zinc-500 uppercase dark:border-zinc-800 dark:text-zinc-400">
             <th className="px-5 py-3">Order</th>
             <th className="px-5 py-3">Customer</th>
-            <th className="px-5 py-3">Delivery</th>
+            <th className="px-5 py-3">Fulfillment</th>
             <th className="px-5 py-3">Total</th>
             <th className="px-5 py-3">Payment</th>
             <th className="px-5 py-3">Status</th>
@@ -179,11 +212,19 @@ function OrdersTable({
                   <p className="text-xs text-zinc-400">{order.user.email}</p>
                 </td>
                 <td className="px-5 py-3 text-xs text-zinc-500 dark:text-zinc-400">
-                  {order.deliverySlotName} ·{" "}
-                  {new Date(order.deliveryDate).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                  })}
+                  <span className={`badge ${FULFILLMENT_STYLES[order.fulfillmentType]}`}>
+                    {order.fulfillmentType === "PICKUP" ? "Pickup" : "Delivery"}
+                  </span>
+                  <p className="mt-1">
+                    {order.deliverySlotName} ·{" "}
+                    {new Date(order.deliveryDate).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </p>
+                  {order.fulfillmentType === "PICKUP" && order.pickupKitchenZone && (
+                    <p className="mt-0.5 text-zinc-400">{order.pickupKitchenZone.pickupAddress}</p>
+                  )}
                 </td>
                 <td className="px-5 py-3 font-medium text-zinc-900 dark:text-zinc-100">
                   {formatPriceFromPaise(order.totalInPaise)}

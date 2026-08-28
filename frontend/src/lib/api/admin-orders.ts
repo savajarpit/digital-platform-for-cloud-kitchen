@@ -21,6 +21,14 @@ export interface AdminOrderAddress {
   lng: number | null;
 }
 
+export type AdminOrderFulfillmentType = "DELIVERY" | "PICKUP";
+
+export interface AdminOrderPickupZone {
+  pickupAddress: string | null;
+  lat: number;
+  lng: number;
+}
+
 export interface AdminOrder {
   id: string;
   orderNumber: string;
@@ -35,7 +43,9 @@ export interface AdminOrder {
   deliveryWindowEnd: string;
   createdAt: string;
   items: AdminOrderItem[];
-  address: AdminOrderAddress;
+  fulfillmentType: AdminOrderFulfillmentType;
+  address: AdminOrderAddress | null;
+  pickupKitchenZone: AdminOrderPickupZone | null;
   user: { firstName: string; lastName: string | null; email: string };
 }
 
@@ -63,11 +73,13 @@ export function listAdminOrders(params: {
   page?: number;
   limit?: number;
   status?: string;
+  fulfillmentType?: AdminOrderFulfillmentType;
 }): Promise<{ data: AdminOrder[]; meta?: AdminOrdersMeta }> {
   const search = new URLSearchParams();
   if (params.page) search.set("page", String(params.page));
   if (params.limit) search.set("limit", String(params.limit));
   if (params.status) search.set("status", params.status);
+  if (params.fulfillmentType) search.set("fulfillmentType", params.fulfillmentType);
   const qs = search.toString();
   return proxyFetchPaginated<AdminOrder[]>(`/orders/admin${qs ? `?${qs}` : ""}`);
 }

@@ -33,13 +33,24 @@ export class UpdateSubscriptionSettingsDto {
   @ApiPropertyOptional({
     example: 24,
     description:
-      "Minimum lead time (hours) for skip/pause/day-override edits, and how far out a new signup's Day 1 is pushed",
+      'Minimum lead time (hours) for skip/pause/day-override edits',
   })
   @IsOptional()
   @IsInt()
   @Min(0)
   @Max(240)
   noticeHoursBeforeDelivery?: number;
+
+  @ApiPropertyOptional({
+    example: 1,
+    description:
+      "Days before a new subscriber's first delivery — 0 for same-day (materialized immediately on payment instead of waiting for the nightly job)",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(14)
+  startDateLeadDays?: number;
 
   @ApiPropertyOptional({
     example: true,

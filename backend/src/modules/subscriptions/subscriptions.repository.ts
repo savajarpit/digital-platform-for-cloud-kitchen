@@ -368,6 +368,7 @@ export class SubscriptionsRepository {
       isAcceptingNewSubscriptions?: boolean;
       closureReason?: string | null;
       noticeHoursBeforeDelivery?: number;
+      startDateLeadDays?: number;
       showOnHomepage?: boolean;
       homepageTitle?: string;
       homepageDescription?: string;
@@ -402,7 +403,7 @@ export class SubscriptionsRepository {
   upsertDayOverride(
     subscriptionId: string,
     date: string,
-    data: { addressId?: string | null; deliverySlotId?: string | null },
+    data: { addressId?: string | null; deliverySlotId?: string | null; note?: string | null },
   ): Promise<SubscriptionDayOverride> {
     return this.prisma.subscriptionDayOverride.upsert({
       where: { subscriptionId_date: { subscriptionId, date } },
@@ -423,6 +424,21 @@ export class SubscriptionsRepository {
   findActiveSubscriptionsForMaterialization() {
     return this.prisma.subscription.findMany({
       where: { status: SubscriptionStatus.ACTIVE },
+      include: {
+        plan: true,
+        address: true,
+        deliverySlot: true,
+        tenant: { include: { businessProfile: true } },
+      },
+    });
+  }
+
+  /** Same shape as findActiveSubscriptionsForMaterialization(), for a single
+   * subscription — used by verifyPayment()'s same-day inline materialize
+   * call (startDateLeadDays === 0), which can't wait for the nightly job. */
+  findSubscriptionForMaterialization(id: string) {
+    return this.prisma.subscription.findUnique({
+      where: { id },
       include: {
         plan: true,
         address: true,

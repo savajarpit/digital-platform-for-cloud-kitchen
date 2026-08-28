@@ -60,6 +60,11 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum OrderFulfillmentType {
+  DELIVERY
+  PICKUP
+}
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -312,6 +317,11 @@ model BusinessProfile {
   // per-tenant uploadable — every tenant displaying it uses the same mark.
   fssaiLicenseNumber        String?
   showFssaiLicense          Boolean  @default(false)
+  // Tenant-wide pickup master switch — checkout only actually offers
+  // pickup when this is true AND at least one KitchenZone also has its own
+  // pickupEnabled set (see Order.fulfillmentType); same two-condition
+  // gating shape as showFssaiLicense + fssaiLicenseNumber above.
+  pickupEnabled             Boolean  @default(false)
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
@@ -395,10 +405,18 @@ model KitchenZone {
   minOrderAmount          Int      @default(0)
   freeDeliveryAboveAmount Int?
   isActive                Boolean  @default(true)
+  // Per-zone pickup opt-in — only relevant when the tenant's own
+  // BusinessProfile.pickupEnabled master switch is also on (see Order.
+  // fulfillmentType). pickupAddress is a real, customer-presentable
+  // address string — `name` above is deliberately admin-only, so pickup
+  // needs its own field rather than reusing it.
+  pickupEnabled           Boolean  @default(false)
+  pickupAddress           String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant Tenant  @relation(fields: [tenantId], references: [id])
+  orders Order[]
 
   @@index([tenantId])
   @@map("kitchen_zones")
@@ -797,7 +815,13 @@ model Order {
   id                  String        @id @default(uuid())
   tenantId            String
   userId              String
-  addressId           String
+  // Required for DELIVERY, null for PICKUP — enforced in the service layer,
+  // not the DB, same convention as SubscriptionPlanDay's mode-conditional
+  // fields.
+  addressId           String?
+  fulfillmentType     OrderFulfillmentType @default(DELIVERY)
+  // Required for PICKUP, null for DELIVERY.
+  pickupKitchenZoneId String?
   orderNumber         String
   status              OrderStatus   @default(PENDING_PAYMENT)
   paymentStatus       PaymentStatus @default(PENDING)
@@ -836,14 +860,15 @@ model Order {
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
-  tenant           Tenant            @relation(fields: [tenantId], references: [id])
-  user             User              @relation(fields: [userId], references: [id])
-  address          Address           @relation(fields: [addressId], references: [id])
-  deliverySlot     DeliverySlot?     @relation(fields: [deliverySlotId], references: [id])
-  subscription     Subscription?     @relation(fields: [subscriptionId], references: [id])
-  items            OrderItem[]
-  notificationLogs NotificationLog[]
-  couponRedemption CouponRedemption?
+  tenant            Tenant            @relation(fields: [tenantId], references: [id])
+  user              User              @relation(fields: [userId], references: [id])
+  address           Address?          @relation(fields: [addressId], references: [id])
+  pickupKitchenZone KitchenZone?      @relation(fields: [pickupKitchenZoneId], references: [id])
+  deliverySlot      DeliverySlot?     @relation(fields: [deliverySlotId], references: [id])
+  subscription      Subscription?     @relation(fields: [subscriptionId], references: [id])
+  items             OrderItem[]
+  notificationLogs  NotificationLog[]
+  couponRedemption  CouponRedemption?
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId])
@@ -1180,6 +1205,11 @@ model SubscriptionDayOverride {
   date           String
   addressId      String?
   deliverySlotId String?
+  // Customer-typed prep/customization note for this one delivery — appended
+  // onto the materialized Order.notes system label (Order.notes is already
+  // claimed for the "Subscription: {plan} — {day}" text nightly
+  // materialization writes, so this can't just reuse that column directly).
+  note           String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -1210,7 +1240,14 @@ model SubscriptionSettings {
   isEnabled                   Boolean  @default(true)
   isAcceptingNewSubscriptions Boolean  @default(true)
   closureReason               String?
+  // Skip/pause/day-override edit lead time only — NOT signup start date
+  // (see startDateLeadDays below for that).
   noticeHoursBeforeDelivery   Int      @default(24)
+  // How many days out a new subscriber's Day 1 is scheduled — 0 means
+  // same-day (verifyPayment() then materializes that one subscription
+  // inline, since the nightly cron already ran/won't run again today).
+  // Default of 1 matches the platform's original hardcoded behavior.
+  startDateLeadDays           Int      @default(1)
   // Home page plans block — only rendered if true AND at least one
   // published SubscriptionPlan exists.
   showOnHomepage              Boolean  @default(true)

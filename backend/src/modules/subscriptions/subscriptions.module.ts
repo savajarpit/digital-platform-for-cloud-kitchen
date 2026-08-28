@@ -3,6 +3,7 @@ import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionsRepository } from './subscriptions.repository';
 import { SubscriptionsMaterializationScheduler } from './subscriptions-materialization.scheduler';
+import { SubscriptionMaterializationService } from './subscription-materialization.service';
 import { AddressesModule } from '../addresses/addresses.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -25,6 +26,7 @@ import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
     SubscriptionsService,
     SubscriptionsRepository,
     SubscriptionsMaterializationScheduler,
+    SubscriptionMaterializationService,
     PaginationService,
   ],
   exports: [SubscriptionsService],

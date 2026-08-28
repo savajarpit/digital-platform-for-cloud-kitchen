@@ -54,6 +54,7 @@ export default function BusinessProfilePage() {
           gstNumber: p.gstNumber ?? undefined,
           fssaiLicenseNumber: p.fssaiLicenseNumber ?? undefined,
           showFssaiLicense: p.showFssaiLicense,
+          pickupEnabled: p.pickupEnabled,
           defaultLocale: p.defaultLocale,
           themeConfig: p.themeConfig,
           showReviewsOnHomepage: p.showReviewsOnHomepage,
@@ -346,6 +347,23 @@ export default function BusinessProfilePage() {
               />
             </label>
           </div>
+        </div>
+
+        <div className="card flex flex-col gap-3 p-6">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Pickup orders</h3>
+          <label className="flex items-center justify-between gap-3">
+            <span className="text-sm text-zinc-700 dark:text-zinc-300">
+              Let customers choose pickup instead of delivery
+              <span className="block text-xs text-zinc-400">
+                Also mark at least one kitchen zone as pickup-enabled, in Delivery Settings, before
+                this actually shows up at checkout.
+              </span>
+            </span>
+            <Toggle
+              checked={form.pickupEnabled ?? false}
+              onChange={(checked) => field("pickupEnabled", checked)}
+            />
+          </label>
         </div>
 
         <div className="card flex flex-col gap-4 p-6">

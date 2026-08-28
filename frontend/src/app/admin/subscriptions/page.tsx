@@ -1209,6 +1209,11 @@ function TodaysDeliveriesTab() {
                           day: "numeric",
                         })
                       : null,
+                    // d.notes is the full materialized-order text (e.g.
+                    // "Subscription: Plan — Week 1 · Fri — Note: no onions")
+                    // — pull out just the customer-added tail so it doesn't
+                    // repeat the plan name already shown in the heading.
+                    note: d.notes?.includes("— Note: ") ? d.notes.split("— Note: ").pop() : null,
                     address: d.address,
                   }}
                 />
@@ -1325,8 +1330,25 @@ function SettingsTab({ canEdit }: { canEdit: boolean }) {
           className="input w-32"
         />
         <p className="text-xs text-zinc-400">
-          How far ahead a customer must skip/pause/change delivery for a day, and how far out a new
-          signup&apos;s first delivery is scheduled.
+          How far ahead a customer must skip/pause/change delivery for an already-active subscription.
+        </p>
+      </div>
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+          First delivery lead time (days)
+        </label>
+        <input
+          type="number"
+          min={0}
+          max={14}
+          value={settings.startDateLeadDays}
+          onChange={(e) => setSettings({ ...settings, startDateLeadDays: Number(e.target.value) })}
+          disabled={!canEdit}
+          className="input w-32"
+        />
+        <p className="text-xs text-zinc-400">
+          Days before a new subscriber&apos;s first delivery — 0 for same-day (delivered right after payment
+          instead of waiting for tonight&apos;s prep run).
         </p>
       </div>
       {canEdit && (

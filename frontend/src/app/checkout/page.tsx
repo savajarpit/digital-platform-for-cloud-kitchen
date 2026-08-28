@@ -15,9 +15,12 @@ import { getOrderWindowStatus } from "@/lib/api/order-window";
 import {
   getDeliverySlots,
   getInstantDeliveryStatus,
+  getPickupInfo,
   type DeliverySlot,
   type InstantDeliveryStatus,
+  type PickupInfo,
 } from "@/lib/api/delivery-slots";
+import { buildGoogleMapsLink } from "@/lib/format/maps-link";
 import { formatTime12h, hhmmToMinutes } from "@/lib/format/time";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { AddressForm } from "@/components/addresses/AddressForm";
@@ -40,6 +43,9 @@ export default function CheckoutPage() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [serviceability, setServiceability] = useState<ServiceabilityResult | null>(null);
+  const [pickupInfo, setPickupInfo] = useState<PickupInfo | null>(null);
+  const [fulfillmentType, setFulfillmentType] = useState<"DELIVERY" | "PICKUP">("DELIVERY");
+  const [selectedZoneId, setSelectedZoneId] = useState("");
   const [windowClosed, setWindowClosed] = useState<string | null>(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
@@ -51,6 +57,7 @@ export default function CheckoutPage() {
   const [isInstant, setIsInstant] = useState(false);
   const [todayStr, setTodayStr] = useState("");
   const [nowMinutes, setNowMinutes] = useState(0);
+  const [notes, setNotes] = useState("");
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountInPaise: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
@@ -65,6 +72,13 @@ export default function CheckoutPage() {
     getOrderWindowStatus().then((status) => {
       if (!status.isAcceptingOrders) setWindowClosed(status.reason ?? "Not currently accepting orders");
     });
+
+    getPickupInfo()
+      .then((info) => {
+        setPickupInfo(info);
+        if (info.zones[0]) setSelectedZoneId(info.zones[0].id);
+      })
+      .catch(() => setPickupInfo({ available: false, zones: [] }));
 
     // Auto-selected by default whenever it's actually available — the
     // customer can still switch to scheduling a later day/slot instead.
@@ -154,16 +168,21 @@ export default function CheckoutPage() {
     ? selectedSlotId
     : (visibleSlots[0]?.id ?? "");
 
+  const isPickup = fulfillmentType === "PICKUP";
   const couponDiscountInPaise = appliedCoupon?.discountInPaise ?? 0;
   const effectiveSubtotal = Math.max(0, subtotal - couponDiscountInPaise);
   const qualifiesForFreeDelivery = Boolean(
     serviceability?.freeDeliveryAboveAmountInPaise !== undefined &&
       effectiveSubtotal >= serviceability.freeDeliveryAboveAmountInPaise,
   );
-  const deliveryFeeInPaise = qualifiesForFreeDelivery ? 0 : (serviceability?.deliveryFeeInPaise ?? 0);
+  const deliveryFeeInPaise = isPickup
+    ? 0
+    : qualifiesForFreeDelivery
+      ? 0
+      : (serviceability?.deliveryFeeInPaise ?? 0);
   const totalInPaise = effectiveSubtotal + deliveryFeeInPaise;
   const belowMinOrder = Boolean(
-    serviceability?.minOrderAmountInPaise && subtotal < serviceability.minOrderAmountInPaise,
+    !isPickup && serviceability?.minOrderAmountInPaise && subtotal < serviceability.minOrderAmountInPaise,
   );
 
   async function handleApplyCoupon() {
@@ -198,17 +217,19 @@ export default function CheckoutPage() {
   }
 
   async function handlePlaceOrder() {
-    if (!selectedAddressId) return;
+    if (isPickup ? !selectedZoneId : !selectedAddressId) return;
     if (!isInstant && (!selectedDay || !effectiveSlotId)) return;
     setIsPlacingOrder(true);
     try {
       const { order, razorpayOrderId, razorpayKeyId } = await createOrder({
-        addressId: selectedAddressId,
+        fulfillmentType,
+        ...(isPickup ? { pickupKitchenZoneId: selectedZoneId } : { addressId: selectedAddressId! }),
         items: items.map((i) => ({ mealId: i.mealId, quantity: i.quantity })),
         ...(isInstant
           ? { isInstant: true }
           : { deliveryDate: selectedDay, deliverySlotId: effectiveSlotId }),
         couponCode: appliedCoupon?.code,
+        notes: notes.trim() || undefined,
       });
 
       await loadRazorpayScript();
@@ -261,6 +282,87 @@ export default function CheckoutPage() {
 
       <div className="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
+          {pickupInfo?.available && (
+            <section className="card p-6">
+              <h2 className="mb-4 font-semibold text-zinc-900 dark:text-zinc-100">How would you like this?</h2>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label
+                  className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 transition-colors ${
+                    !isPickup
+                      ? "border-primary-600 bg-primary-50 dark:bg-primary-950"
+                      : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="fulfillmentType"
+                    checked={!isPickup}
+                    onChange={() => setFulfillmentType("DELIVERY")}
+                    className="h-4 w-4 accent-primary-600"
+                  />
+                  <MapPin className="h-4 w-4 text-primary-600" />
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Delivery</p>
+                </label>
+                <label
+                  className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 transition-colors ${
+                    isPickup
+                      ? "border-primary-600 bg-primary-50 dark:bg-primary-950"
+                      : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-700"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="fulfillmentType"
+                    checked={isPickup}
+                    onChange={() => {
+                      setFulfillmentType("PICKUP");
+                      setIsInstant(false);
+                    }}
+                    className="h-4 w-4 accent-primary-600"
+                  />
+                  <MapPin className="h-4 w-4 text-zinc-500" />
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Pickup</p>
+                </label>
+              </div>
+            </section>
+          )}
+
+          {isPickup ? (
+            <section className="card p-6">
+              <h2 className="mb-4 font-semibold text-zinc-900 dark:text-zinc-100">Choose a pickup location</h2>
+              <div className="flex flex-col gap-3">
+                {pickupInfo?.zones.map((zone) => (
+                  <label
+                    key={zone.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
+                      selectedZoneId === zone.id
+                        ? "border-primary-600 bg-primary-50 dark:bg-primary-950"
+                        : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-700"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="pickupZone"
+                      checked={selectedZoneId === zone.id}
+                      onChange={() => setSelectedZoneId(zone.id)}
+                      className="mt-1 h-4 w-4 accent-primary-600"
+                    />
+                    <div className="flex-1">
+                      <p className="text-sm text-zinc-600 dark:text-zinc-400">{zone.pickupAddress}</p>
+                      <a
+                        href={buildGoogleMapsLink(zone.lat, zone.lng)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-block text-xs text-primary-600 hover:underline dark:text-primary-400"
+                      >
+                        Get directions
+                      </a>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </section>
+          ) : (
           <section className="card p-6">
             <h2 className="mb-4 font-semibold text-zinc-900 dark:text-zinc-100">
               {t("selectAddress")}
@@ -340,14 +442,15 @@ export default function CheckoutPage() {
               <p className="mt-3 text-sm text-red-600 dark:text-red-400">{t("notServiceable")}</p>
             )}
           </section>
+          )}
 
           <section className="card p-6">
             <h2 className="mb-3 flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100">
               <Clock className="h-4 w-4 text-primary-600" />
-              {t("deliverySlot")}
+              {isPickup ? "Pickup time" : t("deliverySlot")}
             </h2>
 
-            {instantStatus?.available && (
+            {!isPickup && instantStatus?.available && (
               <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label
                   className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 transition-colors ${
@@ -451,6 +554,21 @@ export default function CheckoutPage() {
           </section>
 
           <section className="card p-6">
+            <label htmlFor="orderNotes" className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              {t("orderNotes")}
+            </label>
+            <textarea
+              id="orderNotes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              maxLength={500}
+              rows={2}
+              placeholder="Ring the bell twice, leave at the door…"
+              className="input w-full resize-none"
+            />
+          </section>
+
+          <section className="card p-6">
             <label className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
               <input
                 type="checkbox"
@@ -533,8 +651,10 @@ export default function CheckoutPage() {
             )}
             <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
               <span>Delivery fee</span>
-              {qualifiesForFreeDelivery ? (
-                <span className="font-medium text-primary-600">{t("freeDelivery")}</span>
+              {isPickup || qualifiesForFreeDelivery ? (
+                <span className="font-medium text-primary-600">
+                  {isPickup ? "—" : t("freeDelivery")}
+                </span>
               ) : (
                 <span>{formatPriceFromPaise(deliveryFeeInPaise)}</span>
               )}
@@ -557,12 +677,12 @@ export default function CheckoutPage() {
             onClick={handlePlaceOrder}
             disabled={
               isPlacingOrder ||
-              !selectedAddressId ||
+              (isPickup ? !selectedZoneId : !selectedAddressId) ||
               (!isInstant && (!selectedDay || !effectiveSlotId)) ||
               !agreedToTerms ||
               Boolean(windowClosed) ||
               belowMinOrder ||
-              serviceability?.serviceable === false ||
+              (!isPickup && serviceability?.serviceable === false) ||
               checkingAvailability ||
               hasUnavailableItems
             }

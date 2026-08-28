@@ -109,9 +109,9 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
             </p>
             <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">{order.user.email}</p>
             <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
-              {order.address.line1}
-              {order.address.line2 ? `, ${order.address.line2}` : ""}, {order.address.city},{" "}
-              {order.address.state} — {order.address.pincode}
+              {order.fulfillmentType === "PICKUP"
+                ? `Pickup: ${order.pickupKitchenZone?.pickupAddress ?? "—"}`
+                : `${order.address!.line1}${order.address!.line2 ? `, ${order.address!.line2}` : ""}, ${order.address!.city}, ${order.address!.state} — ${order.address!.pincode}`}
             </p>
           </div>
           <div>

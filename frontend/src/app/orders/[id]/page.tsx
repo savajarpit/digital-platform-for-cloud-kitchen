@@ -95,18 +95,27 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </p>
 
         <div className="mt-6 flex flex-col gap-2 rounded-xl bg-zinc-50 p-4 text-left text-sm dark:bg-zinc-800">
-          <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
-            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-            <span>
-              {order.address.line1}
-              {order.address.line2 ? `, ${order.address.line2}` : ""}, {order.address.city},{" "}
-              {order.address.state} — {order.address.pincode}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-            <Phone className="h-4 w-4 shrink-0 text-primary-600" />
-            <span>{order.address.contactPhone}</span>
-          </div>
+          {order.fulfillmentType === "PICKUP" ? (
+            <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+              <span>Pickup: {order.pickupKitchenZone?.pickupAddress ?? "—"}</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                <span>
+                  {order.address!.line1}
+                  {order.address!.line2 ? `, ${order.address!.line2}` : ""}, {order.address!.city},{" "}
+                  {order.address!.state} — {order.address!.pincode}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
+                <Phone className="h-4 w-4 shrink-0 text-primary-600" />
+                <span>{order.address!.contactPhone}</span>
+              </div>
+            </>
+          )}
           <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
             <Clock className="h-4 w-4 shrink-0 text-primary-600" />
             <span>

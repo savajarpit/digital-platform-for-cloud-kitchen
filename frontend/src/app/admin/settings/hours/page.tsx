@@ -17,6 +17,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { InstantDeliveryCard } from "@/components/admin/InstantDeliveryCard";
+import { TimeInput12h } from "@/components/ui/TimeInput12h";
 
 const DAYS: { key: keyof OperatingHours; label: string }[] = [
   { key: "mon", label: "Monday" },
@@ -150,18 +151,16 @@ export default function OrderHoursPage() {
                 <span className="w-28 shrink-0 text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   {day.label}
                 </span>
-                <input
-                  type="time"
+                <TimeInput12h
                   value={dayHours.open ?? ""}
-                  onChange={(e) => updateDay(day.key, { open: e.target.value })}
-                  className="input w-36"
+                  onChange={(v) => updateDay(day.key, { open: v })}
+                  disabled={!canEdit}
                 />
                 <span className="text-sm text-zinc-400">to</span>
-                <input
-                  type="time"
+                <TimeInput12h
                   value={dayHours.close ?? ""}
-                  onChange={(e) => updateDay(day.key, { close: e.target.value })}
-                  className="input w-36"
+                  onChange={(v) => updateDay(day.key, { close: v })}
+                  disabled={!canEdit}
                 />
               </div>
             );
@@ -170,12 +169,7 @@ export default function OrderHoursPage() {
             <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Daily cutoff time
             </label>
-            <input
-              type="time"
-              value={cutoff}
-              onChange={(e) => setCutoff(e.target.value)}
-              className="input w-36"
-            />
+            <TimeInput12h value={cutoff} onChange={setCutoff} disabled={!canEdit} />
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
               Orders stop being accepted after this time each day, even if still within operating hours.
             </p>

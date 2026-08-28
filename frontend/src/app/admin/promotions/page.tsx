@@ -27,6 +27,7 @@ import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { TimeInput12h } from "@/components/ui/TimeInput12h";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { MealPickerGrid } from "@/components/admin/MealPickerGrid";
 import { useFeatures } from "@/context/FeaturesContext";
@@ -825,18 +826,14 @@ function PromotionForm({
               value={form.discountPercentage ?? 10}
               onChange={(v) => setForm({ ...form, discountPercentage: Number(v) })}
             />
-            <LabeledInput
-              label="Start time"
-              type="time"
-              value={form.startTime ?? ""}
-              onChange={(v) => setForm({ ...form, startTime: v })}
-            />
-            <LabeledInput
-              label="End time"
-              type="time"
-              value={form.endTime ?? ""}
-              onChange={(v) => setForm({ ...form, endTime: v })}
-            />
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Start time</label>
+              <TimeInput12h value={form.startTime ?? ""} onChange={(v) => setForm({ ...form, startTime: v })} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">End time</label>
+              <TimeInput12h value={form.endTime ?? ""} onChange={(v) => setForm({ ...form, endTime: v })} />
+            </div>
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">

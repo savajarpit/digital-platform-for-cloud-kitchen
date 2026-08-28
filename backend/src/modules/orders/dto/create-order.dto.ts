@@ -2,6 +2,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -14,6 +15,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { OrderFulfillmentType } from '../../../generated/prisma';
 
 export class OrderItemInputDto {
   @ApiProperty({ example: 'b3f1c2a0-...' })
@@ -27,9 +29,29 @@ export class OrderItemInputDto {
 }
 
 export class CreateOrderDto {
-  @ApiProperty({ example: 'b3f1c2a0-...' })
+  @ApiPropertyOptional({
+    enum: OrderFulfillmentType,
+    default: OrderFulfillmentType.DELIVERY,
+  })
+  @IsOptional()
+  @IsEnum(OrderFulfillmentType)
+  fulfillmentType?: OrderFulfillmentType;
+
+  @ApiPropertyOptional({
+    example: 'b3f1c2a0-...',
+    description: 'Required unless fulfillmentType is PICKUP',
+  })
+  @ValidateIf((o: CreateOrderDto) => o.fulfillmentType !== 'PICKUP')
   @IsUUID()
-  addressId: string;
+  addressId?: string;
+
+  @ApiPropertyOptional({
+    example: 'b3f1c2a0-...',
+    description: 'Required when fulfillmentType is PICKUP',
+  })
+  @ValidateIf((o: CreateOrderDto) => o.fulfillmentType === 'PICKUP')
+  @IsUUID()
+  pickupKitchenZoneId?: string;
 
   @ApiProperty({ type: [OrderItemInputDto] })
   @IsArray()

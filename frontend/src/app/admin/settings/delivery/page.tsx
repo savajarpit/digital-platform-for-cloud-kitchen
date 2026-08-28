@@ -29,6 +29,8 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { KitchenZonesCard } from "@/components/admin/KitchenZonesCard";
+import { TimeInput12h } from "@/components/ui/TimeInput12h";
+import { formatTime12h } from "@/lib/format/time";
 
 const rupeesToPaise = (rupees: string): number | undefined =>
   rupees === "" ? undefined : Math.round(Number(rupees) * 100);
@@ -355,7 +357,7 @@ function SlotsCard({
             <div>
               <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{slot.name}</span>
               <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
-                {slot.startTime}–{slot.endTime}
+                {formatTime12h(slot.startTime)}–{formatTime12h(slot.endTime)}
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -395,22 +397,18 @@ function SlotsCard({
             <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
               Start
             </label>
-            <input
-              type="time"
+            <TimeInput12h
               value={newSlot.startTime}
-              onChange={(e) => setNewSlot((s) => ({ ...s, startTime: e.target.value }))}
-              className="input w-32"
+              onChange={(v) => setNewSlot((s) => ({ ...s, startTime: v }))}
             />
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
               End
             </label>
-            <input
-              type="time"
+            <TimeInput12h
               value={newSlot.endTime}
-              onChange={(e) => setNewSlot((s) => ({ ...s, endTime: e.target.value }))}
-              className="input w-32"
+              onChange={(v) => setNewSlot((s) => ({ ...s, endTime: v }))}
             />
           </div>
           <button

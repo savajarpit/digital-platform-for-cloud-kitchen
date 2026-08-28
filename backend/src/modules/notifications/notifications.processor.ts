@@ -35,13 +35,39 @@ export class NotificationsProcessor {
 
     const settings = await this.settingsRepo.findNotificationSettings(tenantId);
 
+    // PICKUP orders have no Address row at all — fall back to the pickup
+    // zone's own presentable address/coordinates and the account's own
+    // phone number (there's no per-order contact phone without an address).
+    const isPickup = order.fulfillmentType === 'PICKUP';
+    const deliveryAddress = isPickup
+      ? `Pickup: ${order.pickupKitchenZone?.pickupAddress ?? ''}`
+      : [
+          order.address?.line1,
+          order.address?.line2,
+          order.address?.city,
+          order.address?.state,
+          order.address?.pincode,
+        ]
+          .filter(Boolean)
+          .join(', ');
+    const contactPhone = isPickup
+      ? (order.user.phone ?? '')
+      : (order.address?.contactPhone ?? '');
+    const mapLink = isPickup
+      ? order.pickupKitchenZone
+        ? buildGoogleMapsLink(order.pickupKitchenZone.lat, order.pickupKitchenZone.lng)
+        : undefined
+      : order.address?.lat != null && order.address?.lng != null
+        ? buildGoogleMapsLink(order.address.lat, order.address.lng)
+        : undefined;
+
     const attempts = await this.notificationsService.sendOrderConfirmation(
       settings,
       {
         customerName:
           `${order.user.firstName} ${order.user.lastName ?? ''}`.trim(),
         customerEmail: order.user.email,
-        customerWhatsAppNumber: order.address.contactPhone,
+        customerWhatsAppNumber: contactPhone || undefined,
         orderNumber: order.orderNumber,
         totalInPaise: order.totalInPaise,
         deliverySlotName: order.deliverySlotName,
@@ -52,20 +78,9 @@ export class NotificationsProcessor {
           name: item.nameSnapshot,
           quantity: item.quantity,
         })),
-        deliveryAddress: [
-          order.address.line1,
-          order.address.line2,
-          order.address.city,
-          order.address.state,
-          order.address.pincode,
-        ]
-          .filter(Boolean)
-          .join(', '),
-        deliveryContactPhone: order.address.contactPhone,
-        mapLink:
-          order.address.lat != null && order.address.lng != null
-            ? buildGoogleMapsLink(order.address.lat, order.address.lng)
-            : undefined,
+        deliveryAddress,
+        deliveryContactPhone: contactPhone,
+        mapLink,
       },
     );
 

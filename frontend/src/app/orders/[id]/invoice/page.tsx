@@ -115,16 +115,24 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
         <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div>
             <h3 className="mb-2 text-xs font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400 print:text-zinc-600">
-              {t("deliverTo")}
+              {order.fulfillmentType === "PICKUP" ? "Pickup location" : t("deliverTo")}
             </h3>
-            <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
-              {order.address.line1}
-              {order.address.line2 ? `, ${order.address.line2}` : ""}, {order.address.city},{" "}
-              {order.address.state} — {order.address.pincode}
-            </p>
-            <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
-              {order.address.contactPhone}
-            </p>
+            {order.fulfillmentType === "PICKUP" ? (
+              <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
+                {order.pickupKitchenZone?.pickupAddress ?? "—"}
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
+                  {order.address!.line1}
+                  {order.address!.line2 ? `, ${order.address!.line2}` : ""}, {order.address!.city},{" "}
+                  {order.address!.state} — {order.address!.pincode}
+                </p>
+                <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
+                  {order.address!.contactPhone}
+                </p>
+              </>
+            )}
           </div>
           <div>
             <h3 className="mb-2 text-xs font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400 print:text-zinc-600">

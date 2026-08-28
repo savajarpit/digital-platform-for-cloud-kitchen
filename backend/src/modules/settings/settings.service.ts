@@ -128,6 +128,34 @@ export class SettingsService {
     return { maxAdvanceOrderDays: profile?.maxAdvanceOrderDays ?? 2, slots };
   }
 
+  /** Pickup is only actually offered when BOTH the tenant-wide master
+   * switch is on AND at least one KitchenZone has its own pickupEnabled —
+   * same two-condition gating shape as showFssaiLicense + a real license
+   * number. Computed fresh here (not cached/trusted from the client) so
+   * checkout and order creation always agree on the current state. */
+  async getPickupInfo(tenantId: string): Promise<{
+    available: boolean;
+    zones: { id: string; pickupAddress: string; lat: number; lng: number }[];
+  }> {
+    const [profile, zones] = await Promise.all([
+      this.settingsRepo.findBusinessProfile(tenantId),
+      this.settingsRepo.findAllKitchenZones(tenantId),
+    ]);
+    const eligibleZones = zones.filter((z) => z.isActive && z.pickupEnabled);
+    const available = Boolean(profile?.pickupEnabled) && eligibleZones.length > 0;
+    return {
+      available,
+      zones: available
+        ? eligibleZones.map((z) => ({
+            id: z.id,
+            pickupAddress: z.pickupAddress ?? '',
+            lat: z.lat,
+            lng: z.lng,
+          }))
+        : [],
+    };
+  }
+
   // ── Business profile / branding ──────────────────────────
 
   getBusinessProfile(tenantId: string): Promise<BusinessProfile | null> {

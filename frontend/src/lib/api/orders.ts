@@ -21,6 +21,14 @@ export interface OrderAddress {
   pincode: string;
 }
 
+export type OrderFulfillmentType = "DELIVERY" | "PICKUP";
+
+export interface OrderPickupZone {
+  pickupAddress: string | null;
+  lat: number;
+  lng: number;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -40,11 +48,15 @@ export interface Order {
   notes: string | null;
   createdAt: string;
   items: OrderItem[];
-  address: OrderAddress;
+  fulfillmentType: OrderFulfillmentType;
+  address: OrderAddress | null;
+  pickupKitchenZone: OrderPickupZone | null;
 }
 
 export interface CreateOrderInput {
-  addressId: string;
+  fulfillmentType?: OrderFulfillmentType;
+  addressId?: string;
+  pickupKitchenZoneId?: string;
   items: { mealId: string; quantity: number }[];
   notes?: string;
   isInstant?: boolean;

@@ -470,13 +470,34 @@ export class SubscriptionsRepository {
   }
 
   /** Active subscriber count for a plan — the multiplier behind the kitchen
-   * prep planner's per-day meal quantities. */
+   * prep planner's per-day meal quantities. `excludeSkippedOnDate`, when
+   * given a real date, subtracts anyone with a skip/pause covering that
+   * exact date (SubscriptionSkip stores both under the same dateFrom/dateTo
+   * range) — only meaningful for a WEEKLY_FIXED plan's "today" projection,
+   * where every subscriber shares the same real date. Left unset for a
+   * RELATIVE_DAY plan's hypothetical "if everyone hit day N" projection,
+   * since there "today" isn't a single shared date to check skips against. */
   countActiveSubscriptionsForPlan(
     tenantId: string,
     planId: string,
+    excludeSkippedOnDate?: string,
   ): Promise<number> {
     return this.prisma.subscription.count({
-      where: { tenantId, planId, status: SubscriptionStatus.ACTIVE },
+      where: {
+        tenantId,
+        planId,
+        status: SubscriptionStatus.ACTIVE,
+        ...(excludeSkippedOnDate
+          ? {
+              skips: {
+                none: {
+                  dateFrom: { lte: excludeSkippedOnDate },
+                  dateTo: { gte: excludeSkippedOnDate },
+                },
+              },
+            }
+          : {}),
+      },
     });
   }
 

@@ -397,9 +397,10 @@ export class SubscriptionsService {
     if (!plan) throw new NotFoundException('Plan not found');
 
     let key: PlanScheduleKey;
+    let todayStr: string | undefined;
     if (plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED) {
       const timezone = await this.getTenantTimezone(tenantId);
-      const { dateStr: todayStr } = DateUtil.getTenantNow(timezone);
+      todayStr = DateUtil.getTenantNow(timezone).dateStr;
       key = PlanScheduleUtil.resolveKey(plan, {
         dateStr: todayStr,
         relativeCounter: 1,
@@ -421,7 +422,15 @@ export class SubscriptionsService {
             key.weekNumber,
             key.weekday,
           ),
-      this.subscriptionsRepo.countActiveSubscriptionsForPlan(tenantId, planId),
+      // todayStr is only set for WEEKLY_FIXED, where every subscriber shares
+      // the same real date — RELATIVE_DAY's projection stays the existing
+      // hypothetical "if everyone hit day N" count, skip-unaware, since
+      // there's no single shared date to check skips against there.
+      this.subscriptionsRepo.countActiveSubscriptionsForPlan(
+        tenantId,
+        planId,
+        todayStr,
+      ),
     ]);
 
     const items = (day?.slots ?? [])

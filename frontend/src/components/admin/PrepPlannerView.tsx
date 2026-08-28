@@ -45,8 +45,9 @@ export function PrepPlannerView() {
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        Pick a plan and a day of its template — this shows what you&apos;d need to prepare if every
-        active subscriber on that plan were on that day, not just today&apos;s actual deliveries.
+        {isWeeklyFixed
+          ? "Today's real batch-cook count — every active subscriber on this plan, minus anyone who skipped or paused today."
+          : "Pick a plan and a day of its template — this shows what you'd need to prepare if every active subscriber on that plan were on that day, not just today's actual deliveries."}
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">

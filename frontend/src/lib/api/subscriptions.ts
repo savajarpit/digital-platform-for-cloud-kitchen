@@ -15,8 +15,17 @@ export interface PlanSlot {
 
 export interface PlanDay {
   id: string;
-  dayNumber: number;
+  dayNumber: number | null;
+  weekNumber: number | null;
+  weekday: number | null;
   slots: PlanSlot[];
+}
+
+export type SchedulingMode = "RELATIVE_DAY" | "WEEKLY_FIXED";
+
+export interface PlanPreviewDay {
+  date: string;
+  meals: { slotType: MealSlotType; mealId: string | null; name: string | null; imageUrl: string | null }[];
 }
 
 export interface PlanDetail {
@@ -26,6 +35,11 @@ export interface PlanDetail {
   durationDays: number;
   priceInPaise: number;
   days: PlanDay[];
+  schedulingMode: SchedulingMode;
+  /** WEEKLY_FIXED plans only — a real, weekday-labeled rolling window
+   * starting tomorrow, for browsing before subscribing. Null for
+   * RELATIVE_DAY plans, which render `days` as authored instead. */
+  previewWindow: PlanPreviewDay[] | null;
   timeSelectionEnabled: boolean;
   activePromotion?: { promotionName: string; discountPercentage: number } | null;
 }

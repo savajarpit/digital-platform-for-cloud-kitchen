@@ -14,11 +14,19 @@ export interface PlanSlot {
 
 export interface PlanDay {
   id: string;
-  dayNumber: number;
+  dayNumber: number | null;
+  weekNumber: number | null;
+  weekday: number | null;
   slots: PlanSlot[];
 }
 
 export type PlanAccentColor = "PRIMARY" | "SECONDARY" | "ACCENT";
+
+// RELATIVE_DAY (default) — days are relative to each subscriber's own start
+// date, "Day 1, Day 2...". WEEKLY_FIXED — the menu is pinned to real
+// calendar weekdays (and optionally multiple weeks) so every subscriber
+// eating on the same real day gets the same dish — batch cooking.
+export type SchedulingMode = "RELATIVE_DAY" | "WEEKLY_FIXED";
 
 export interface Plan {
   id: string;
@@ -33,6 +41,9 @@ export interface Plan {
   badgeText: string | null;
   isPopular: boolean;
   accentColor: PlanAccentColor;
+  schedulingMode: SchedulingMode;
+  weekCount: number | null;
+  scheduleAnchorDate: string | null;
   days?: PlanDay[];
 }
 
@@ -46,6 +57,9 @@ export interface PlanInput {
   badgeText?: string;
   isPopular?: boolean;
   accentColor?: PlanAccentColor;
+  schedulingMode?: SchedulingMode;
+  weekCount?: number;
+  scheduleAnchorDate?: string;
 }
 
 export interface PlanSlotInput {
@@ -54,7 +68,9 @@ export interface PlanSlotInput {
 }
 
 export interface PlanDayInput {
-  dayNumber: number;
+  dayNumber?: number;
+  weekNumber?: number;
+  weekday?: number;
   slots: PlanSlotInput[];
 }
 
@@ -250,14 +266,18 @@ export function getTodaysDeliveries(): Promise<TodaysDeliveries> {
 export interface PrepPlan {
   planId: string;
   planName: string;
-  dayNumber: number;
+  schedulingMode: SchedulingMode;
+  dayNumber?: number;
+  weekNumber?: number;
+  weekday?: number;
+  label: string;
   subscriberCount: number;
   items: { slotType: MealSlotType; mealName: string; quantity: number }[];
 }
 
-/** Projected quantities for a plan's template day = active subscriber count x that day's meals — independent of calendar dates, since subscribers start on staggered days. */
-export function getPrepPlan(planId: string, dayNumber: number): Promise<PrepPlan> {
-  return proxyFetch<PrepPlan>(
-    `/subscriptions/admin/prep-plan?planId=${encodeURIComponent(planId)}&dayNumber=${dayNumber}`,
-  );
+/** Projected quantities for a plan's template day = active subscriber count x that day's meals — independent of calendar dates for RELATIVE_DAY plans (subscribers start on staggered days), but for WEEKLY_FIXED plans it's today's real weekday and dayNumber is ignored/omitted. */
+export function getPrepPlan(planId: string, dayNumber?: number): Promise<PrepPlan> {
+  const qs = new URLSearchParams({ planId });
+  if (dayNumber != null) qs.set("dayNumber", String(dayNumber));
+  return proxyFetch<PrepPlan>(`/subscriptions/admin/prep-plan?${qs.toString()}`);
 }

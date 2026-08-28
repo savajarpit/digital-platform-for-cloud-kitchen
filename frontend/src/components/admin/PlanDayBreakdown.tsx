@@ -7,6 +7,36 @@ const SLOT_LABELS: Record<MealSlotType, string> = {
   DINNER: "Dinner",
 };
 
+// Mon-first display order — the backend stores weekday as 0=Sun..6=Sat, and
+// Prisma's own orderBy can't safely express "Mon first" (see schema note on
+// SubscriptionPlanDay), so this component sorts client-side instead.
+const WEEKDAY_DISPLAY_RANK: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6 };
+const WEEKDAY_LABELS: Record<number, string> = {
+  0: "Sun",
+  1: "Mon",
+  2: "Tue",
+  3: "Wed",
+  4: "Thu",
+  5: "Fri",
+  6: "Sat",
+};
+
+function dayLabel(day: PlanDay): string {
+  return day.weekNumber != null && day.weekday != null
+    ? `Week ${day.weekNumber} · ${WEEKDAY_LABELS[day.weekday]}`
+    : `Day ${day.dayNumber}`;
+}
+
+function sortDays(days: PlanDay[]): PlanDay[] {
+  return [...days].sort((a, b) => {
+    if (a.weekNumber != null && b.weekNumber != null) {
+      if (a.weekNumber !== b.weekNumber) return a.weekNumber - b.weekNumber;
+      return WEEKDAY_DISPLAY_RANK[a.weekday ?? 0] - WEEKDAY_DISPLAY_RANK[b.weekday ?? 0];
+    }
+    return (a.dayNumber ?? 0) - (b.dayNumber ?? 0);
+  });
+}
+
 export function PlanDayBreakdown({ days }: { days: PlanDay[] }) {
   if (days.length === 0) {
     return <p className="text-sm text-zinc-500 dark:text-zinc-400">No days configured yet.</p>;
@@ -14,9 +44,9 @@ export function PlanDayBreakdown({ days }: { days: PlanDay[] }) {
 
   return (
     <div className="flex flex-col gap-2">
-      {days.map((day) => (
+      {sortDays(days).map((day) => (
         <div key={day.id} className="rounded-lg border border-zinc-100 p-3 dark:border-zinc-800">
-          <p className="mb-2 text-xs font-semibold text-zinc-900 dark:text-zinc-100">Day {day.dayNumber}</p>
+          <p className="mb-2 text-xs font-semibold text-zinc-900 dark:text-zinc-100">{dayLabel(day)}</p>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {day.slots.map((slot) => (
               <div key={slot.id} className="flex items-center gap-2">

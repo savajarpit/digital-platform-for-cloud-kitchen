@@ -12,6 +12,11 @@ import { FeaturesService } from '../features/features.service';
 import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-client.service';
 import { PaginationService } from '../../common/services/pagination.service';
 import { DateUtil } from '../../common/utils/date.util';
+import {
+  PlanScheduleKey,
+  PlanScheduleUtil,
+} from '../../common/utils/plan-schedule.util';
+import { SubscriptionPlanSchedulingMode } from '../../generated/prisma';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
 import { UpsertPlanDaysDto } from './dto/upsert-plan-days.dto';
@@ -70,13 +75,88 @@ export class SubscriptionsService {
     return plan;
   }
 
-  createPlan(tenantId: string, dto: CreatePlanDto) {
-    return this.subscriptionsRepo.createPlan(tenantId, dto);
+  async createPlan(tenantId: string, dto: CreatePlanDto) {
+    const scheduling = await this.resolveSchedulingFields(tenantId, null, dto);
+    return this.subscriptionsRepo.createPlan(tenantId, {
+      ...dto,
+      ...scheduling,
+    });
   }
 
   async updatePlan(tenantId: string, id: string, dto: UpdatePlanDto) {
-    await this.findPlanForAdmin(tenantId, id);
-    return this.subscriptionsRepo.updatePlan(id, dto);
+    const existing = await this.findPlanForAdmin(tenantId, id);
+    if (
+      dto.schedulingMode !== undefined &&
+      dto.schedulingMode !== existing.schedulingMode
+    ) {
+      const subscriberCount =
+        await this.subscriptionsRepo.countSubscriptionsForPlan(id);
+      if (subscriberCount > 0) {
+        throw new BadRequestException(
+          'This plan already has subscribers, so its scheduling mode can\'t be changed — create a new plan instead.',
+        );
+      }
+    }
+    const scheduling = await this.resolveSchedulingFields(
+      tenantId,
+      existing,
+      dto,
+    );
+    return this.subscriptionsRepo.updatePlan(id, { ...dto, ...scheduling });
+  }
+
+  /** Cross-field validation that class-validator can't express: WEEKLY_FIXED
+   * requires weekCount + scheduleAnchorDate (defaulted to the most recent
+   * tenant-local Monday if omitted), RELATIVE_DAY nulls both out so a prior
+   * WEEKLY_FIXED config never lingers stale after toggling back. */
+  private async resolveSchedulingFields(
+    tenantId: string,
+    existing: {
+      schedulingMode: SubscriptionPlanSchedulingMode;
+      weekCount: number | null;
+      scheduleAnchorDate: string | null;
+    } | null,
+    dto: {
+      schedulingMode?: SubscriptionPlanSchedulingMode;
+      weekCount?: number;
+      scheduleAnchorDate?: string;
+    },
+  ): Promise<{
+    schedulingMode: SubscriptionPlanSchedulingMode;
+    weekCount: number | null;
+    scheduleAnchorDate: string | null;
+  }> {
+    const schedulingMode =
+      dto.schedulingMode ??
+      existing?.schedulingMode ??
+      SubscriptionPlanSchedulingMode.RELATIVE_DAY;
+
+    if (schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED) {
+      const weekCount = dto.weekCount ?? existing?.weekCount;
+      if (!weekCount) {
+        throw new BadRequestException(
+          'weekCount is required for WEEKLY_FIXED plans',
+        );
+      }
+      let scheduleAnchorDate =
+        dto.scheduleAnchorDate ?? existing?.scheduleAnchorDate;
+      if (!scheduleAnchorDate) {
+        const timezone = await this.getTenantTimezone(tenantId);
+        const { dateStr: todayStr } = DateUtil.getTenantNow(timezone);
+        scheduleAnchorDate = this.getMostRecentMondayStr(todayStr);
+      }
+      return { schedulingMode, weekCount, scheduleAnchorDate };
+    }
+
+    return { schedulingMode, weekCount: null, scheduleAnchorDate: null };
+  }
+
+  private getMostRecentMondayStr(todayStr: string): string {
+    let cursor = todayStr;
+    while (DateUtil.getDayOfWeekForDateStr(cursor) !== 1) {
+      cursor = DateUtil.addDaysToDateStr(cursor, -1);
+    }
+    return cursor;
   }
 
   async deletePlan(tenantId: string, id: string): Promise<void> {
@@ -92,11 +172,53 @@ export class SubscriptionsService {
   }
 
   async replacePlanDays(tenantId: string, id: string, dto: UpsertPlanDaysDto) {
-    await this.findPlanForAdmin(tenantId, id);
-    const dayNumbers = dto.days.map((d) => d.dayNumber);
-    if (new Set(dayNumbers).size !== dayNumbers.length) {
-      throw new BadRequestException('Duplicate dayNumber in plan days');
+    const plan = await this.findPlanForAdmin(tenantId, id);
+
+    if (plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED) {
+      const keys = new Set<string>();
+      for (const day of dto.days) {
+        if (day.weekNumber == null || day.weekday == null) {
+          throw new BadRequestException(
+            'Every day needs a weekNumber and weekday for a WEEKLY_FIXED plan',
+          );
+        }
+        if (day.dayNumber != null) {
+          throw new BadRequestException(
+            'dayNumber must not be set for a WEEKLY_FIXED plan',
+          );
+        }
+        if (plan.weekCount && day.weekNumber > plan.weekCount) {
+          throw new BadRequestException(
+            `weekNumber ${day.weekNumber} exceeds this plan's weekCount (${plan.weekCount})`,
+          );
+        }
+        const key = `${day.weekNumber}-${day.weekday}`;
+        if (keys.has(key)) {
+          throw new BadRequestException(
+            `Duplicate day for week ${day.weekNumber}, weekday ${day.weekday}`,
+          );
+        }
+        keys.add(key);
+      }
+    } else {
+      const dayNumbers = dto.days.map((d) => {
+        if (d.dayNumber == null) {
+          throw new BadRequestException(
+            'Every day needs a dayNumber for a RELATIVE_DAY plan',
+          );
+        }
+        if (d.weekNumber != null || d.weekday != null) {
+          throw new BadRequestException(
+            'weekNumber/weekday must not be set for a RELATIVE_DAY plan',
+          );
+        }
+        return d.dayNumber;
+      });
+      if (new Set(dayNumbers).size !== dayNumbers.length) {
+        throw new BadRequestException('Duplicate dayNumber in plan days');
+      }
     }
+
     await this.subscriptionsRepo.replacePlanDays(id, dto.days);
     return this.findPlanForAdmin(tenantId, id);
   }
@@ -240,16 +362,21 @@ export class SubscriptionsService {
       id,
     );
     if (!plan) throw new NotFoundException('Plan not found');
-    const [timeLocked, promoMap] = await Promise.all([
+    const [timeLocked, promoMap, timezone] = await Promise.all([
       this.featuresService.hasFeature(tenantId, TIME_LOCK_FEATURE_KEY),
       this.promotionsService.getActiveScheduledDiscountsForPlans(tenantId, [
         plan.id,
       ]),
+      this.getTenantTimezone(tenantId),
     ]);
     return {
       ...plan,
       timeSelectionEnabled: !timeLocked,
       activePromotion: promoMap.get(plan.id) ?? null,
+      previewWindow:
+        plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED
+          ? buildPlanPreviewWindow(plan, timezone)
+          : null,
     };
   }
 
@@ -262,15 +389,38 @@ export class SubscriptionsService {
    * full per-subscriber simulation. This answers the simpler, more useful
    * question an owner actually asks: "if everyone on this plan hits day N,
    * what do I prepare?" */
-  async getPrepPlan(tenantId: string, planId: string, dayNumber: number) {
+  async getPrepPlan(tenantId: string, planId: string, dayNumber?: number) {
     const plan = await this.subscriptionsRepo.findPlanByIdAdmin(
       tenantId,
       planId,
     );
     if (!plan) throw new NotFoundException('Plan not found');
 
+    let key: PlanScheduleKey;
+    if (plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED) {
+      const timezone = await this.getTenantTimezone(tenantId);
+      const { dateStr: todayStr } = DateUtil.getTenantNow(timezone);
+      key = PlanScheduleUtil.resolveKey(plan, {
+        dateStr: todayStr,
+        relativeCounter: 1,
+      });
+    } else {
+      if (!dayNumber) {
+        throw new BadRequestException(
+          'dayNumber is required for RELATIVE_DAY plans',
+        );
+      }
+      key = { dayNumber };
+    }
+
     const [day, subscriberCount] = await Promise.all([
-      this.subscriptionsRepo.findPlanDayWithSlots(planId, dayNumber),
+      'dayNumber' in key
+        ? this.subscriptionsRepo.findPlanDayWithSlots(planId, key.dayNumber)
+        : this.subscriptionsRepo.findPlanDayByWeekAndWeekday(
+            planId,
+            key.weekNumber,
+            key.weekday,
+          ),
       this.subscriptionsRepo.countActiveSubscriptionsForPlan(tenantId, planId),
     ]);
 
@@ -282,7 +432,17 @@ export class SubscriptionsService {
         quantity: subscriberCount,
       }));
 
-    return { planId, planName: plan.name, dayNumber, subscriberCount, items };
+    return {
+      planId,
+      planName: plan.name,
+      schedulingMode: plan.schedulingMode,
+      ...('dayNumber' in key
+        ? { dayNumber: key.dayNumber }
+        : { weekNumber: key.weekNumber, weekday: key.weekday }),
+      label: PlanScheduleUtil.describeKey(key),
+      subscriberCount,
+      items,
+    };
   }
 
   // ─── Subscribe + payment ─────────────────────────────────
@@ -704,6 +864,73 @@ export class SubscriptionsService {
   }
 }
 
+export interface PlanPreviewDay {
+  date: string;
+  meals: {
+    slotType: string;
+    mealId: string | null;
+    name: string | null;
+    imageUrl: string | null;
+  }[];
+}
+
+const PLAN_PREVIEW_WINDOW_DAYS = 14;
+
+/** Pre-purchase browsing preview for a WEEKLY_FIXED plan — there's no
+ * subscription yet, so this skips all the subscription-specific machinery
+ * (skip/override/lock/cycleEnd) buildUpcomingPreview() needs, and just
+ * walks PLAN_PREVIEW_WINDOW_DAYS real calendar days forward from tomorrow.
+ * Starts at tomorrow, not today, matching verifyPayment()'s own rule that
+ * Day 1 is always next-day since materialization is a nightly batch job —
+ * the storefront shouldn't visually promise a same-day dish a real
+ * subscribe wouldn't actually deliver. */
+function buildPlanPreviewWindow(
+  plan: {
+    schedulingMode: SubscriptionPlanSchedulingMode;
+    durationDays: number;
+    weekCount: number | null;
+    scheduleAnchorDate: string | null;
+    days: {
+      weekNumber: number | null;
+      weekday: number | null;
+      slots: {
+        slotType: string;
+        meal: { id: string; name: string; imageUrl: string | null } | null;
+      }[];
+    }[];
+  },
+  timezone: string,
+): PlanPreviewDay[] {
+  const { dateStr: todayStr } = DateUtil.getTenantNow(timezone);
+  const byWeekWeekday = new Map(
+    plan.days.map((d) => [`${d.weekNumber}-${d.weekday}`, d]),
+  );
+
+  let cursor = DateUtil.addDaysToDateStr(todayStr, 1);
+  const preview: PlanPreviewDay[] = [];
+  for (let i = 0; i < PLAN_PREVIEW_WINDOW_DAYS; i++) {
+    const key = PlanScheduleUtil.resolveKey(plan, {
+      dateStr: cursor,
+      relativeCounter: 1,
+    });
+    const day =
+      'weekNumber' in key
+        ? byWeekWeekday.get(`${key.weekNumber}-${key.weekday}`)
+        : undefined;
+    preview.push({
+      date: cursor,
+      meals: (day?.slots ?? []).map((slot) => ({
+        slotType: slot.slotType,
+        mealId: slot.meal?.id ?? null,
+        name: slot.meal?.name ?? null,
+        imageUrl: slot.meal?.imageUrl ?? null,
+      })),
+    });
+    cursor = DateUtil.addDaysToDateStr(cursor, 1);
+  }
+  return preview;
+}
+
 export interface UpcomingPreviewDay {
   date: string;
   skipped: boolean;
@@ -744,9 +971,14 @@ function buildUpcomingPreview(
       deliverySlotId: string | null;
     }[];
     plan: {
+      schedulingMode: SubscriptionPlanSchedulingMode;
       durationDays: number;
+      weekCount: number | null;
+      scheduleAnchorDate: string | null;
       days: {
-        dayNumber: number;
+        dayNumber: number | null;
+        weekNumber: number | null;
+        weekday: number | null;
         slots: {
           slotType: string;
           meal: { id: string; name: string; imageUrl: string | null } | null;
@@ -767,6 +999,9 @@ function buildUpcomingPreview(
 
   const daysByNumber = new Map(
     subscription.plan.days.map((d) => [d.dayNumber, d]),
+  );
+  const daysByWeekWeekday = new Map(
+    subscription.plan.days.map((d) => [`${d.weekNumber}-${d.weekday}`, d]),
   );
   const overridesByDate = new Map(
     subscription.dayOverrides.map((o) => [o.date, o]),
@@ -799,9 +1034,14 @@ function buildUpcomingPreview(
         locked,
       });
     } else {
-      const templateDayNumber =
-        ((counter - 1) % subscription.plan.durationDays) + 1;
-      const planDay = daysByNumber.get(templateDayNumber);
+      const key = PlanScheduleUtil.resolveKey(subscription.plan, {
+        dateStr: cursor,
+        relativeCounter: counter,
+      });
+      const planDay =
+        'dayNumber' in key
+          ? daysByNumber.get(key.dayNumber)
+          : daysByWeekWeekday.get(`${key.weekNumber}-${key.weekday}`);
       const meals = (planDay?.slots ?? []).map((slot) => ({
         slotType: slot.slotType,
         mealId: slot.meal?.id ?? null,

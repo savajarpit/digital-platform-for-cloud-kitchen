@@ -16,7 +16,9 @@ import {
 } from '../../generated/prisma';
 
 export interface PlanDayInput {
-  dayNumber: number;
+  dayNumber?: number;
+  weekNumber?: number;
+  weekday?: number;
   slots: { slotType: 'BREAKFAST' | 'LUNCH' | 'DINNER'; mealId?: string }[];
 }
 
@@ -104,6 +106,8 @@ export class SubscriptionsRepository {
           data: {
             planId,
             dayNumber: day.dayNumber,
+            weekNumber: day.weekNumber,
+            weekday: day.weekday,
             slots: {
               create: day.slots.map((slot) => ({
                 slotType: slot.slotType,
@@ -446,6 +450,23 @@ export class SubscriptionsRepository {
       where: { planId_dayNumber: { planId, dayNumber } },
       include: { slots: { include: { meal: true } } },
     });
+  }
+
+  /** WEEKLY_FIXED counterpart to findPlanDayWithSlots — looks up a day by
+   * its fixed (week, real weekday) key instead of a relative dayNumber. */
+  findPlanDayByWeekAndWeekday(planId: string, weekNumber: number, weekday: number) {
+    return this.prisma.subscriptionPlanDay.findUnique({
+      where: { planId_weekNumber_weekday: { planId, weekNumber, weekday } },
+      include: { slots: { include: { meal: true } } },
+    });
+  }
+
+  /** Any subscription ever created against this plan, any status — used to
+   * block a schedulingMode change once a plan is no longer purely
+   * hypothetical (neither mode's per-subscriber bookkeeping handles a live
+   * plan switching semantics mid-flight). */
+  countSubscriptionsForPlan(planId: string): Promise<number> {
+    return this.prisma.subscription.count({ where: { planId } });
   }
 
   /** Active subscriber count for a plan — the multiplier behind the kitchen

@@ -170,50 +170,101 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
           </div>
 
           <div className="mt-8 flex flex-col gap-3">
-            {plan.days.map((day) => (
-              <div key={day.id} className="card p-4">
-                <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  Day {day.dayNumber}
-                </h3>
-                <div className="mt-3 flex flex-col gap-3">
-                  {day.slots.length === 0 ? (
-                    <p className="text-xs text-zinc-400 italic">Meals for this day to be decided.</p>
-                  ) : (
-                    day.slots.map((slot) => (
-                      <div key={slot.id} className="flex items-center gap-3">
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                          {slot.meal?.imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={slot.meal.imageUrl}
-                              alt={slot.meal.name}
-                              className="h-full w-full object-cover"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <ImageOff className="h-5 w-5 text-zinc-300 dark:text-zinc-600" strokeWidth={1.5} />
-                          )}
+            {plan.schedulingMode === "WEEKLY_FIXED" ? (
+              (plan.previewWindow ?? []).map((day) => (
+                <div key={day.date} className="card p-4">
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {new Date(day.date).toLocaleDateString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </h3>
+                  <div className="mt-3 flex flex-col gap-3">
+                    {day.meals.length === 0 ? (
+                      <p className="text-xs text-zinc-400 italic">Meals for this day to be decided.</p>
+                    ) : (
+                      day.meals.map((meal, i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
+                            {meal.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={meal.imageUrl}
+                                alt={meal.name ?? ""}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <ImageOff className="h-5 w-5 text-zinc-300 dark:text-zinc-600" strokeWidth={1.5} />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs text-zinc-400">
+                              {SLOT_LABELS[meal.slotType] ?? meal.slotType}
+                            </p>
+                            <p
+                              className={
+                                meal.name
+                                  ? "truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
+                                  : "truncate text-sm text-zinc-400 italic dark:text-zinc-500"
+                              }
+                            >
+                              {meal.name ?? "Meal to be announced"}
+                            </p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-xs text-zinc-400">
-                            {SLOT_LABELS[slot.slotType] ?? slot.slotType}
-                          </p>
-                          <p
-                            className={
-                              slot.meal
-                                ? "truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
-                                : "truncate text-sm text-zinc-400 italic dark:text-zinc-500"
-                            }
-                          >
-                            {slot.meal?.name ?? "Meal to be announced"}
-                          </p>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              plan.days.map((day) => (
+                <div key={day.id} className="card p-4">
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    Day {day.dayNumber}
+                  </h3>
+                  <div className="mt-3 flex flex-col gap-3">
+                    {day.slots.length === 0 ? (
+                      <p className="text-xs text-zinc-400 italic">Meals for this day to be decided.</p>
+                    ) : (
+                      day.slots.map((slot) => (
+                        <div key={slot.id} className="flex items-center gap-3">
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
+                            {slot.meal?.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={slot.meal.imageUrl}
+                                alt={slot.meal.name}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <ImageOff className="h-5 w-5 text-zinc-300 dark:text-zinc-600" strokeWidth={1.5} />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs text-zinc-400">
+                              {SLOT_LABELS[slot.slotType] ?? slot.slotType}
+                            </p>
+                            <p
+                              className={
+                                slot.meal
+                                  ? "truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
+                                  : "truncate text-sm text-zinc-400 italic dark:text-zinc-500"
+                              }
+                            >
+                              {slot.meal?.name ?? "Meal to be announced"}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 

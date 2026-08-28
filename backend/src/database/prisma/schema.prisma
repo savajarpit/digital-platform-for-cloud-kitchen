@@ -103,6 +103,18 @@ enum SubscriptionPlanType {
   CUSTOM
 }
 
+// RELATIVE_DAY (default) — today's model: SubscriptionPlanDay.dayNumber is a
+// per-subscriber relative offset from their own startDate, cycling via
+// modulo once a subscription outlasts the authored days.
+// WEEKLY_FIXED — the menu is pinned to real calendar weekdays (and
+// optionally multiple distinct weeks) so every subscriber eating on the
+// same real day gets the same dish, enabling true batch cooking. See
+// SubscriptionPlan.weekCount/scheduleAnchorDate and PlanScheduleUtil.
+enum SubscriptionPlanSchedulingMode {
+  RELATIVE_DAY
+  WEEKLY_FIXED
+}
+
 /**
  * Which of the tenant's own semantic theme ramps accents a plan card —
  * never a raw hex, so a brand-color change in Settings reskins every plan
@@ -995,6 +1007,18 @@ model SubscriptionPlan {
   durationDays Int
   priceInPaise Int
   isActive     Boolean              @default(true)
+  // See SubscriptionPlanSchedulingMode. WEEKLY_FIXED only — weekCount is
+  // how many distinct authored weeks exist before the template loops back
+  // to week 1 (kept separate from durationDays, which keeps meaning "paid
+  // billing length in days" for BOTH modes). scheduleAnchorDate (YYYY-MM-DD,
+  // tenant-local) is the admin-chosen date that defines "week 1" for every
+  // subscriber on this plan — a shared reference point, not per-subscriber.
+  // Changing schedulingMode is blocked once the plan has any subscriptions
+  // (see SubscriptionsService) since neither mode's math handles a live
+  // plan switching semantics mid-flight.
+  schedulingMode     SubscriptionPlanSchedulingMode @default(RELATIVE_DAY)
+  weekCount          Int?
+  scheduleAnchorDate String?
   // A plan can be published while some SubscriptionPlanSlots are still TBD
   // (mealId null) — lets an OWNER pre-sell before finishing later days.
   isPublished  Boolean              @default(false)
@@ -1025,13 +1049,23 @@ model SubscriptionPlan {
 model SubscriptionPlanDay {
   id        String   @id @default(uuid())
   planId    String
-  dayNumber Int
+  // RELATIVE_DAY rows only. WEEKLY_FIXED rows instead carry
+  // weekNumber+weekday — a plan is always exclusively one mode, so a given
+  // plan's rows never actually mix populated dayNumber with populated
+  // weekNumber/weekday.
+  dayNumber Int?
+  // WEEKLY_FIXED rows only, 1-based.
+  weekNumber Int?
+  // WEEKLY_FIXED rows only, 0=Sun..6=Sat — matches Promotion.daysOfWeek /
+  // DateUtil.getTenantDayOfWeek's convention.
+  weekday    Int?
   createdAt DateTime @default(now())
 
   plan  SubscriptionPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
   slots SubscriptionPlanSlot[]
 
   @@unique([planId, dayNumber])
+  @@unique([planId, weekNumber, weekday])
   @@index([planId])
   @@map("subscription_plan_days")
 }
@@ -1089,6 +1123,9 @@ model Subscription {
   // Counts actual materialized days, not calendar days since startDate —
   // skips/pauses shift future template days later without ever repeating
   // a meal. Points at SubscriptionPlanDay.dayNumber for the next delivery.
+  // RELATIVE_DAY plans only — for a WEEKLY_FIXED plan this is simply never
+  // incremented (frozen at its default), since the day is derived purely
+  // from the calendar (see PlanScheduleUtil), not a per-subscriber counter.
   nextPlanDayNumber Int       @default(1)
   bankedDays        Int       @default(0)
 

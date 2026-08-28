@@ -2,15 +2,20 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsInt,
   IsOptional,
   IsString,
+  Max,
   Min,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PlanAccentColor } from '../../../generated/prisma';
+import {
+  PlanAccentColor,
+  SubscriptionPlanSchedulingMode,
+} from '../../../generated/prisma';
 
 export class CreatePlanDto {
   @ApiProperty({ example: '7-Day Weight Loss Plan' })
@@ -66,4 +71,35 @@ export class CreatePlanDto {
   @IsOptional()
   @IsEnum(PlanAccentColor)
   accentColor?: PlanAccentColor;
+
+  @ApiPropertyOptional({
+    enum: SubscriptionPlanSchedulingMode,
+    default: SubscriptionPlanSchedulingMode.RELATIVE_DAY,
+    description:
+      'RELATIVE_DAY (default) — days are relative to each subscriber\'s own start date. ' +
+      'WEEKLY_FIXED — the menu is pinned to real calendar weekdays (see weekCount/scheduleAnchorDate) so every subscriber eating on the same real day gets the same dish.',
+  })
+  @IsOptional()
+  @IsEnum(SubscriptionPlanSchedulingMode)
+  schedulingMode?: SubscriptionPlanSchedulingMode;
+
+  @ApiPropertyOptional({
+    example: 2,
+    description:
+      'WEEKLY_FIXED only — how many distinct authored weeks before the menu loops back to week 1.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(52)
+  weekCount?: number;
+
+  @ApiPropertyOptional({
+    example: '2026-08-24',
+    description:
+      'WEEKLY_FIXED only — YYYY-MM-DD, tenant-local. The date that defines "week 1" for every subscriber on this plan.',
+  })
+  @IsOptional()
+  @IsDateString()
+  scheduleAnchorDate?: string;
 }

@@ -33,13 +33,14 @@ export function PrepPlannerView() {
   }, []);
 
   const selectedPlan = plans.find((p) => p.id === planId);
+  const isWeeklyFixed = selectedPlan?.schedulingMode === "WEEKLY_FIXED";
 
   useEffect(() => {
     if (!planId) return;
-    getPrepPlan(planId, dayNumber)
+    getPrepPlan(planId, isWeeklyFixed ? undefined : dayNumber)
       .then(setResult)
       .catch(() => setResult(null));
-  }, [planId, dayNumber]);
+  }, [planId, dayNumber, isWeeklyFixed]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -63,25 +64,34 @@ export function PrepPlannerView() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Day</label>
-          <Select
-            value={String(dayNumber)}
-            onValueChange={(v) => setDayNumber(Number(v))}
-            disabled={!selectedPlan}
-          >
-            <SelectTrigger className="py-1.5 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Array.from({ length: selectedPlan?.durationDays ?? 1 }, (_, i) => i + 1).map((n) => (
-                <SelectItem key={n} value={String(n)}>
-                  Day {n}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {isWeeklyFixed ? (
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Day</label>
+            <p className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700 dark:border-zinc-700 dark:text-zinc-300">
+              {result?.label ?? "Today"}
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Day</label>
+            <Select
+              value={String(dayNumber)}
+              onValueChange={(v) => setDayNumber(Number(v))}
+              disabled={!selectedPlan}
+            >
+              <SelectTrigger className="py-1.5 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: selectedPlan?.durationDays ?? 1 }, (_, i) => i + 1).map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    Day {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {plans.length === 0 ? (

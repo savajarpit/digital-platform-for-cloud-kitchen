@@ -6,6 +6,7 @@ import {
   IsInt,
   IsOptional,
   IsUUID,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -27,13 +28,34 @@ export class PlanSlotDto {
 }
 
 export class PlanDayDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 1,
-    description: 'Relative day number within the plan, 1-based',
+    description:
+      'RELATIVE_DAY plans only — relative day number within the plan, 1-based',
   })
+  @IsOptional()
   @IsInt()
   @Min(1)
-  dayNumber: number;
+  dayNumber?: number;
+
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'WEEKLY_FIXED plans only — 1-based, must be <= plan.weekCount',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  weekNumber?: number;
+
+  @ApiPropertyOptional({
+    example: 2,
+    description: 'WEEKLY_FIXED plans only — 0=Sun..6=Sat',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  weekday?: number;
 
   @ApiProperty({
     type: [PlanSlotDto],

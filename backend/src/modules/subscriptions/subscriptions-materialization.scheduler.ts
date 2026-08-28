@@ -3,6 +3,8 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomBytes } from 'crypto';
 import { SubscriptionsRepository } from './subscriptions.repository';
 import { DateUtil } from '../../common/utils/date.util';
+import { PlanScheduleUtil } from '../../common/utils/plan-schedule.util';
+import { SubscriptionPlanSchedulingMode } from '../../generated/prisma';
 
 /**
  * Nightly job: for every ACTIVE subscription, materializes "today" into a
@@ -21,6 +23,14 @@ import { DateUtil } from '../../common/utils/date.util';
  * - A subscription whose startDate hasn't arrived yet (tenant-local date
  *   compare, not an instant race against this cron's own fixed run time)
  *   is skipped entirely — Day 1 never fires early.
+ *
+ * WEEKLY_FIXED plans (see PlanScheduleUtil) resolve the day purely from the
+ * real calendar instead of nextPlanDayNumber, which is deliberately left
+ * frozen for them. One direct consequence: for RELATIVE_DAY, a skip shifts
+ * every future template day later (the counter simply doesn't advance);
+ * for WEEKLY_FIXED, a skip removes only that day's order — every later day
+ * is still whatever real weekday it actually is, nothing shifts. This is
+ * inherent to "calendar-driven, not per-subscriber-offset," not a bug.
  */
 @Injectable()
 export class SubscriptionsMaterializationScheduler {
@@ -57,7 +67,12 @@ export class SubscriptionsMaterializationScheduler {
     nextPlanDayNumber: number;
     startDate: Date | null;
     cycleEnd: Date | null;
-    plan: { durationDays: number };
+    plan: {
+      durationDays: number;
+      schedulingMode: SubscriptionPlanSchedulingMode;
+      weekCount: number | null;
+      scheduleAnchorDate: string | null;
+    };
     tenant: { businessProfile: { timezone: string } | null };
   }): Promise<void> {
     if (!subscription.cycleEnd || !subscription.startDate) return;
@@ -102,13 +117,22 @@ export class SubscriptionsMaterializationScheduler {
         )
       : null;
 
-    const templateDayNumber =
-      ((subscription.nextPlanDayNumber - 1) % subscription.plan.durationDays) +
-      1;
-    const planDay = await this.subscriptionsRepo.findPlanDayWithSlots(
-      subscription.planId,
-      templateDayNumber,
-    );
+    const key = PlanScheduleUtil.resolveKey(subscription.plan, {
+      dateStr: todayStr,
+      relativeCounter: subscription.nextPlanDayNumber,
+    });
+    const planDay =
+      'dayNumber' in key
+        ? await this.subscriptionsRepo.findPlanDayWithSlots(
+            subscription.planId,
+            key.dayNumber,
+          )
+        : await this.subscriptionsRepo.findPlanDayByWeekAndWeekday(
+            subscription.planId,
+            key.weekNumber,
+            key.weekday,
+          );
+    const templateLabel = PlanScheduleUtil.describeKey(key);
 
     const items = (planDay?.slots ?? [])
       .filter((slot) => slot.mealId && slot.meal)
@@ -126,7 +150,7 @@ export class SubscriptionsMaterializationScheduler {
         subscriptionId: subscription.id,
         addressId,
         orderNumber: generateSubscriptionOrderNumber(),
-        notes: `Subscription: ${subscription.planNameSnapshot} — Day ${templateDayNumber}`,
+        notes: `Subscription: ${subscription.planNameSnapshot} — ${templateLabel}`,
         deliverySlotId: slot?.id,
         deliverySlotName: slot?.name ?? 'Subscription delivery',
         deliveryWindowStart: slot?.startTime ?? '00:00',
@@ -135,14 +159,22 @@ export class SubscriptionsMaterializationScheduler {
       });
     } else {
       this.logger.warn(
-        `Subscription ${subscription.id}: plan day ${templateDayNumber} has no decided meals — nothing delivered today.`,
+        `Subscription ${subscription.id}: plan ${templateLabel} has no decided meals — nothing delivered today.`,
       );
     }
 
-    await this.subscriptionsRepo.advanceSubscriptionDay(
-      subscription.id,
-      subscription.nextPlanDayNumber + 1,
-    );
+    // RELATIVE_DAY only — WEEKLY_FIXED derives the day purely from the
+    // calendar (see PlanScheduleUtil), so nextPlanDayNumber has no meaning
+    // for it and is deliberately left frozen at its default.
+    if (
+      subscription.plan.schedulingMode ===
+      SubscriptionPlanSchedulingMode.RELATIVE_DAY
+    ) {
+      await this.subscriptionsRepo.advanceSubscriptionDay(
+        subscription.id,
+        subscription.nextPlanDayNumber + 1,
+      );
+    }
   }
 }
 

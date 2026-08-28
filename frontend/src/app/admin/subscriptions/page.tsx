@@ -33,6 +33,7 @@ import {
   type PlanAccentColor,
   type PlanDayInput,
   type PlanInput,
+  type SchedulingMode,
   type SubscriptionSettings,
   type TodaysDeliveries,
 } from "@/lib/api/admin-subscriptions";
@@ -362,6 +363,7 @@ function PlanMetaForm({
   const { showToast } = useToast();
   const [form, setForm] = useState(initial);
   const [saving, setSaving] = useState(false);
+  const schedulingMode: SchedulingMode = form.schedulingMode ?? "RELATIVE_DAY";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -424,6 +426,63 @@ function PlanMetaForm({
             className="input"
             required
           />
+        </div>
+      </div>
+
+      <div className="border-t border-primary-200 pt-3 dark:border-primary-900">
+        <p className="mb-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300">Scheduling</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Menu schedule</label>
+            <Select
+              value={schedulingMode}
+              onValueChange={(v) => setForm({ ...form, schedulingMode: v as SchedulingMode })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="RELATIVE_DAY">Relative days (Day 1, Day 2…)</SelectItem>
+                <SelectItem value="WEEKLY_FIXED">Fixed weekly menu (real weekdays)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-zinc-400">
+              {schedulingMode === "WEEKLY_FIXED"
+                ? "Every subscriber eating on the same real weekday gets the same dish — batch cook once."
+                : "Each subscriber's Day 1 is whenever they join, cycling once the plan's days run out."}
+            </p>
+          </div>
+          {schedulingMode === "WEEKLY_FIXED" && (
+            <>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Weeks in rotation
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={52}
+                  value={form.weekCount ?? 1}
+                  onChange={(e) => setForm({ ...form, weekCount: Number(e.target.value) })}
+                  className="input"
+                />
+                <p className="text-xs text-zinc-400">
+                  1 for the same week every time, 4 for a month of variety before it repeats.
+                </p>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Week 1 starts on
+                </label>
+                <input
+                  type="date"
+                  value={form.scheduleAnchorDate ?? ""}
+                  onChange={(e) => setForm({ ...form, scheduleAnchorDate: e.target.value })}
+                  className="input"
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -555,12 +614,38 @@ function FeatureListEditor({
 
 type SlotState = { included: boolean; mealId: string };
 type DayState = Record<MealSlotType, SlotState>;
+// A week's 7 days, keyed by weekday (0=Sun..6=Sat, matching the backend).
+type WeekState = Record<number, DayState>;
 
 function emptyDayState(): DayState {
   return {
     BREAKFAST: { included: false, mealId: "" },
     LUNCH: { included: false, mealId: "" },
     DINNER: { included: false, mealId: "" },
+  };
+}
+
+// Display order (Mon-first) — the storage key stays 0=Sun..6=Sat.
+const WEEKDAY_DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const WEEKDAY_LABELS: Record<number, string> = {
+  0: "Sun",
+  1: "Mon",
+  2: "Tue",
+  3: "Wed",
+  4: "Thu",
+  5: "Fri",
+  6: "Sat",
+};
+
+function emptyWeekState(): WeekState {
+  return {
+    0: emptyDayState(),
+    1: emptyDayState(),
+    2: emptyDayState(),
+    3: emptyDayState(),
+    4: emptyDayState(),
+    5: emptyDayState(),
+    6: emptyDayState(),
   };
 }
 
@@ -578,21 +663,39 @@ function PlanEditor({
   const { showToast } = useToast();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [days, setDays] = useState<DayState[] | null>(null);
+  const [weeks, setWeeks] = useState<WeekState[] | null>(null);
+  const [activeWeek, setActiveWeek] = useState(0);
   const [savingDays, setSavingDays] = useState(false);
 
   useEffect(() => {
     getPlanAdmin(planId)
       .then((p) => {
         setPlan(p);
-        const initial: DayState[] = Array.from({ length: p.durationDays }, () => emptyDayState());
-        for (const day of p.days ?? []) {
-          if (day.dayNumber < 1 || day.dayNumber > p.durationDays) continue;
-          const dayState = initial[day.dayNumber - 1];
-          for (const slot of day.slots) {
-            dayState[slot.slotType] = { included: true, mealId: slot.mealId ?? "" };
+        if (p.schedulingMode === "WEEKLY_FIXED") {
+          const weekCount = p.weekCount ?? 1;
+          const initialWeeks: WeekState[] = Array.from({ length: weekCount }, () => emptyWeekState());
+          for (const day of p.days ?? []) {
+            if (day.weekNumber == null || day.weekday == null) continue;
+            if (day.weekNumber < 1 || day.weekNumber > weekCount) continue;
+            const weekState = initialWeeks[day.weekNumber - 1][day.weekday];
+            for (const slot of day.slots) {
+              weekState[slot.slotType] = { included: true, mealId: slot.mealId ?? "" };
+            }
           }
+          setWeeks(initialWeeks);
+          setDays(null);
+        } else {
+          const initial: DayState[] = Array.from({ length: p.durationDays }, () => emptyDayState());
+          for (const day of p.days ?? []) {
+            if (day.dayNumber == null || day.dayNumber < 1 || day.dayNumber > p.durationDays) continue;
+            const dayState = initial[day.dayNumber - 1];
+            for (const slot of day.slots) {
+              dayState[slot.slotType] = { included: true, mealId: slot.mealId ?? "" };
+            }
+          }
+          setDays(initial);
+          setWeeks(null);
         }
-        setDays(initial);
       })
       .catch(() => showToast("Couldn't load plan.", "error"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -600,21 +703,51 @@ function PlanEditor({
 
   async function handleSaveMeta(input: PlanInput) {
     const updated = await updatePlan(planId, input);
+    // A mode toggled mid-session (only possible before this plan has any
+    // subscribers — the backend rejects it otherwise) needs its authoring
+    // state rebuilt to match; otherwise the editor would keep showing the
+    // old shape until the page is reloaded.
+    if (plan && plan.schedulingMode !== updated.schedulingMode) {
+      if (updated.schedulingMode === "WEEKLY_FIXED") {
+        setWeeks(Array.from({ length: updated.weekCount ?? 1 }, () => emptyWeekState()));
+        setDays(null);
+        setActiveWeek(0);
+      } else {
+        setDays(Array.from({ length: updated.durationDays }, () => emptyDayState()));
+        setWeeks(null);
+      }
+    }
     setPlan(updated);
     showToast("Plan details saved", "success");
   }
 
   async function handleSaveDays() {
-    if (!plan || !days) return;
+    if (!plan) return;
     setSavingDays(true);
     try {
-      const payload: PlanDayInput[] = days.map((day, i) => ({
-        dayNumber: i + 1,
-        slots: SLOT_TYPES.filter((slotType) => day[slotType].included).map((slotType) => ({
-          slotType,
-          mealId: day[slotType].mealId || undefined,
-        })),
-      }));
+      let payload: PlanDayInput[];
+      if (plan.schedulingMode === "WEEKLY_FIXED") {
+        if (!weeks) return;
+        payload = weeks.flatMap((week, wi) =>
+          WEEKDAY_DISPLAY_ORDER.map((weekday) => ({
+            weekNumber: wi + 1,
+            weekday,
+            slots: SLOT_TYPES.filter((slotType) => week[weekday][slotType].included).map((slotType) => ({
+              slotType,
+              mealId: week[weekday][slotType].mealId || undefined,
+            })),
+          })),
+        );
+      } else {
+        if (!days) return;
+        payload = days.map((day, i) => ({
+          dayNumber: i + 1,
+          slots: SLOT_TYPES.filter((slotType) => day[slotType].included).map((slotType) => ({
+            slotType,
+            mealId: day[slotType].mealId || undefined,
+          })),
+        }));
+      }
       await replacePlanDays(planId, payload);
       showToast("Meal plan saved", "success");
     } catch (err) {
@@ -633,7 +766,27 @@ function PlanEditor({
     });
   }
 
-  if (!plan || !days) {
+  function updateWeekSlot(
+    weekIndex: number,
+    weekday: number,
+    slotType: MealSlotType,
+    patch: Partial<SlotState>,
+  ) {
+    setWeeks((prev) => {
+      if (!prev) return prev;
+      const next = prev.map((w) => ({ ...w }));
+      next[weekIndex] = {
+        ...next[weekIndex],
+        [weekday]: {
+          ...next[weekIndex][weekday],
+          [slotType]: { ...next[weekIndex][weekday][slotType], ...patch },
+        },
+      };
+      return next;
+    });
+  }
+
+  if (!plan || (!days && !weeks)) {
     return (
       <div className="card p-6">
         <Skeleton className="h-6 w-40" />
@@ -663,6 +816,9 @@ function PlanEditor({
           badgeText: plan.badgeText ?? undefined,
           isPopular: plan.isPopular,
           accentColor: plan.accentColor,
+          schedulingMode: plan.schedulingMode,
+          weekCount: plan.weekCount ?? undefined,
+          scheduleAnchorDate: plan.scheduleAnchorDate ?? undefined,
         }}
         onCancel={onClose}
         onSave={handleSaveMeta}
@@ -672,38 +828,95 @@ function PlanEditor({
         <div>
           <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Meal plan</h4>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Tick a meal slot to give it a day; leave the meal as &ldquo;Meal to be announced&rdquo; if it&apos;s
-            not decided yet — customers will see that instead of a blank slot.
+            {plan.schedulingMode === "WEEKLY_FIXED"
+              ? "Tick a meal slot to give it a real weekday; leave the meal as “Meal to be announced” if it's not decided yet."
+              : "Tick a meal slot to give it a day; leave the meal as “Meal to be announced” if it's not decided yet — customers will see that instead of a blank slot."}
           </p>
         </div>
-        <div className="flex flex-col gap-2">
-          {days.map((day, i) => (
-            <div
-              key={i}
-              className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-100 p-3 sm:grid-cols-[3rem_repeat(3,1fr)] sm:items-center dark:border-zinc-800"
-            >
-              <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Day {i + 1}</span>
-              {SLOT_TYPES.map((slotType) => (
-                <div key={slotType} className="flex min-w-0 items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={day[slotType].included}
-                    onChange={(e) => updateSlot(i, slotType, { included: e.target.checked })}
-                    disabled={!canEdit}
-                    className="h-3.5 w-3.5 accent-primary-600"
-                  />
-                  <MealCombobox
-                    value={day[slotType].mealId}
-                    onChange={(mealId) => updateSlot(i, slotType, { mealId })}
-                    knownMeals={meals}
-                    noneLabel={`${SLOT_LABELS[slotType]} — to be announced`}
-                    disabled={!canEdit || !day[slotType].included}
-                  />
+
+        {plan.schedulingMode === "WEEKLY_FIXED" && weeks ? (
+          <div className="flex flex-col gap-3">
+            {weeks.length > 1 && (
+              <div className="flex flex-wrap gap-1.5">
+                {weeks.map((_, wi) => (
+                  <button
+                    key={wi}
+                    type="button"
+                    onClick={() => setActiveWeek(wi)}
+                    className={`badge cursor-pointer border transition-colors ${
+                      activeWeek === wi
+                        ? "border-primary-600 bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                        : "border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
+                    }`}
+                  >
+                    Week {wi + 1}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-col gap-2">
+              {WEEKDAY_DISPLAY_ORDER.map((weekday) => (
+                <div
+                  key={weekday}
+                  className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-100 p-3 sm:grid-cols-[3rem_repeat(3,1fr)] sm:items-center dark:border-zinc-800"
+                >
+                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    {WEEKDAY_LABELS[weekday]}
+                  </span>
+                  {SLOT_TYPES.map((slotType) => (
+                    <div key={slotType} className="flex min-w-0 items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={weeks[activeWeek][weekday][slotType].included}
+                        onChange={(e) =>
+                          updateWeekSlot(activeWeek, weekday, slotType, { included: e.target.checked })
+                        }
+                        disabled={!canEdit}
+                        className="h-3.5 w-3.5 accent-primary-600"
+                      />
+                      <MealCombobox
+                        value={weeks[activeWeek][weekday][slotType].mealId}
+                        onChange={(mealId) => updateWeekSlot(activeWeek, weekday, slotType, { mealId })}
+                        knownMeals={meals}
+                        noneLabel={`${SLOT_LABELS[slotType]} — to be announced`}
+                        disabled={!canEdit || !weeks[activeWeek][weekday][slotType].included}
+                      />
+                    </div>
+                  ))}
                 </div>
               ))}
             </div>
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {(days ?? []).map((day, i) => (
+              <div
+                key={i}
+                className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-100 p-3 sm:grid-cols-[3rem_repeat(3,1fr)] sm:items-center dark:border-zinc-800"
+              >
+                <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Day {i + 1}</span>
+                {SLOT_TYPES.map((slotType) => (
+                  <div key={slotType} className="flex min-w-0 items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={day[slotType].included}
+                      onChange={(e) => updateSlot(i, slotType, { included: e.target.checked })}
+                      disabled={!canEdit}
+                      className="h-3.5 w-3.5 accent-primary-600"
+                    />
+                    <MealCombobox
+                      value={day[slotType].mealId}
+                      onChange={(mealId) => updateSlot(i, slotType, { mealId })}
+                      knownMeals={meals}
+                      noneLabel={`${SLOT_LABELS[slotType]} — to be announced`}
+                      disabled={!canEdit || !day[slotType].included}
+                    />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
         {canEdit && (
           <button
             type="button"

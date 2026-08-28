@@ -121,4 +121,23 @@ export class DateUtil {
     const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return days.indexOf(weekday);
   }
+
+  /** Whole days from `fromStr` to `toStr` (both `YYYY-MM-DD`), UTC-anchored
+   * so it's DST-safe — used by PlanScheduleUtil to count elapsed weeks
+   * since a WEEKLY_FIXED plan's scheduleAnchorDate. */
+  static diffInDays(fromStr: string, toStr: string): number {
+    const [y1, m1, d1] = fromStr.split('-').map(Number);
+    const [y2, m2, d2] = toStr.split('-').map(Number);
+    const a = Date.UTC(y1, m1 - 1, d1);
+    const b = Date.UTC(y2, m2 - 1, d2);
+    return Math.round((b - a) / 86400000);
+  }
+
+  /** Day of week for a `YYYY-MM-DD` string, 0=Sun..6=Sat — same convention
+   * as getTenantDayOfWeek, but for an arbitrary calendar date rather than
+   * "now". */
+  static getDayOfWeekForDateStr(dateStr: string): number {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  }
 }

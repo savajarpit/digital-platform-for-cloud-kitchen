@@ -332,10 +332,20 @@ function BillingCard({
             </div>
           )}
 
-          {subscription.status !== "ACTIVE" && (
+          {subscription.status === "PENDING_PAYMENT" && (
             <button type="button" onClick={handleManualActivate} className="btn-outline btn-sm w-fit">
               Manual Activate
             </button>
+          )}
+
+          {subscription.status !== "ACTIVE" && subscription.status !== "PENDING_PAYMENT" && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                This subscription is {subscription.status.toLowerCase().replace(/_/g, " ")} — send a
+                new activation link to properly resubscribe this tenant.
+              </p>
+              <CreateInviteForm tenantId={tenant.id} onCreated={(url) => setActivationUrl(url)} />
+            </div>
           )}
 
           {subscription.status === "ACTIVE" && subscription.cancelAtPeriodEnd && (

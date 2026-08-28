@@ -105,6 +105,11 @@ export class PlatformBillingService {
         'This subscription has no active Razorpay mandate yet — contact support.',
       );
     }
+    if (subscription.cancelAtPeriodEnd) {
+      throw new BadRequestException(
+        'This subscription is scheduled to cancel — plan switching is disabled.',
+      );
+    }
     if (!targetPlan) throw new NotFoundException('Plan not found');
     if (targetPlan.id === subscription.planId) {
       throw new ConflictException('Already on this plan');
@@ -375,9 +380,26 @@ export class PlatformBillingService {
     return { activated: true };
   }
 
+  /** Comped/offline-paid override — but only safe before a subscription has
+   * ever really started (no row yet, or still PENDING_PAYMENT). Reused on a
+   * CANCELLED/PAST_DUE subscription, this would flip the tenant back to
+   * ACTIVE while leaving PlatformSubscription stuck at its old status with
+   * a dead razorpaySubscriptionId — "active but unbilled," not a real
+   * reactivation. That case needs a fresh invite (a real Razorpay
+   * subscription behind it), not this shortcut. */
   async manualActivate(tenantId: string): Promise<void> {
     const tenant = await this.billingRepo.findTenantBasics(tenantId);
     if (!tenant) throw new NotFoundException('Tenant not found');
+    const subscription =
+      await this.billingRepo.findSubscriptionByTenantId(tenantId);
+    if (
+      subscription &&
+      subscription.status !== PlatformSubscriptionStatus.PENDING_PAYMENT
+    ) {
+      throw new BadRequestException(
+        'This tenant already has a subscription that is not pending payment — send a new activation link instead of manually activating.',
+      );
+    }
     await this.billingRepo.manualActivate(tenantId);
     await this.tenantLimits.resetForPlanChange(tenantId);
   }

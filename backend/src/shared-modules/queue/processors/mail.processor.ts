@@ -60,6 +60,12 @@ export interface PlatformWebhookFailedEmailJob {
   errorMessage: string;
 }
 
+export interface PlatformCancellationRequestEmailJob {
+  email: string;
+  tenantName: string;
+  reason: string;
+}
+
 @Processor('mail')
 export class MailProcessor {
   private readonly logger = new Logger(MailProcessor.name);
@@ -140,6 +146,16 @@ export class MailProcessor {
       planName: job.data.planName,
       message: job.data.message,
       isUpgradeRequest: job.data.isUpgradeRequest,
+    });
+  }
+
+  @Process('send-platform-cancellation-request')
+  async sendPlatformCancellationRequest(
+    job: Job<PlatformCancellationRequestEmailJob>,
+  ) {
+    await this.mailService.sendPlatformCancellationRequest(job.data.email, {
+      tenantName: job.data.tenantName,
+      reason: job.data.reason,
     });
   }
 

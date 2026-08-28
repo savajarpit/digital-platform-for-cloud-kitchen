@@ -60,6 +60,8 @@ export interface EligiblePlansResponse {
   currentAmountInPaise: number;
   plans: EligiblePlan[];
   pendingSwitch: PendingPlanSwitch | null;
+  cancelAtPeriodEnd: boolean;
+  cancelsOn: string | null;
 }
 
 export function getMyEligiblePlans(): Promise<EligiblePlansResponse> {

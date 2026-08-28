@@ -220,6 +220,7 @@ model Tenant {
   platformInvoices         PlatformInvoice[]
   tenantLimits             TenantLimits?
   platformLeads            PlatformLead[]
+  cancellationRequests     PlatformCancellationRequest[]
   homeSections             HomeSection[]
   reviews                  Review[]
   socialLinks              SocialLink[]
@@ -1563,6 +1564,32 @@ model PlatformLead {
   @@index([tenantId])
   @@index([status])
   @@map("platform_leads")
+}
+
+enum PlatformCancellationRequestStatus {
+  PENDING
+  CONTACTED
+  RESOLVED
+}
+
+// Tenant-initiated "I want to cancel" ask — deliberately not a real
+// cancellation itself. Same "manual review before anything real happens"
+// principle as PlatformLead above: Arpit gets notified, follows up, and
+// only he actually schedules the cancellation (via the existing
+// PlatformSubscription cancelAtPeriodEnd flow) once he's talked to them.
+model PlatformCancellationRequest {
+  id        String                             @id @default(uuid())
+  tenantId  String
+  reason    String
+  status    PlatformCancellationRequestStatus  @default(PENDING)
+  createdAt DateTime                           @default(now())
+  updatedAt DateTime                           @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("platform_cancellation_requests")
 }
 
 // Opaque, high-entropy token backing a public, unauthenticated activation

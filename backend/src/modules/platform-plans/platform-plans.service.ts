@@ -63,6 +63,22 @@ export class PlatformPlansService {
       );
     }
 
+    // Status stays ACTIVE for the whole cancelAtPeriodEnd window (it only
+    // flips to CANCELLED once the period actually ends), so this needs its
+    // own check — switching plans mid-cancellation would leave a confusing
+    // double-scheduled state. Short-circuits before the usage/plan queries
+    // below since there's nothing eligible to show anyway.
+    if (subscription.cancelAtPeriodEnd) {
+      return {
+        currentPlanId: subscription.planId,
+        currentAmountInPaise: subscription.amountInPaise,
+        plans: [],
+        pendingSwitch: null,
+        cancelAtPeriodEnd: true,
+        cancelsOn: subscription.currentPeriodEnd,
+      };
+    }
+
     const profile = await this.settingsRepo.findBusinessProfile(tenantId);
     const timezone = profile?.timezone ?? 'Asia/Kolkata';
     const { monthStart, monthEnd } = DateUtil.getTenantCurrentMonth(timezone);
@@ -94,6 +110,8 @@ export class PlatformPlansService {
             changeAt: subscription.scheduledPlanChangeAt,
           }
         : null,
+      cancelAtPeriodEnd: false,
+      cancelsOn: null,
     };
   }
 

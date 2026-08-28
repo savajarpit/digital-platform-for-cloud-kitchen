@@ -33,6 +33,10 @@ import {
   platformWebhookFailedTemplate,
   PlatformWebhookFailedTemplateData,
 } from './templates/platform-webhook-failed.template';
+import {
+  platformCancellationRequestTemplate,
+  PlatformCancellationRequestTemplateData,
+} from './templates/platform-cancellation-request.template';
 
 @Injectable()
 export class MailService {
@@ -130,6 +134,14 @@ export class MailService {
     data: PlatformLeadNotificationTemplateData,
   ): Promise<void> {
     const { subject, html } = platformLeadNotificationTemplate(data);
+    await this.send(to, subject, html);
+  }
+
+  async sendPlatformCancellationRequest(
+    to: string,
+    data: PlatformCancellationRequestTemplateData,
+  ): Promise<void> {
+    const { subject, html } = platformCancellationRequestTemplate(data);
     await this.send(to, subject, html);
   }
 }

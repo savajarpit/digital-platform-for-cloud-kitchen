@@ -63,6 +63,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 import { TenantLimitsModule } from './modules/tenant-limits/tenant-limits.module';
 import { PlatformPlansModule } from './modules/platform-plans/platform-plans.module';
 import { PlatformLeadsModule } from './modules/platform-leads/platform-leads.module';
+import { PlatformCancellationRequestsModule } from './modules/platform-cancellation-requests/platform-cancellation-requests.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { HomeSectionsModule } from './modules/home-sections/home-sections.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
@@ -156,6 +157,7 @@ import { PlanContentModule } from './modules/plan-content/plan-content.module';
     TenantLimitsModule,
     PlatformPlansModule,
     PlatformLeadsModule,
+    PlatformCancellationRequestsModule,
     UploadsModule,
     HomeSectionsModule,
     ReviewsModule,

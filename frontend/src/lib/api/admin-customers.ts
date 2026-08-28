@@ -22,6 +22,8 @@ export interface CustomerAddress {
   state: string;
   pincode: string;
   isDefault: boolean;
+  lat: number | null;
+  lng: number | null;
 }
 
 export interface CustomerOrder {

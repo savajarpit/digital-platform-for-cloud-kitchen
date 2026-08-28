@@ -14,12 +14,16 @@ export interface OrderConfirmationTemplateData {
   mapLink?: string;
 }
 
-/** A plain Google Maps URL — opens/pinpoints the location with no API key
- * needed (unlike an embedded map), so it's safe in a plain email/WhatsApp
- * message and works whether the coordinate was captured via Google or the
- * free OpenStreetMap picker. */
+/** A plain Google Maps URL that opens turn-by-turn directions straight to
+ * this location — no `origin` param means Maps defaults the starting point
+ * to whoever opens the link's current location (still changeable inside
+ * Maps itself), so the recipient (e.g. a delivery driver forwarded this
+ * email) doesn't need a manual "Get Directions" tap. No API key needed
+ * (unlike an embedded map), so it's safe in a plain email/WhatsApp message,
+ * and works whether the coordinate was captured via Google or the free
+ * OpenStreetMap picker. */
 export function buildGoogleMapsLink(lat: number, lng: number): string {
-  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
 }
 
 export function orderConfirmationCustomerEmailTemplate(
@@ -30,7 +34,7 @@ export function orderConfirmationCustomerEmailTemplate(
     .join('');
   const total = (data.totalInPaise / 100).toFixed(2);
   const mapLinkHtml = data.mapLink
-    ? ` — <a href="${data.mapLink}">View on map</a>`
+    ? ` — <a href="${data.mapLink}">Get directions</a>`
     : '';
 
   return {

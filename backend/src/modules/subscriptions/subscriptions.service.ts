@@ -322,13 +322,26 @@ export class SubscriptionsService {
 
     const dispatch = todaysOrders.map((order) => ({
       orderId: order.id,
+      orderNumber: order.orderNumber,
       customerName:
         `${order.user.firstName} ${order.user.lastName ?? ''}`.trim(),
       customerEmail: order.user.email,
       planName: order.subscription?.planNameSnapshot ?? 'Subscription',
-      address: `${order.address.line1}, ${order.address.city}`,
-      addressLat: order.address.lat,
-      addressLng: order.address.lng,
+      // Full structured address (not just a flat "line1, city" string) so
+      // the dispatch card can both display and share() the complete,
+      // day-accurate delivery address — this is the actual materialized
+      // Order's own address, which already reflects whatever day-override
+      // won for this specific date, not just the subscription's default.
+      address: {
+        line1: order.address.line1,
+        line2: order.address.line2,
+        city: order.address.city,
+        state: order.address.state,
+        pincode: order.address.pincode,
+        contactPhone: order.address.contactPhone,
+        lat: order.address.lat,
+        lng: order.address.lng,
+      },
       deliverySlotName: order.deliverySlotName,
       deliveryWindowStart: order.deliveryWindowStart,
       deliveryWindowEnd: order.deliveryWindowEnd,

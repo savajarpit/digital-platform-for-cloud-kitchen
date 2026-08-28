@@ -166,12 +166,20 @@ export interface TodaysDeliveries {
   prepSheet: { mealName: string; quantity: number }[];
   dispatch: {
     orderId: string;
+    orderNumber: string;
     customerName: string;
     customerEmail: string;
     planName: string;
-    address: string;
-    addressLat: number | null;
-    addressLng: number | null;
+    address: {
+      line1: string;
+      line2: string | null;
+      city: string;
+      state: string;
+      pincode: string;
+      contactPhone: string;
+      lat: number | null;
+      lng: number | null;
+    };
     deliverySlotName: string;
     deliveryWindowStart: string;
     deliveryWindowEnd: string;

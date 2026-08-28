@@ -47,6 +47,7 @@ import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { MapLink } from "@/components/ui/MapLink";
+import { ShareOrderDetailsButton } from "@/components/ui/ShareOrderDetailsButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { PrepPlannerView } from "@/components/admin/PrepPlannerView";
@@ -1188,8 +1189,29 @@ function TodaysDeliveriesTab() {
                 </span>
               </div>
               <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                <span>{d.planName} · {d.address}</span>
-                <MapLink lat={d.addressLat} lng={d.addressLng} />
+                <span>
+                  {d.planName} · {d.address.line1}
+                  {d.address.line2 ? `, ${d.address.line2}` : ""}, {d.address.city}
+                </span>
+                <MapLink lat={d.address.lat} lng={d.address.lng} />
+                <ShareOrderDetailsButton
+                  details={{
+                    heading: `Delivery — ${d.planName} (Order #${d.orderNumber})`,
+                    customerName: d.customerName,
+                    itemLines: d.meals,
+                    deliverySlotName: d.deliverySlotName,
+                    deliveryWindowStart: d.deliveryWindowStart,
+                    deliveryWindowEnd: d.deliveryWindowEnd,
+                    deliveryDateLabel: data.date
+                      ? new Date(data.date).toLocaleDateString(undefined, {
+                          weekday: "short",
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : null,
+                    address: d.address,
+                  }}
+                />
               </div>
               <p className="text-xs text-zinc-400">{d.meals.join(", ")}</p>
             </div>

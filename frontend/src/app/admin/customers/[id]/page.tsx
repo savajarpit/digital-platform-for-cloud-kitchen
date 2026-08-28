@@ -5,6 +5,8 @@ import Link from "next/link";
 import { ArrowLeft, CalendarClock, Mail, MapPin, Package, Phone, User } from "lucide-react";
 import { getCustomer, type CustomerDetail } from "@/lib/api/admin-customers";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { MapLink } from "@/components/ui/MapLink";
+import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
 const ORDER_STATUS_STYLES: Record<string, string> = {
@@ -137,6 +139,10 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
                     {address.pincode}
                   </p>
                   <p className="mt-1 text-xs text-zinc-400">{address.contactPhone}</p>
+                  <div className="mt-1.5 flex items-center gap-3 text-xs">
+                    <MapLink lat={address.lat} lng={address.lng} />
+                    <ShareAddressButton address={address} />
+                  </div>
                 </div>
               ))}
             </div>

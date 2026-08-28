@@ -10,7 +10,7 @@ export function orderConfirmationOwnerEmailTemplate(
   // A tappable map link is the whole point of including this on the owner's
   // copy — it's what actually gets forwarded to a delivery driver.
   const mapLinkHtml = data.mapLink
-    ? ` — <a href="${data.mapLink}"><strong>View on map</strong></a>`
+    ? ` — <a href="${data.mapLink}"><strong>Get directions</strong></a>`
     : '';
 
   return {

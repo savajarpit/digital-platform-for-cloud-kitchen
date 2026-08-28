@@ -7,6 +7,7 @@ import { getAdminSubscription, type AdminSubscriptionDetail } from "@/lib/api/ad
 import { Skeleton } from "@/components/ui/Skeleton";
 import { MapLink } from "@/components/ui/MapLink";
 import { PlanDayBreakdown } from "@/components/admin/PlanDayBreakdown";
+import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -93,7 +94,8 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
             {sub.cycleEnd ? new Date(sub.cycleEnd).toLocaleDateString() : "—"}
           </p>
           <p className="text-xs text-zinc-400">
-            {sub.durationDaysSnapshot} days · next delivery day {sub.nextPlanDayNumber}
+            {sub.durationDaysSnapshot} days
+            {sub.plan.schedulingMode === "RELATIVE_DAY" && ` · next delivery day ${sub.nextPlanDayNumber}`}
             {sub.bankedDays > 0 && ` · ${sub.bankedDays} banked`}
           </p>
           {sub.couponCode && (
@@ -118,7 +120,13 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
                   {sub.address.line2 ? `, ${sub.address.line2}` : ""}, {sub.address.city}, {sub.address.state} —{" "}
                   {sub.address.pincode}
                 </span>
-                <MapLink lat={sub.address.lat} lng={sub.address.lng} className="mt-0.5 block text-xs" />
+                <div className="mt-0.5 flex items-center gap-3 text-xs">
+                  <MapLink lat={sub.address.lat} lng={sub.address.lng} />
+                  <ShareAddressButton
+                    address={{ ...sub.address, label: undefined }}
+                    className="text-xs"
+                  />
+                </div>
               </div>
             </div>
           ) : (

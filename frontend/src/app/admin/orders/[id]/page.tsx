@@ -16,6 +16,8 @@ import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { MapLink } from "@/components/ui/MapLink";
+import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
+import { ShareOrderDetailsButton } from "@/components/ui/ShareOrderDetailsButton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -87,10 +89,29 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           <ArrowLeft className="h-4 w-4" />
           Back to orders
         </Link>
-        <Link href={`/admin/orders/${order.id}/invoice`} className="btn-outline btn-sm">
-          <FileText className="h-4 w-4" />
-          Invoice
-        </Link>
+        <div className="flex items-center gap-3">
+          <ShareOrderDetailsButton
+            details={{
+              heading: `Order #${order.orderNumber}`,
+              customerName: `${order.user.firstName} ${order.user.lastName ?? ""}`.trim(),
+              itemLines: order.items.map((item) => `${item.nameSnapshot} x${item.quantity}`),
+              deliverySlotName: order.isInstant ? "Instant delivery" : order.deliverySlotName,
+              deliveryWindowStart: order.isInstant ? null : order.deliveryWindowStart,
+              deliveryWindowEnd: order.isInstant ? null : order.deliveryWindowEnd,
+              deliveryDateLabel: new Date(order.deliveryDate).toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              }),
+              totalLabel: formatPriceFromPaise(order.totalInPaise),
+              address: order.address,
+            }}
+          />
+          <Link href={`/admin/orders/${order.id}/invoice`} className="btn-outline btn-sm">
+            <FileText className="h-4 w-4" />
+            Invoice
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -196,7 +217,10 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   {order.address.line2 ? `, ${order.address.line2}` : ""}, {order.address.city},{" "}
                   {order.address.state} — {order.address.pincode}
                 </span>
-                <MapLink lat={order.address.lat} lng={order.address.lng} className="mt-0.5 block text-xs" />
+                <div className="mt-0.5 flex items-center gap-3 text-xs">
+                  <MapLink lat={order.address.lat} lng={order.address.lng} />
+                  <ShareAddressButton address={order.address} className="text-xs" />
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">

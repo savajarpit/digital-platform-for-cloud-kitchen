@@ -165,6 +165,7 @@ export class PlatformBillingRepository {
     amountInPaise: number;
     token: string;
     expiresAt: Date;
+    trialEndsAt: Date | null;
     createdByUserId: string;
   }): Promise<{
     subscription: PlatformSubscription;
@@ -179,6 +180,10 @@ export class PlatformBillingRepository {
           billingCycle: params.billingCycle,
           amountInPaise: params.amountInPaise,
           status: PlatformSubscriptionStatus.PENDING_PAYMENT,
+          // Cleared here, not set — a re-invite's trial only becomes real
+          // once activateFromInvite() runs; showing "on trial" before the
+          // tenant has even completed activation would be misleading.
+          trialEndsAt: null,
         },
         create: {
           tenantId: params.tenantId,
@@ -197,6 +202,7 @@ export class PlatformBillingRepository {
           billingCycle: params.billingCycle,
           amountInPaise: params.amountInPaise,
           expiresAt: params.expiresAt,
+          trialEndsAt: params.trialEndsAt,
           createdByUserId: params.createdByUserId,
         },
       });
@@ -225,6 +231,7 @@ export class PlatformBillingRepository {
     razorpaySubscriptionId: string;
     razorpayCustomerId: string | null;
     currentPeriodEnd: Date | null;
+    trialEndsAt: Date | null;
   }): Promise<void> {
     await this.prisma.$transaction([
       this.prisma.platformSubscription.update({
@@ -234,6 +241,7 @@ export class PlatformBillingRepository {
           razorpaySubscriptionId: params.razorpaySubscriptionId,
           razorpayCustomerId: params.razorpayCustomerId,
           currentPeriodEnd: params.currentPeriodEnd,
+          trialEndsAt: params.trialEndsAt,
         },
       }),
       this.prisma.tenant.update({

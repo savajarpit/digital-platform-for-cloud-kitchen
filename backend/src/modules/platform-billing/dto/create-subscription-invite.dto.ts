@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Min, MaxLength } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min, MaxLength } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingCycle } from '../../../generated/prisma';
 
@@ -30,4 +30,15 @@ export class CreateSubscriptionInviteDto {
   @IsInt()
   @Min(100)
   amountInPaise?: number;
+
+  @ApiPropertyOptional({
+    example: 14,
+    description:
+      "Free trial in days — the tenant authorizes payment now but Razorpay won't actually charge until this many days out. Omit for no trial.",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  trialDays?: number;
 }

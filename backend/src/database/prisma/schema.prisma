@@ -1426,6 +1426,11 @@ model PlatformSubscription {
   razorpaySubscriptionId        String?
   razorpayCustomerId            String?
   currentPeriodEnd              DateTime?
+  // Copied from the activating TenantActivationInvite, if it carried a
+  // trial — the real Razorpay subscription already won't charge until this
+  // date (it was created with `start_at` = this same value), so nothing on
+  // our side needs to enforce it; purely for display ("on trial until X").
+  trialEndsAt                   DateTime?
   // True once SUPER_ADMIN has scheduled a cancellation — the subscription
   // stays ACTIVE and keeps billing rights until currentPeriodEnd, then the
   // `subscription.cancelled` webhook flips status to CANCELLED. Resumable
@@ -1606,6 +1611,11 @@ model TenantActivationInvite {
   billingCycle           BillingCycle
   amountInPaise          Int
   razorpaySubscriptionId String?
+  // Optional free-trial end date — when set, passed as the Razorpay
+  // subscription's `start_at` (same deferred-billing param already used for
+  // a scheduled downgrade's replacement subscription) so the tenant
+  // authorizes payment now but isn't actually charged until this date.
+  trialEndsAt            DateTime?
   expiresAt              DateTime
   usedAt                 DateTime?
   createdByUserId        String

@@ -164,6 +164,14 @@ export default function MyPlanPage() {
                 Plan switching is disabled until then.
               </p>
             </div>
+          ) : eligible.trialEndsAt ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-3.5 py-2.5 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
+              <p className="text-emerald-700 dark:text-emerald-400">
+                You&apos;re on a free trial until{" "}
+                {new Date(eligible.trialEndsAt).toLocaleDateString()}. Plan switching is disabled
+                until the trial ends.
+              </p>
+            </div>
           ) : (
             <>
               {eligible.pendingSwitch && (

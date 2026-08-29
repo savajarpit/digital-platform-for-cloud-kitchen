@@ -110,6 +110,18 @@ export class PlatformBillingService {
         'This subscription is scheduled to cancel — plan switching is disabled.',
       );
     }
+    if (subscription.trialEndsAt && subscription.trialEndsAt > new Date()) {
+      // A trial subscription is already ACTIVE with a real razorpaySubscriptionId
+      // (verifyAndActivate() flips status immediately, before Razorpay's
+      // deferred start_at ever fires) — so it passes every check above.
+      // Splicing a switch mid-trial would mean cancelling the never-charged
+      // trial subscription and creating a replacement with no start_at,
+      // silently charging the tenant right now instead of honoring the
+      // trial. Simpler and safer to just block switching until it ends.
+      throw new BadRequestException(
+        `You're on a free trial until ${subscription.trialEndsAt.toISOString().slice(0, 10)} — plan switching is disabled until the trial ends.`,
+      );
+    }
     if (!targetPlan) throw new NotFoundException('Plan not found');
     if (targetPlan.id === subscription.planId) {
       throw new ConflictException('Already on this plan');
@@ -259,6 +271,9 @@ export class PlatformBillingService {
     const expiresAt = new Date(
       Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000,
     );
+    const trialEndsAt = dto.trialDays
+      ? new Date(Date.now() + dto.trialDays * 24 * 60 * 60 * 1000)
+      : null;
 
     await this.billingRepo.createSubscriptionAndInvite({
       tenantId,
@@ -268,6 +283,7 @@ export class PlatformBillingService {
       amountInPaise,
       token,
       expiresAt,
+      trialEndsAt,
       createdByUserId,
     });
 
@@ -315,6 +331,10 @@ export class PlatformBillingService {
         planCode: invite.planCode,
         billingCycle: invite.billingCycle,
         amountInPaise: invite.amountInPaise,
+        // Same deferred-billing param already used for a scheduled
+        // downgrade's replacement subscription — the tenant authorizes
+        // payment now, Razorpay just doesn't charge until this date.
+        startAt: invite.trialEndsAt ?? undefined,
       });
       await this.billingRepo.updateInviteRazorpaySubscription(
         invite.id,
@@ -330,6 +350,7 @@ export class PlatformBillingService {
       amountInPaise: invite.amountInPaise,
       razorpaySubscriptionId,
       razorpayKeyId: this.razorpayClient.getKeyId(),
+      trialEndsAt: invite.trialEndsAt,
     };
   }
 
@@ -368,6 +389,7 @@ export class PlatformBillingService {
       currentPeriodEnd: fetched.currentEnd
         ? new Date(fetched.currentEnd * 1000)
         : null,
+      trialEndsAt: invite.trialEndsAt,
     });
     // A reactivation (not just a brand-new tenant) may carry stale
     // TenantLimits — blocked-attempt counters, alert-dedupe flags, or a

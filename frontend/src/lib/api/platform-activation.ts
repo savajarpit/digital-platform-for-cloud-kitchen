@@ -10,6 +10,7 @@ export interface ActivationInvite {
   amountInPaise: number;
   razorpaySubscriptionId: string;
   razorpayKeyId: string;
+  trialEndsAt: string | null;
 }
 
 export interface VerifyActivationInput {

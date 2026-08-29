@@ -108,6 +108,12 @@ export default function ActivateTenantPage({
                 </span>
               </div>
             </div>
+            {invite.trialEndsAt && (
+              <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400">
+                Free trial until {new Date(invite.trialEndsAt).toLocaleDateString()} — you won&apos;t
+                be charged until then.
+              </p>
+            )}
             {error && (
               <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
                 {error}
@@ -119,7 +125,7 @@ export default function ActivateTenantPage({
               disabled={paying}
               className="btn-primary mt-6 w-full disabled:cursor-not-allowed"
             >
-              {paying ? "Processing…" : "Pay & Activate"}
+              {paying ? "Processing…" : invite.trialEndsAt ? "Start Free Trial" : "Pay & Activate"}
             </button>
           </>
         )}

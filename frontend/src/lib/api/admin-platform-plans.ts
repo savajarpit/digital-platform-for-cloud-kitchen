@@ -62,6 +62,9 @@ export interface EligiblePlansResponse {
   pendingSwitch: PendingPlanSwitch | null;
   cancelAtPeriodEnd: boolean;
   cancelsOn: string | null;
+  /** Set while an activation trial is still running — switching is blocked
+   * until it ends (see the plan/page for why). */
+  trialEndsAt: string | null;
 }
 
 export function getMyEligiblePlans(): Promise<EligiblePlansResponse> {

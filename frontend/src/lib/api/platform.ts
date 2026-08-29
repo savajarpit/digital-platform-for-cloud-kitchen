@@ -10,6 +10,9 @@ export interface PlatformSubscriptionSummary {
   billingCycle: BillingCycle;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
+  /** Set once activated from an invite that carried a trial — Razorpay
+   * itself already won't charge until this date, this is purely display. */
+  trialEndsAt: string | null;
 }
 
 export interface PlatformSubscriptionDetail extends PlatformSubscriptionSummary {
@@ -204,6 +207,9 @@ export interface CreateSubscriptionInviteInput {
   planCode?: string;
   billingCycle?: BillingCycle;
   amountInPaise?: number;
+  /** Free trial in days — the tenant authorizes payment now but Razorpay
+   * won't actually charge until this many days out. Omit for no trial. */
+  trialDays?: number;
 }
 
 export function createSubscriptionInvite(

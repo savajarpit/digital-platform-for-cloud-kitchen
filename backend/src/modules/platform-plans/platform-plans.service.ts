@@ -76,6 +76,25 @@ export class PlatformPlansService {
         pendingSwitch: null,
         cancelAtPeriodEnd: true,
         cancelsOn: subscription.currentPeriodEnd,
+        trialEndsAt: null,
+      };
+    }
+
+    // Same reasoning as the cancelAtPeriodEnd short-circuit above — a trial
+    // subscription is already ACTIVE, so it'd otherwise sail through to the
+    // eligible-plans list. Switching mid-trial silently cancels the
+    // never-charged trial subscription and replaces it with one that starts
+    // billing immediately (see switchPlan()'s own guard for the full
+    // reasoning) — blocked here too so the UI never even offers it.
+    if (subscription.trialEndsAt && subscription.trialEndsAt > new Date()) {
+      return {
+        currentPlanId: subscription.planId,
+        currentAmountInPaise: subscription.amountInPaise,
+        plans: [],
+        pendingSwitch: null,
+        cancelAtPeriodEnd: false,
+        cancelsOn: null,
+        trialEndsAt: subscription.trialEndsAt,
       };
     }
 
@@ -112,6 +131,7 @@ export class PlatformPlansService {
         : null,
       cancelAtPeriodEnd: false,
       cancelsOn: null,
+      trialEndsAt: null,
     };
   }
 

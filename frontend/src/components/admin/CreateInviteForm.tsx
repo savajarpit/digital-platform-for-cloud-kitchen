@@ -21,6 +21,7 @@ export function CreateInviteForm({
   const [planCode, setPlanCode] = useState("STANDARD");
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("MONTHLY");
   const [amountRupees, setAmountRupees] = useState("999");
+  const [trialDays, setTrialDays] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -37,16 +38,16 @@ export function CreateInviteForm({
     e.preventDefault();
     setSaving(true);
     try {
-      const { activationUrl } = await createSubscriptionInvite(
-        tenantId,
-        manualEntry
+      const { activationUrl } = await createSubscriptionInvite(tenantId, {
+        ...(manualEntry
           ? {
               planCode,
               billingCycle,
               amountInPaise: Math.round(Number(amountRupees) * 100),
             }
-          : { planId: selectedPlanId },
-      );
+          : { planId: selectedPlanId }),
+        trialDays: trialDays ? Math.round(Number(trialDays)) : undefined,
+      });
       onCreated(activationUrl);
       showToast("Activation invite created and emailed to the owner", "success");
     } catch (err) {
@@ -128,6 +129,24 @@ export function CreateInviteForm({
           )}
         </div>
       )}
+
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+          Free trial (days, optional)
+        </label>
+        <input
+          type="number"
+          value={trialDays}
+          onChange={(e) => setTrialDays(e.target.value)}
+          placeholder="e.g. 14 — leave blank for no trial"
+          min={1}
+          max={365}
+          className="input w-full max-w-xs"
+        />
+        <p className="text-xs text-zinc-400">
+          Tenant authorizes payment now but isn&apos;t charged until this many days out.
+        </p>
+      </div>
 
       <button
         type="submit"

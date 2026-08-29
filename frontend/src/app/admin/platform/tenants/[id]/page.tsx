@@ -312,8 +312,18 @@ function BillingCard({
             </span>
           </div>
 
+          {subscription.trialEndsAt && new Date(subscription.trialEndsAt) > new Date() && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3.5 py-2.5 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
+              <span className="text-emerald-700 dark:text-emerald-400">
+                On trial — first charge on{" "}
+                {new Date(subscription.trialEndsAt).toLocaleDateString()}.
+              </span>
+            </div>
+          )}
+
           {subscription.status === "ACTIVE" &&
             !subscription.cancelAtPeriodEnd &&
+            !(subscription.trialEndsAt && new Date(subscription.trialEndsAt) > new Date()) &&
             subscription.currentPeriodEnd && (
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
                 Upcoming invoice: {formatPriceFromPaise(subscription.amountInPaise)} on{" "}

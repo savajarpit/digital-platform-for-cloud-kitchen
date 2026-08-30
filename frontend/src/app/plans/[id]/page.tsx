@@ -182,7 +182,11 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                   </h3>
                   <div className="mt-3 flex flex-col gap-3">
                     {day.meals.length === 0 ? (
-                      <p className="text-xs text-zinc-400 italic">Meals for this day to be decided.</p>
+                      // Zero slots for this real weekday (not zero meals within a
+                      // decided slot — that case renders per-slot below with
+                      // "Meal to be announced" instead) means no delivery happens
+                      // this day at all, so this is never "still being decided."
+                      <p className="text-xs text-zinc-400 italic">No delivery on this day.</p>
                     ) : (
                       day.meals.map((meal, i) => (
                         <div key={i} className="flex items-center gap-3">

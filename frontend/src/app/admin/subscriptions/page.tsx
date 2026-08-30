@@ -20,6 +20,7 @@ import {
   createPlan,
   deletePlan,
   getPlanAdmin,
+  getPlanCyclePreview,
   getSubscriptionSettings,
   getTodaysDeliveries,
   listPlansAdmin,
@@ -36,6 +37,7 @@ import {
   type PlanInput,
   type SchedulingMode,
   type OffDayHandling,
+  type PlanCyclePreview,
   type SubscriptionSettings,
   type TodaysDeliveries,
 } from "@/lib/api/admin-subscriptions";
@@ -724,12 +726,24 @@ function PlanEditor({
   const [weeks, setWeeks] = useState<WeekState[] | null>(null);
   const [activeWeek, setActiveWeek] = useState(0);
   const [savingDays, setSavingDays] = useState(false);
+  const [cyclePreview, setCyclePreview] = useState<PlanCyclePreview | null>(null);
+
+  // Reflects the last-SAVED meal plan, not unsaved grid edits — refreshed
+  // after every save so it's never more than one "Save meal plan" click
+  // stale. Silent on failure: this is a convenience preview, not core
+  // functionality worth a toast if it can't load.
+  function refreshCyclePreview() {
+    getPlanCyclePreview(planId)
+      .then(setCyclePreview)
+      .catch(() => setCyclePreview(null));
+  }
 
   useEffect(() => {
     getPlanAdmin(planId)
       .then((p) => {
         setPlan(p);
         if (p.schedulingMode === "WEEKLY_FIXED") {
+          refreshCyclePreview();
           const weekCount = p.weekCount ?? 1;
           const initialWeeks: WeekState[] = Array.from({ length: weekCount }, () => emptyWeekState());
           for (const day of p.days ?? []) {
@@ -776,6 +790,7 @@ function PlanEditor({
       }
     }
     setPlan(updated);
+    if (updated.schedulingMode === "WEEKLY_FIXED") refreshCyclePreview();
     showToast("Plan details saved", "success");
   }
 
@@ -807,6 +822,7 @@ function PlanEditor({
         }));
       }
       await replacePlanDays(planId, payload);
+      if (plan.schedulingMode === "WEEKLY_FIXED") refreshCyclePreview();
       showToast("Meal plan saved", "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't save meal plan.", "error");
@@ -893,6 +909,21 @@ function PlanEditor({
         onCancel={onClose}
         onSave={handleSaveMeta}
       />
+
+      {plan.schedulingMode === "WEEKLY_FIXED" && cyclePreview && (
+        <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+          A subscriber joining now would run{" "}
+          <strong className="text-zinc-900 dark:text-zinc-100">
+            {new Date(cyclePreview.startDate).toLocaleDateString()} –{" "}
+            {new Date(cyclePreview.cycleEnd).toLocaleDateString()}
+          </strong>{" "}
+          — {cyclePreview.durationDays} paid delivery day{cyclePreview.durationDays === 1 ? "" : "s"}
+          {cyclePreview.calendarSpanDays !== cyclePreview.durationDays &&
+            ` across ${cyclePreview.calendarSpanDays} calendar days (off days extend the plan, not counted against it)`}
+          . Based on the currently-saved meal plan below and today&apos;s date — reflects the last
+          save, not unsaved edits.
+        </div>
+      )}
 
       <div className="flex flex-col gap-3">
         <div>

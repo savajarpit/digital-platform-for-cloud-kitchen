@@ -80,6 +80,37 @@ export class SubscriptionsService {
     return plan;
   }
 
+  /** Projects what a brand-new subscriber's start/end dates would actually
+   * be right now, given this plan's current schedule config — the only way
+   * to see the effect of EXTEND_TO_COMPENSATE (or confirm LOSS_DELIVERY's
+   * flat behavior) without running a real test signup, since the extension
+   * is computed per-subscriber at activation and never shown anywhere in
+   * the plan-authoring UI itself. Reuses the exact same computation
+   * verifyPayment() runs for a real activation — same startDateLeadDays
+   * setting, same computeInitialCycleEnd() — so this preview can never
+   * drift from what a real subscriber would actually get. */
+  async previewPlanCycle(tenantId: string, planId: string) {
+    const plan = await this.findPlanForAdmin(tenantId, planId);
+    const settings = await this.subscriptionsRepo.findSettings(tenantId);
+    const startDateLeadDays = settings?.startDateLeadDays ?? 1;
+    const startDate = DateUtil.addDays(DateUtil.now(), startDateLeadDays);
+    const cycleEnd = await this.computeInitialCycleEnd(
+      tenantId,
+      planId,
+      startDate,
+      plan.durationDays,
+    );
+    const timezone = await this.getTenantTimezone(tenantId);
+    const startDateStr = DateUtil.toTenantDateStr(startDate, timezone);
+    const cycleEndStr = DateUtil.toTenantDateStr(cycleEnd, timezone);
+    return {
+      startDate: startDateStr,
+      cycleEnd: cycleEndStr,
+      durationDays: plan.durationDays,
+      calendarSpanDays: DateUtil.diffInDays(startDateStr, cycleEndStr) + 1,
+    };
+  }
+
   async createPlan(tenantId: string, dto: CreatePlanDto) {
     const scheduling = await this.resolveSchedulingFields(tenantId, null, dto);
     return this.subscriptionsRepo.createPlan(tenantId, {

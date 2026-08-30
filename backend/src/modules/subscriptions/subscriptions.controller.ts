@@ -123,6 +123,23 @@ export class SubscriptionsController {
     return this.subscriptionsService.findPlanForAdmin(tenantId, id);
   }
 
+  @Get('plans/admin/:id/cycle-preview')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Cycle preview computed')
+  @ApiOperation({
+    summary:
+      "Admin: project a brand-new subscriber's start/end dates for this plan right now, given its current off-day configuration — the only way to see EXTEND_TO_COMPENSATE's effect without a real test signup",
+  })
+  previewPlanCycle(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.subscriptionsService.previewPlanCycle(tenantId, id);
+  }
+
   @Post('plans')
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
   @RequirePermission('subscriptions.manage')

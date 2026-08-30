@@ -215,6 +215,21 @@ export function getPlanAdmin(id: string): Promise<Plan> {
   return proxyFetch<Plan>(`/subscriptions/plans/admin/${id}`);
 }
 
+export interface PlanCyclePreview {
+  startDate: string;
+  cycleEnd: string;
+  durationDays: number;
+  calendarSpanDays: number;
+}
+
+/** Projects a brand-new subscriber's start/end dates right now, given the
+ * plan's currently-SAVED schedule config — the only way to see
+ * EXTEND_TO_COMPENSATE's effect without a real test signup. Reflects the
+ * last-saved meal plan, not unsaved edits still in the grid. */
+export function getPlanCyclePreview(id: string): Promise<PlanCyclePreview> {
+  return proxyFetch<PlanCyclePreview>(`/subscriptions/plans/admin/${id}/cycle-preview`);
+}
+
 export function createPlan(input: PlanInput): Promise<Plan> {
   return proxyFetch<Plan>("/subscriptions/plans", { method: "POST", body: JSON.stringify(input) });
 }

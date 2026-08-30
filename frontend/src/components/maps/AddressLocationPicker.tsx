@@ -4,27 +4,42 @@ import { useState } from "react";
 import { LocationPickerMap, type AddressHint } from "@/components/maps/LocationPickerMap";
 import { extractGoogleAddressParts } from "@/lib/format/google-address";
 import { extractNominatimAddressParts } from "@/lib/format/nominatim-address";
-import { MAPS_PROVIDER } from "@/lib/config/env";
+import { GOOGLE_MAPS_API_KEY, MAPS_PROVIDER } from "@/lib/config/env";
 
 export interface PickedAddress extends AddressHint {
   lat: number;
   lng: number;
 }
 
+// Geocoding API v4 REST (https://geocode.googleapis.com/v4/geocode/location/...),
+// not the classic google.maps.Geocoder JS class — the classic Geocoding API
+// is billing-gated the same way legacy Places Autocomplete was, while v4 is
+// covered by a plain (even a free demo) API key. CORS-enabled for direct
+// browser fetch, confirmed via a real request with an Origin header.
 async function reverseGeocodeGoogle(lat: number, lng: number): Promise<AddressHint> {
-  return new Promise((resolve) => {
-    if (typeof google === "undefined") {
-      resolve({});
-      return;
-    }
-    new google.maps.Geocoder().geocode({ location: { lat, lng } }, (results, status) => {
-      resolve(
-        status === "OK" && results?.[0]
-          ? extractGoogleAddressParts(undefined, results[0].address_components)
-          : {},
-      );
-    });
-  });
+  if (!GOOGLE_MAPS_API_KEY) return {};
+  try {
+    const res = await fetch(
+      `https://geocode.googleapis.com/v4/geocode/location/${lat},${lng}?key=${GOOGLE_MAPS_API_KEY}`,
+    );
+    if (!res.ok) return {};
+    const data = (await res.json()) as {
+      results?: {
+        addressComponents?: { longText: string | null; types?: string[] }[];
+        // The house/street-level line as free text — v4 sometimes leaves
+        // this untagged (no `types` at all) in addressComponents for a
+        // less-structured address, so prefer this over hunting for a
+        // street_number+route match that may not exist.
+        postalAddress?: { addressLines?: string[] };
+      }[];
+    };
+    const result = data.results?.[0];
+    if (!result?.addressComponents) return {};
+    const addressLine = result.postalAddress?.addressLines?.[0];
+    return extractGoogleAddressParts(addressLine, result.addressComponents);
+  } catch {
+    return {};
+  }
 }
 
 async function reverseGeocodeNominatim(lat: number, lng: number): Promise<AddressHint> {

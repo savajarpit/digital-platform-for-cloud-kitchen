@@ -844,6 +844,17 @@ function PlanEditor({
     });
   }
 
+  // "Off day" isn't a separate field — a weekday with zero decided slots is
+  // already treated as off by materialization (see PlanScheduleUtil), so
+  // this is purely a convenience: one click to clear every slot for the day
+  // instead of unchecking each one, plus a badge making the already-off
+  // state visible instead of only discoverable by an empty row.
+  function markWeekdayOff(weekIndex: number, weekday: number) {
+    for (const slotType of SLOT_TYPES) {
+      updateWeekSlot(weekIndex, weekday, slotType, { included: false });
+    }
+  }
+
   if (!plan || (!days && !weeks)) {
     return (
       <div className="card p-6">
@@ -914,14 +925,39 @@ function PlanEditor({
               </div>
             )}
             <div className="flex flex-col gap-2">
-              {WEEKDAY_DISPLAY_ORDER.map((weekday) => (
+              {WEEKDAY_DISPLAY_ORDER.map((weekday) => {
+                const isOffDay = SLOT_TYPES.every(
+                  (slotType) => !weeks[activeWeek][weekday][slotType].included,
+                );
+                return (
                 <div
                   key={weekday}
-                  className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-100 p-3 sm:grid-cols-[3rem_repeat(3,1fr)] sm:items-center dark:border-zinc-800"
+                  className={`grid grid-cols-1 gap-2 rounded-lg border p-3 sm:grid-cols-[3rem_repeat(3,1fr)] sm:items-center ${
+                    isOffDay
+                      ? "border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20"
+                      : "border-zinc-100 dark:border-zinc-800"
+                  }`}
                 >
-                  <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                    {WEEKDAY_LABELS[weekday]}
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                      {WEEKDAY_LABELS[weekday]}
+                    </span>
+                    {isOffDay ? (
+                      <span className="badge w-fit bg-amber-50 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                        Off day
+                      </span>
+                    ) : (
+                      canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => markWeekdayOff(activeWeek, weekday)}
+                          className="w-fit text-[10px] font-medium text-zinc-400 hover:text-amber-600 hover:underline dark:hover:text-amber-400"
+                        >
+                          Mark off
+                        </button>
+                      )
+                    )}
+                  </div>
                   {SLOT_TYPES.map((slotType) => (
                     <div key={slotType} className="flex min-w-0 items-center gap-2">
                       <input
@@ -943,7 +979,8 @@ function PlanEditor({
                     </div>
                   ))}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ) : (

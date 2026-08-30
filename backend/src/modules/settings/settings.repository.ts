@@ -170,6 +170,15 @@ export class SettingsRepository {
     });
   }
 
+  findServiceablePincodeByPincode(
+    tenantId: string,
+    pincode: string,
+  ): Promise<ServiceablePincode | null> {
+    return this.prisma.serviceablePincode.findUnique({
+      where: { tenantId_pincode: { tenantId, pincode } },
+    });
+  }
+
   createServiceablePincode(
     tenantId: string,
     data: Omit<Prisma.ServiceablePincodeUncheckedCreateInput, 'tenantId'>,

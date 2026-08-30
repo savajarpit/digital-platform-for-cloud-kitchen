@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -268,10 +269,17 @@ export class SettingsService {
     return this.settingsRepo.findAllServiceablePincodes(tenantId);
   }
 
-  createServiceablePincode(
+  async createServiceablePincode(
     tenantId: string,
     dto: CreateServiceablePincodeDto,
   ): Promise<ServiceablePincode> {
+    const existing = await this.settingsRepo.findServiceablePincodeByPincode(
+      tenantId,
+      dto.pincode,
+    );
+    if (existing) {
+      throw new ConflictException('This pincode is already serviceable');
+    }
     return this.settingsRepo.createServiceablePincode(tenantId, dto);
   }
 
@@ -285,6 +293,15 @@ export class SettingsService {
       id,
     );
     if (!existing) throw new NotFoundException('Serviceable pincode not found');
+    if (dto.pincode && dto.pincode !== existing.pincode) {
+      const duplicate = await this.settingsRepo.findServiceablePincodeByPincode(
+        tenantId,
+        dto.pincode,
+      );
+      if (duplicate) {
+        throw new ConflictException('This pincode is already serviceable');
+      }
+    }
     return this.settingsRepo.updateServiceablePincode(id, dto);
   }
 

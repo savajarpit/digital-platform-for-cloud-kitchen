@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { Autocomplete, Circle, GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { useEffect, useRef, useState } from "react";
+import { Circle, GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { LocateFixed, Search } from "lucide-react";
 import { GOOGLE_MAPS_API_KEY } from "@/lib/config/env";
 import { extractGoogleAddressParts } from "@/lib/format/google-address";
@@ -11,18 +11,13 @@ const LIBRARIES: "places"[] = ["places"];
 // India's rough centroid — only used as the map's starting view when no
 // location has been picked yet.
 const DEFAULT_CENTER = { lat: 20.5937, lng: 78.9629 };
-// Locks panning to India (incl. J&K, NE states, Andaman/Nicobar) and biases/
-// restricts Autocomplete predictions the same way.
+// Locks panning to India (incl. J&K, NE states, Andaman/Nicobar) and biases
+// Autocomplete predictions the same way.
 const INDIA_BOUNDS: google.maps.LatLngBoundsLiteral = {
   south: 6.0,
   west: 68.0,
   north: 37.6,
   east: 97.5,
-};
-const AUTOCOMPLETE_OPTIONS: google.maps.places.AutocompleteOptions = {
-  componentRestrictions: { country: "in" },
-  bounds: INDIA_BOUNDS,
-  strictBounds: false,
 };
 
 /** Search box + draggable pin + "use my current location", backed by the
@@ -39,9 +34,66 @@ export function GoogleLocationPickerMap({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY ?? "",
     libraries: LIBRARIES,
   });
-  const [autocomplete, setAutocomplete] = useState<google.maps.places.Autocomplete | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const hasPin = lat != null && lng != null;
+
+  // Search box — New Places API "data only" Autocomplete (the legacy
+  // `google.maps.places.Autocomplete` widget this used to wrap is blocked
+  // for any Google Cloud project created after Google's legacy-API cutoff).
+  // Structurally mirrors OsmLocationPickerMap's search pattern exactly:
+  // debounce -> dropdown of results tagged by the query they belong to ->
+  // pick one -> skip the next search (writing the picked display text back
+  // into the box shouldn't re-trigger a lookup for that whole string).
+  const [query, setQuery] = useState("");
+  const [searched, setSearched] = useState<{
+    query: string;
+    suggestions: google.maps.places.AutocompleteSuggestion[] | null;
+    error: boolean;
+  }>({ query: "", suggestions: null, error: false });
+  const [searching, setSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextSearchRef = useRef(false);
+  // One token per "session" (first keystroke through the resulting pick) —
+  // lets Google bill the whole search as one session instead of per
+  // keystroke, per Google's own session-token guidance. Cleared after a
+  // pick or when the box empties, so the next search starts a fresh one.
+  const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
+
+  const queryTooShort = query.trim().length < 3;
+  const suggestions = searched.query === query ? searched.suggestions : null;
+  const searchError = searched.query === query && searched.error;
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (skipNextSearchRef.current) {
+      skipNextSearchRef.current = false;
+      return;
+    }
+    if (!isLoaded || queryTooShort) return;
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true);
+      try {
+        if (!sessionTokenRef.current) {
+          sessionTokenRef.current = new google.maps.places.AutocompleteSessionToken();
+        }
+        const { suggestions: results } =
+          await google.maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+            input: query,
+            includedRegionCodes: ["in"],
+            locationBias: INDIA_BOUNDS,
+            sessionToken: sessionTokenRef.current,
+          });
+        setSearched({ query, suggestions: results, error: false });
+      } catch {
+        setSearched({ query, suggestions: null, error: true });
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query, queryTooShort, isLoaded]);
 
   function moveTo(nextLat: number, nextLng: number, hint?: Parameters<typeof onChange>[2]) {
     onChange(nextLat, nextLng, hint);
@@ -58,17 +110,24 @@ export function GoogleLocationPickerMap({
     );
   }
 
-  function handlePlaceChanged() {
-    const place = autocomplete?.getPlace();
-    const location = place?.geometry?.location;
-    if (!location) return;
-    // Autocomplete already returns the full address breakdown — use it
-    // directly instead of a separate reverse-geocode call, and prefer the
-    // place's own name (e.g. a business/landmark) over its street address.
-    const hint = place.address_components
-      ? extractGoogleAddressParts(place.name, place.address_components)
+  async function handlePickResult(suggestion: google.maps.places.AutocompleteSuggestion) {
+    const prediction = suggestion.placePrediction;
+    if (!prediction) return;
+    const place = prediction.toPlace();
+    await place.fetchFields({
+      fields: ["addressComponents", "location", "displayName", "formattedAddress"],
+    });
+    if (!place.location) return;
+    // The suggestion's own address breakdown, not a separate reverse-geocode
+    // call — same reasoning as the legacy path this replaces: a reverse
+    // lookup on a park/POI often only resolves the surrounding suburb.
+    const hint = place.addressComponents
+      ? extractGoogleAddressParts(place.displayName, place.addressComponents)
       : undefined;
-    moveTo(location.lat(), location.lng(), hint);
+    moveTo(place.location.lat(), place.location.lng(), hint);
+    skipNextSearchRef.current = true;
+    sessionTokenRef.current = null;
+    setQuery(place.formattedAddress ?? place.displayName ?? "");
   }
 
   if (!GOOGLE_MAPS_API_KEY) {
@@ -103,16 +162,43 @@ export function GoogleLocationPickerMap({
     // box, so it never competes with page-level chrome like the sticky
     // header once this component scrolls under it.
     <div className="isolate flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
+      <div className="relative z-[2000] flex flex-wrap gap-2">
         <div className="relative min-w-48 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 z-10 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-          <Autocomplete
-            onLoad={setAutocomplete}
-            onPlaceChanged={handlePlaceChanged}
-            options={AUTOCOMPLETE_OPTIONS}
-          >
-            <input type="text" placeholder="Search for an address" className="input w-full pl-8" />
-          </Autocomplete>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search for an address"
+            className="input w-full pl-8"
+          />
+          {!queryTooShort && !searching && searchError && (
+            <div className="absolute top-full right-0 left-0 z-[2000] mt-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600 shadow-lg dark:border-red-900 dark:bg-red-950 dark:text-red-400">
+              Couldn&apos;t search right now — check your connection and try again.
+            </div>
+          )}
+          {!queryTooShort && !searchError && (searching || suggestions !== null) && (
+            <div className="absolute top-full right-0 left-0 z-[2000] mt-1 max-h-80 overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
+              {searching ? (
+                <p className="px-3 py-2 text-xs text-zinc-400">Searching…</p>
+              ) : suggestions !== null && suggestions.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-zinc-400">
+                  No matches — try a shorter or more general search (e.g. just the area name).
+                </p>
+              ) : (
+                (suggestions ?? []).map((s, i) => (
+                  <button
+                    key={s.placePrediction?.placeId ?? i}
+                    type="button"
+                    onClick={() => handlePickResult(s)}
+                    className="block w-full px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    {s.placePrediction?.text.toString()}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
         <button type="button" onClick={handleUseCurrentLocation} className="btn-outline btn-sm shrink-0">
           <LocateFixed className="h-4 w-4" />

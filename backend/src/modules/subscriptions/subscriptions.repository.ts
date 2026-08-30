@@ -368,19 +368,28 @@ export class SubscriptionsRepository {
   }
 
   /** One bulk query over every SubscriptionPlanDay+slot for a plan, reduced
-   * to the set of "{weekNumber}-{weekday}" keys that have >=1 decided
-   * (mealId set) slot — the plan's real WEEKLY_FIXED delivery days. Feeds
-   * PlanScheduleUtil.advanceRealDeliveryDays for both off-day-aware
-   * banking and EXTEND_TO_COMPENSATE cycleEnd math. RELATIVE_DAY plans
-   * never call this (no off-day concept there). */
+   * to the set of "{weekNumber}-{weekday}" keys that have >=1 slot checked
+   * at all — the plan's real WEEKLY_FIXED delivery days. Deliberately NOT
+   * "has a decided meal" — a checked-but-TBD slot (owner hasn't picked a
+   * meal yet) still counts as a real day per materializeOne()'s own
+   * existing rule ("skipped [no order] but still consumes a day count,
+   * exactly like a customer's own unfilled custom-plan selection"); only a
+   * weekday with ZERO checked slots at all (nothing authored for it, ever)
+   * is genuinely "off." A day with zero SubscriptionPlanDay rows at all
+   * (the weekday was never even submitted) is equally off — `days` simply
+   * won't contain a key for it, so it's excluded the same way. Feeds
+   * PlanScheduleUtil.advanceRealDeliveryDays for off-day-aware banking,
+   * EXTEND_TO_COMPENSATE cycleEnd math, and the customer-facing plan
+   * preview window. RELATIVE_DAY plans never call this (no off-day concept
+   * there). */
   async findPlanDeliveryDayKeys(planId: string): Promise<Set<string>> {
     const days = await this.prisma.subscriptionPlanDay.findMany({
       where: { planId, weekNumber: { not: null } },
-      include: { slots: { select: { mealId: true } } },
+      include: { slots: { select: { id: true } } },
     });
     const keys = new Set<string>();
     for (const day of days) {
-      if (day.slots.some((s) => s.mealId)) {
+      if (day.slots.length > 0) {
         keys.add(`${day.weekNumber}-${day.weekday}`);
       }
     }

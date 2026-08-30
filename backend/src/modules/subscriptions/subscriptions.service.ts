@@ -201,10 +201,50 @@ export class SubscriptionsService {
   }
 
   async publishPlan(tenantId: string, id: string, dto: PublishPlanDto) {
-    await this.findPlanForAdmin(tenantId, id);
+    const plan = await this.findPlanForAdmin(tenantId, id);
+    if (
+      dto.isPublished &&
+      plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED
+    ) {
+      this.assertNoHalfConfiguredWeeklyDays(plan);
+    }
     return this.subscriptionsRepo.updatePlan(id, {
       isPublished: dto.isPublished,
     });
+  }
+
+  /** Blocks publishing a WEEKLY_FIXED plan that has a "half-configured" day
+   * — at least one slot checked for that weekday, but none of them have an
+   * actual meal picked yet ("to be announced" left as-is). Such a day is
+   * indistinguishable from a genuinely off day for scheduling purposes
+   * (materialization skips it either way), so it silently confuses
+   * customers exactly the way an unfinished week did before this check
+   * existed — a real day with zero decided meals reads as "no delivery"
+   * rather than "still being planned." Draft (unpublished) saves are never
+   * blocked — only the moment a tenant tries to actually go live. A
+   * genuinely off day (zero slots checked at all) is unaffected. */
+  private assertNoHalfConfiguredWeeklyDays(plan: {
+    days: {
+      weekNumber: number | null;
+      weekday: number | null;
+      slots: { meal: { id: string } | null }[];
+    }[];
+  }): void {
+    const halfConfigured = plan.days.filter(
+      (d) => d.slots.length > 0 && !d.slots.some((s) => s.meal),
+    );
+    if (halfConfigured.length === 0) return;
+    const labels = halfConfigured
+      .map((d) =>
+        PlanScheduleUtil.describeKey({
+          weekNumber: d.weekNumber ?? 1,
+          weekday: d.weekday ?? 0,
+        }),
+      )
+      .join(', ');
+    throw new BadRequestException(
+      `Pick at least one meal (or uncheck all its slots to mark it off) for: ${labels} — before publishing.`,
+    );
   }
 
   async replacePlanDays(tenantId: string, id: string, dto: UpsertPlanDaysDto) {
@@ -1030,22 +1070,34 @@ export interface PlanPreviewDay {
   }[];
 }
 
-const PLAN_PREVIEW_WINDOW_DAYS = 14;
+// Safety cap only — not a product decision. The real stopping condition is
+// "enough calendar days to cover durationDays" (below); this just prevents
+// a runaway loop if a plan somehow has zero decided days anywhere.
+const PLAN_PREVIEW_MAX_DAYS = 60;
 
 /** Pre-purchase browsing preview for a WEEKLY_FIXED plan — there's no
  * subscription yet, so this skips all the subscription-specific machinery
- * (skip/override/lock/cycleEnd) buildUpcomingPreview() needs, and just
- * walks PLAN_PREVIEW_WINDOW_DAYS real calendar days forward from tomorrow.
- * Starts at tomorrow, not today, matching verifyPayment()'s own rule that
- * Day 1 is always next-day since materialization is a nightly batch job —
- * the storefront shouldn't visually promise a same-day dish a real
- * subscribe wouldn't actually deliver. */
+ * (skip/override/lock/cycleEnd) buildUpcomingPreview() needs. Walks forward
+ * from tomorrow (Day 1 is always next-day, matching verifyPayment()'s own
+ * rule — materialization is a nightly batch job, the storefront shouldn't
+ * visually promise a same-day dish a real subscribe wouldn't actually
+ * deliver) and stops once it's shown exactly what a real subscriber would
+ * actually get: LOSS_DELIVERY shows durationDays flat calendar days
+ * (off days included, but they still count against the total, same as
+ * activation); EXTEND_TO_COMPENSATE keeps going until durationDays REAL
+ * (non-off) days have appeared — the exact same rule computeInitialCycleEnd()
+ * uses for a real activation, so the preview can never promise more or
+ * fewer days than an actual subscriber ends up with. Previously this walked
+ * a fixed 14 calendar days regardless of durationDays/offDayHandling — for
+ * a short plan (e.g. 7 days) that showed a full 2 extra weeks of content no
+ * subscriber would ever actually receive. */
 function buildPlanPreviewWindow(
   plan: {
     schedulingMode: SubscriptionPlanSchedulingMode;
     durationDays: number;
     weekCount: number | null;
     scheduleAnchorDate: string | null;
+    offDayHandling: SubscriptionOffDayHandling;
     days: {
       weekNumber: number | null;
       weekday: number | null;
@@ -1061,10 +1113,28 @@ function buildPlanPreviewWindow(
   const byWeekWeekday = new Map(
     plan.days.map((d) => [`${d.weekNumber}-${d.weekday}`, d]),
   );
+  // Same rule as SubscriptionsRepository.findPlanDeliveryDayKeys — a
+  // checked-but-TBD slot still counts as a real day, only zero checked
+  // slots at all is genuinely off. Computed inline here (not via that
+  // repo method) since plan.days is already loaded for this call.
+  const deliveryDayKeys = new Set(
+    plan.days
+      .filter((d) => d.slots.length > 0)
+      .map((d) => `${d.weekNumber}-${d.weekday}`),
+  );
+  const extendMode =
+    plan.offDayHandling === SubscriptionOffDayHandling.EXTEND_TO_COMPENSATE;
+  // A plan with zero checked slots anywhere (nothing authored yet) has no
+  // real day to ever find — extend mode would otherwise silently walk all
+  // the way to PLAN_PREVIEW_MAX_DAYS looking for one, showing a nonsensical
+  // date range instead of the empty preview this actually is.
+  if (extendMode && deliveryDayKeys.size === 0) return [];
 
   let cursor = DateUtil.addDaysToDateStr(todayStr, 1);
   const preview: PlanPreviewDay[] = [];
-  for (let i = 0; i < PLAN_PREVIEW_WINDOW_DAYS; i++) {
+  let realDayCount = 0;
+  const maxIterations = extendMode ? PLAN_PREVIEW_MAX_DAYS : plan.durationDays;
+  for (let i = 0; i < maxIterations; i++) {
     const key = PlanScheduleUtil.resolveKey(plan, {
       dateStr: cursor,
       relativeCounter: 1,
@@ -1073,6 +1143,9 @@ function buildPlanPreviewWindow(
       'weekNumber' in key
         ? byWeekWeekday.get(`${key.weekNumber}-${key.weekday}`)
         : undefined;
+    const isRealDay =
+      'weekNumber' in key &&
+      deliveryDayKeys.has(`${key.weekNumber}-${key.weekday}`);
     preview.push({
       date: cursor,
       meals: (day?.slots ?? []).map((slot) => ({
@@ -1083,6 +1156,8 @@ function buildPlanPreviewWindow(
       })),
     });
     cursor = DateUtil.addDaysToDateStr(cursor, 1);
+    if (isRealDay) realDayCount++;
+    if (extendMode && realDayCount >= plan.durationDays) break;
   }
   return preview;
 }

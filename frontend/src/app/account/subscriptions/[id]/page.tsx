@@ -412,7 +412,7 @@ function DayCard({
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs text-zinc-400">{SLOT_LABELS[meal.slotType] ?? meal.slotType}</p>
-                    <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    <p className="truncate pr-1 text-sm font-medium text-zinc-900 dark:text-zinc-100">
                       {meal.name ?? "Meal to be announced"}
                     </p>
                   </div>

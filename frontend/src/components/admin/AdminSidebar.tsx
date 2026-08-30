@@ -88,7 +88,7 @@ export function AdminSidebar() {
   }
 
   return (
-    <nav className="flex w-full flex-col gap-1 sm:w-56 sm:shrink-0">
+    <nav className="flex w-full flex-col gap-1">
       {isSuperAdmin && (
         <>
           <Link

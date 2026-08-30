@@ -19,13 +19,15 @@ export function PlansHomeBlock({
   return (
     <section className="container-app py-16 sm:py-20">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="section-title text-zinc-900 dark:text-zinc-100">{title}</h2>
+        <div className="min-w-0">
+          <h2 className="section-title wrap-break-word text-zinc-900 dark:text-zinc-100">{title}</h2>
           {description && (
-            <p className="mt-2 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">{description}</p>
+            <p className="mt-2 max-w-2xl wrap-break-word text-sm text-zinc-500 dark:text-zinc-400">
+              {description}
+            </p>
           )}
         </div>
-        <Link href="/plans" className="btn-outline btn-sm">
+        <Link href="/plans" className="btn-outline btn-sm shrink-0">
           View all plans
           <ArrowRight className="h-4 w-4" />
         </Link>

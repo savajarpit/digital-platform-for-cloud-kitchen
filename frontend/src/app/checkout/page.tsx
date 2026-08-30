@@ -347,8 +347,10 @@ export default function CheckoutPage() {
                       onChange={() => setSelectedZoneId(zone.id)}
                       className="mt-1 h-4 w-4 accent-primary-600"
                     />
-                    <div className="flex-1">
-                      <p className="text-sm text-zinc-600 dark:text-zinc-400">{zone.pickupAddress}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="wrap-break-word text-sm text-zinc-600 dark:text-zinc-400">
+                        {zone.pickupAddress}
+                      </p>
                       <a
                         href={buildGoogleMapsLink(zone.lat, zone.lng)}
                         target="_blank"
@@ -400,14 +402,14 @@ export default function CheckoutPage() {
                       onChange={() => setSelectedAddressId(address.id)}
                       className="mt-1 h-4 w-4 accent-primary-600"
                     />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-primary-600" />
-                        <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <MapPin className="h-4 w-4 shrink-0 text-primary-600" />
+                        <span className="min-w-0 truncate font-medium text-zinc-900 dark:text-zinc-100">
                           {address.label || address.city}
                         </span>
                       </div>
-                      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                      <p className="mt-1 wrap-break-word text-sm text-zinc-600 dark:text-zinc-400">
                         {address.line1}, {address.city}, {address.state} — {address.pincode}
                       </p>
                     </div>
@@ -585,11 +587,11 @@ export default function CheckoutPage() {
           <h2 className="mb-4 font-semibold text-zinc-900 dark:text-zinc-100">{t("orderSummary")}</h2>
           <ul className="flex flex-col gap-2 text-sm">
             {items.map((item) => (
-              <li key={item.mealId} className="flex justify-between text-zinc-600 dark:text-zinc-400">
-                <span>
+              <li key={item.mealId} className="flex justify-between gap-3 text-zinc-600 dark:text-zinc-400">
+                <span className="min-w-0 wrap-break-word">
                   {item.name} × {item.quantity}
                 </span>
-                <span>{formatPriceFromPaise(item.priceInPaise * item.quantity)}</span>
+                <span className="shrink-0">{formatPriceFromPaise(item.priceInPaise * item.quantity)}</span>
               </li>
             ))}
           </ul>

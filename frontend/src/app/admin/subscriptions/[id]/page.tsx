@@ -122,15 +122,15 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
         <div className="card flex flex-col gap-2 p-6 text-sm">
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Delivery</h3>
           {sub.address ? (
-            <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
+            <div className="flex min-w-0 items-start gap-2 text-zinc-600 dark:text-zinc-400">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-              <div>
-                <span>
+              <div className="min-w-0">
+                <span className="wrap-break-word">
                   {sub.address.line1}
                   {sub.address.line2 ? `, ${sub.address.line2}` : ""}, {sub.address.city}, {sub.address.state} —{" "}
                   {sub.address.pincode}
                 </span>
-                <div className="mt-0.5 flex items-center gap-3 text-xs">
+                <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs">
                   <MapLink lat={sub.address.lat} lng={sub.address.lng} />
                   <ShareAddressButton
                     address={{ ...sub.address, label: undefined }}
@@ -143,9 +143,9 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
             <p className="text-zinc-500 dark:text-zinc-400">No address on file.</p>
           )}
           {sub.address && (
-            <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
+            <div className="flex min-w-0 items-center gap-2 text-zinc-600 dark:text-zinc-400">
               <Phone className="h-4 w-4 shrink-0 text-primary-600" />
-              <span>{sub.address.contactPhone}</span>
+              <span className="wrap-break-word">{sub.address.contactPhone}</span>
             </div>
           )}
           {sub.deliverySlot && (

@@ -105,25 +105,31 @@ export async function Footer({
               <h4 className="mb-4 font-semibold text-white">Contact</h4>
               <ul className="space-y-3 text-sm">
                 {config.supportPhone && (
-                  <li className="flex items-start gap-3">
+                  <li className="flex min-w-0 items-start gap-3">
                     <Phone className="mt-0.5 h-4 w-4 shrink-0 text-primary-400" />
-                    <a href={`tel:${config.supportPhone}`} className="transition-colors hover:text-primary-400">
+                    <a
+                      href={`tel:${config.supportPhone}`}
+                      className="min-w-0 wrap-break-word transition-colors hover:text-primary-400"
+                    >
                       {config.supportPhone}
                     </a>
                   </li>
                 )}
                 {config.supportEmail && (
-                  <li className="flex items-start gap-3">
+                  <li className="flex min-w-0 items-start gap-3">
                     <Mail className="mt-0.5 h-4 w-4 shrink-0 text-primary-400" />
-                    <a href={`mailto:${config.supportEmail}`} className="transition-colors hover:text-primary-400">
+                    <a
+                      href={`mailto:${config.supportEmail}`}
+                      className="min-w-0 wrap-break-word transition-colors hover:text-primary-400"
+                    >
                       {config.supportEmail}
                     </a>
                   </li>
                 )}
                 {config.addressLine1 && (
-                  <li className="flex items-start gap-3">
+                  <li className="flex min-w-0 items-start gap-3">
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-400" />
-                    <span>{config.addressLine1}</span>
+                    <span className="min-w-0 wrap-break-word">{config.addressLine1}</span>
                   </li>
                 )}
               </ul>

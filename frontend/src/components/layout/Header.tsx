@@ -53,16 +53,16 @@ export function Header({
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/90 backdrop-blur-lg print:hidden dark:border-zinc-800 dark:bg-zinc-950/90">
       <div className="container-app flex h-16 items-center justify-between sm:h-18">
-        <Link href="/" className="group flex items-center gap-2">
+        <Link href="/" className="group flex min-w-0 items-center gap-2">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={displayName} className="h-9 w-auto" />
+            <img src={logoUrl} alt={displayName} className="h-9 w-auto shrink-0" />
           ) : (
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600 shadow-glow transition-transform group-hover:scale-110">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-600 shadow-glow transition-transform group-hover:scale-110">
               <Leaf className="h-5 w-5 text-white" />
             </div>
           )}
-          <span className="font-display text-lg font-bold text-zinc-900 sm:text-xl dark:text-zinc-100">
+          <span className="truncate font-display text-lg font-bold text-zinc-900 sm:text-xl dark:text-zinc-100">
             {displayName}
           </span>
         </Link>

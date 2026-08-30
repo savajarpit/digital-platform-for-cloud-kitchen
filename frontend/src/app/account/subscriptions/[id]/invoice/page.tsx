@@ -83,7 +83,7 @@ export default function SubscriptionInvoicePage({ params }: { params: Promise<{ 
               // eslint-disable-next-line @next/next/no-img-element
               <img src={config.logoUrl} alt={config.displayName} className="h-10 w-auto" />
             ) : (
-              <h2 className="font-display text-xl font-bold text-zinc-900 dark:text-zinc-100 print:text-black">
+              <h2 className="wrap-break-word font-display text-xl font-bold text-zinc-900 dark:text-zinc-100 print:text-black">
                 {config.displayName}
               </h2>
             )}
@@ -93,7 +93,7 @@ export default function SubscriptionInvoicePage({ params }: { params: Promise<{ 
               </p>
             )}
             {config.supportEmail && (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
+              <p className="wrap-break-word text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
                 {config.supportEmail}
               </p>
             )}

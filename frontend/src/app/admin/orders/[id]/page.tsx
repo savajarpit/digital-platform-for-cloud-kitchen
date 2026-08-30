@@ -165,11 +165,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Items</h3>
           <div className="flex flex-col gap-2">
             {order.items.map((item) => (
-              <div key={item.id} className="flex justify-between text-sm text-zinc-600 dark:text-zinc-400">
-                <span>
+              <div key={item.id} className="flex justify-between gap-3 text-sm text-zinc-600 dark:text-zinc-400">
+                <span className="min-w-0 wrap-break-word">
                   {item.nameSnapshot} × {item.quantity}
                 </span>
-                <span>{formatPriceFromPaise(item.priceInPaiseSnapshot * item.quantity)}</span>
+                <span className="shrink-0">{formatPriceFromPaise(item.priceInPaiseSnapshot * item.quantity)}</span>
               </div>
             ))}
           </div>
@@ -194,7 +194,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             </div>
           </div>
           {order.notes && (
-            <div className="mt-2 rounded-lg bg-zinc-50 p-3 text-sm text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+            <div className="mt-2 wrap-break-word rounded-lg bg-zinc-50 p-3 text-sm text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
               <span className="font-medium text-zinc-900 dark:text-zinc-100">Notes: </span>
               {order.notes}
             </div>
@@ -221,10 +221,12 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               {order.fulfillmentType === "PICKUP" ? "Pickup" : "Delivery"}
             </h3>
             {order.fulfillmentType === "PICKUP" ? (
-              <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
+              <div className="flex min-w-0 items-start gap-2 text-zinc-600 dark:text-zinc-400">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-                <div>
-                  <span>{order.pickupKitchenZone?.pickupAddress ?? "Pickup location unavailable"}</span>
+                <div className="min-w-0">
+                  <span className="wrap-break-word">
+                    {order.pickupKitchenZone?.pickupAddress ?? "Pickup location unavailable"}
+                  </span>
                   {order.pickupKitchenZone && (
                     <div className="mt-0.5">
                       <MapLink lat={order.pickupKitchenZone.lat} lng={order.pickupKitchenZone.lng} />
@@ -234,23 +236,23 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               </div>
             ) : (
               <>
-                <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
+                <div className="flex min-w-0 items-start gap-2 text-zinc-600 dark:text-zinc-400">
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-                  <div>
-                    <span>
+                  <div className="min-w-0">
+                    <span className="wrap-break-word">
                       {order.address!.line1}
                       {order.address!.line2 ? `, ${order.address!.line2}` : ""}, {order.address!.city},{" "}
                       {order.address!.state} — {order.address!.pincode}
                     </span>
-                    <div className="mt-0.5 flex items-center gap-3 text-xs">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs">
                       <MapLink lat={order.address!.lat} lng={order.address!.lng} />
                       <ShareAddressButton address={order.address!} className="text-xs" />
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
+                <div className="flex min-w-0 items-center gap-2 text-zinc-600 dark:text-zinc-400">
                   <Phone className="h-4 w-4 shrink-0 text-primary-600" />
-                  <span>{order.address!.contactPhone}</span>
+                  <span className="wrap-break-word">{order.address!.contactPhone}</span>
                 </div>
               </>
             )}

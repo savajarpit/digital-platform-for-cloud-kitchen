@@ -106,23 +106,25 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
         <div className="mt-6 flex flex-col gap-2 rounded-xl bg-zinc-50 p-4 text-left text-sm dark:bg-zinc-800">
           {order.fulfillmentType === "PICKUP" ? (
-            <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
+            <div className="flex min-w-0 items-start gap-2 text-zinc-600 dark:text-zinc-400">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-              <span>Pickup: {order.pickupKitchenZone?.pickupAddress ?? "—"}</span>
+              <span className="min-w-0 wrap-break-word">
+                Pickup: {order.pickupKitchenZone?.pickupAddress ?? "—"}
+              </span>
             </div>
           ) : (
             <>
-              <div className="flex items-start gap-2 text-zinc-600 dark:text-zinc-400">
+              <div className="flex min-w-0 items-start gap-2 text-zinc-600 dark:text-zinc-400">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-                <span>
+                <span className="min-w-0 wrap-break-word">
                   {order.address!.line1}
                   {order.address!.line2 ? `, ${order.address!.line2}` : ""}, {order.address!.city},{" "}
                   {order.address!.state} — {order.address!.pincode}
                 </span>
               </div>
-              <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
+              <div className="flex min-w-0 items-center gap-2 text-zinc-600 dark:text-zinc-400">
                 <Phone className="h-4 w-4 shrink-0 text-primary-600" />
-                <span>{order.address!.contactPhone}</span>
+                <span className="min-w-0 wrap-break-word">{order.address!.contactPhone}</span>
               </div>
             </>
           )}
@@ -143,8 +145,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <div className="mt-4 flex flex-col gap-2 rounded-xl bg-zinc-50 p-4 text-left text-sm dark:bg-zinc-800">
           <h2 className="mb-1 font-semibold text-zinc-900 dark:text-zinc-100">{t("items")}</h2>
           {order.items.map((item) => (
-            <div key={item.id} className="flex justify-between text-zinc-600 dark:text-zinc-400">
-              <span>
+            <div key={item.id} className="flex justify-between gap-3 text-zinc-600 dark:text-zinc-400">
+              <span className="min-w-0 wrap-break-word">
                 {item.nameSnapshot} × {item.quantity}
                 {item.isFreeItem && (
                   <span className="ml-2 text-xs font-semibold text-primary-600 dark:text-primary-400">
@@ -152,7 +154,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   </span>
                 )}
               </span>
-              <span>{formatPriceFromPaise(item.priceInPaiseSnapshot * item.quantity)}</span>
+              <span className="shrink-0">{formatPriceFromPaise(item.priceInPaiseSnapshot * item.quantity)}</span>
             </div>
           ))}
           {order.discountInPaise > 0 && (

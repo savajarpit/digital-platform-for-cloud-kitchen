@@ -55,7 +55,7 @@ function OrdersList({
 
   if (orders === null) {
     return (
-      <div className="mt-6 flex flex-col gap-3">
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <OrderCardSkeleton key={i} />
         ))}
@@ -76,15 +76,15 @@ function OrdersList({
   }
 
   return (
-    <div className="mt-6 flex flex-col gap-3">
+    <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
       {orders.map((order) => (
         <div
           key={order.id}
-          className="card flex flex-col items-start justify-between gap-4 p-5 transition-colors hover:border-primary-300 sm:flex-row sm:items-center"
+          className="card flex flex-col items-start justify-between gap-4 p-5 transition-colors hover:border-primary-300 md:flex-row md:items-center"
         >
           <Link
             href={`/orders/${order.id}`}
-            className="flex w-full flex-1 flex-col justify-between gap-3 sm:flex-row sm:items-center"
+            className="flex w-full flex-1 flex-col justify-between gap-3 md:flex-row md:items-center"
           >
             <div>
               <p className="font-mono text-sm text-zinc-500 dark:text-zinc-400">
@@ -94,7 +94,7 @@ function OrdersList({
                 {new Date(order.createdAt).toLocaleDateString()}
               </p>
             </div>
-            <div className="text-left sm:text-right">
+            <div className="text-left md:text-right">
               <p className="font-semibold text-zinc-900 dark:text-zinc-100">
                 {formatPriceFromPaise(order.totalInPaise)}
               </p>
@@ -117,7 +117,7 @@ function OrdersList({
       ))}
 
       {meta && meta.totalPages > 1 && (
-        <div className="mt-2 flex items-center justify-between px-1">
+        <div className="col-span-full mt-2 flex items-center justify-between px-1">
           <span className="text-xs text-zinc-500 dark:text-zinc-400">
             Page {meta.page} of {meta.totalPages} · {meta.total} orders
           </span>

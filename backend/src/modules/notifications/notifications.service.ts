@@ -11,6 +11,11 @@ import {
 import { orderConfirmationOwnerEmailTemplate } from './templates/email/order-confirmation-owner.template';
 import { orderConfirmationCustomerWhatsAppTemplate } from './templates/whatsapp/order-confirmation-customer.template';
 import { orderConfirmationOwnerWhatsAppTemplate } from './templates/whatsapp/order-confirmation-owner.template';
+import {
+  subscriptionDisruptionEmailTemplate,
+  SubscriptionDisruptionTemplateData,
+} from './templates/email/subscription-disruption.template';
+import { subscriptionDisruptionWhatsAppTemplate } from './templates/whatsapp/subscription-disruption.template';
 
 export interface SendOtpParams {
   recipientEmail: string;
@@ -20,6 +25,11 @@ export interface SendOtpParams {
 }
 
 export interface OrderConfirmationParams extends OrderConfirmationTemplateData {
+  customerEmail: string;
+  customerWhatsAppNumber?: string;
+}
+
+export interface SubscriptionDisruptionParams extends SubscriptionDisruptionTemplateData {
   customerEmail: string;
   customerWhatsAppNumber?: string;
 }
@@ -170,6 +180,48 @@ export class NotificationsService {
           ),
         );
       }
+    }
+
+    await Promise.all(tasks);
+    return attempts;
+  }
+
+  /**
+   * Fired once per subscriber affected by a tenant-declared disruption
+   * (see SubscriptionDisruptionService) — customer-only, no owner copy,
+   * unlike sendOrderConfirmation's dual-send (the tenant is the one who
+   * declared the disruption, they don't need a copy of their own notice).
+   */
+  async sendSubscriptionDisruptionNotice(
+    settings: NotificationSettings | null,
+    params: SubscriptionDisruptionParams,
+  ): Promise<NotificationAttempt[]> {
+    const attempts: NotificationAttempt[] = [];
+    if (!settings) return attempts;
+
+    const tasks: Promise<void>[] = [];
+
+    if (settings.whatsappEnabled && params.customerWhatsAppNumber) {
+      tasks.push(
+        this.trySendWhatsApp(
+          settings,
+          'CUSTOMER',
+          params.customerWhatsAppNumber,
+          subscriptionDisruptionWhatsAppTemplate(params),
+          attempts,
+        ),
+      );
+    }
+    if (settings.emailEnabled) {
+      tasks.push(
+        this.trySendEmail(
+          settings,
+          'CUSTOMER',
+          params.customerEmail,
+          subscriptionDisruptionEmailTemplate(params),
+          attempts,
+        ),
+      );
     }
 
     await Promise.all(tasks);

@@ -32,8 +32,7 @@ export class UpdateSubscriptionSettingsDto {
 
   @ApiPropertyOptional({
     example: 24,
-    description:
-      'Minimum lead time (hours) for skip/pause/day-override edits',
+    description: 'Minimum lead time (hours) for skip/pause/day-override edits',
   })
   @IsOptional()
   @IsInt()

@@ -14,6 +14,7 @@ import {
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   PlanAccentColor,
+  SubscriptionOffDayHandling,
   SubscriptionPlanSchedulingMode,
 } from '../../../generated/prisma';
 
@@ -76,7 +77,7 @@ export class CreatePlanDto {
     enum: SubscriptionPlanSchedulingMode,
     default: SubscriptionPlanSchedulingMode.RELATIVE_DAY,
     description:
-      'RELATIVE_DAY (default) — days are relative to each subscriber\'s own start date. ' +
+      "RELATIVE_DAY (default) — days are relative to each subscriber's own start date. " +
       'WEEKLY_FIXED — the menu is pinned to real calendar weekdays (see weekCount/scheduleAnchorDate) so every subscriber eating on the same real day gets the same dish.',
   })
   @IsOptional()
@@ -102,4 +103,16 @@ export class CreatePlanDto {
   @IsOptional()
   @IsDateString()
   scheduleAnchorDate?: string;
+
+  @ApiPropertyOptional({
+    enum: SubscriptionOffDayHandling,
+    default: SubscriptionOffDayHandling.LOSS_DELIVERY,
+    description:
+      'WEEKLY_FIXED only — governs an "off day" (a real weekday with no decided meals anywhere on the plan). ' +
+      'LOSS_DELIVERY (default) — off days eat into the paid durationDays. ' +
+      'EXTEND_TO_COMPENSATE — the schedule stretches past off days so every subscriber still gets exactly durationDays real deliveries.',
+  })
+  @IsOptional()
+  @IsEnum(SubscriptionOffDayHandling)
+  offDayHandling?: SubscriptionOffDayHandling;
 }

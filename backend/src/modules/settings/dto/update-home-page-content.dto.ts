@@ -28,7 +28,10 @@ export class UpdateHomePageContentDto {
   @MaxLength(300)
   heroSubtitle?: string;
 
-  @ApiPropertyOptional({ type: [String], description: 'Up to 4 hero collage images' })
+  @ApiPropertyOptional({
+    type: [String],
+    description: 'Up to 4 hero collage images',
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(4)

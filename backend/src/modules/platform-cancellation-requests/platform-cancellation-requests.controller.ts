@@ -21,7 +21,7 @@ export class PlatformCancellationRequestsController {
   @ResponseMessage("Thanks — we'll be in touch shortly")
   @ApiOperation({
     summary:
-      "Tenant: request cancellation of the platform subscription — never cancels anything itself, just notifies Arpit to follow up. The trigger for this is currently hidden in the admin UI; the endpoint works once enabled.",
+      'Tenant: request cancellation of the platform subscription — never cancels anything itself, just notifies Arpit to follow up. The trigger for this is currently hidden in the admin UI; the endpoint works once enabled.',
   })
   create(
     @CurrentTenantId() tenantId: string,

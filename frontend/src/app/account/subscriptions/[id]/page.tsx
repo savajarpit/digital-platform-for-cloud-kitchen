@@ -338,7 +338,14 @@ function DayCard({
                 day: "numeric",
               })}
             </span>
-            {day.skipped && <span className="badge bg-zinc-100 text-zinc-500 dark:bg-zinc-800">Skipped</span>}
+            {day.skipped && !day.disruptionReason && (
+              <span className="badge bg-zinc-100 text-zinc-500 dark:bg-zinc-800">Skipped</span>
+            )}
+            {day.skipped && day.disruptionReason && (
+              <span className="badge bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+                Paused by the business
+              </span>
+            )}
             {day.isOverridden && (
               <span className="badge bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400">
                 Changed
@@ -358,6 +365,9 @@ function DayCard({
           </div>
           {!day.skipped && day.meals.length === 0 && (
             <p className="text-xs text-zinc-400 italic">Meal to be announced</p>
+          )}
+          {day.skipped && day.disruptionReason && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">{day.disruptionReason}</p>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">

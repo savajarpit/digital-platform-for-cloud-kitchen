@@ -18,17 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { MapLink } from "@/components/ui/MapLink";
 import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
 import { ShareOrderDetailsButton } from "@/components/ui/ShareOrderDetailsButton";
+import { OrderStatusStepper, type OrderStatus } from "@/components/ui/OrderStatusStepper";
+import { ORDER_STATUS_STYLES as STATUS_STYLES } from "@/lib/format/status-styles";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
-
-const STATUS_STYLES: Record<string, string> = {
-  PENDING_PAYMENT: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
-  CONFIRMED: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
-  PREPARING: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
-  OUT_FOR_DELIVERY: "bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400",
-  DELIVERED: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
-  CANCELLED: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400",
-};
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -157,6 +150,15 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
       </div>
+
+      {isPaid && (
+        <div className="card flex justify-center p-6">
+          <OrderStatusStepper
+            status={order.status as OrderStatus}
+            fulfillmentType={order.fulfillmentType}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="card flex flex-col gap-3 p-6 lg:col-span-2">

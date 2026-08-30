@@ -54,6 +54,9 @@ export interface UpcomingPreviewDay {
   note: string | null;
   /** Too close to delivery to skip/pause/override — hide the controls and explain why instead of letting the request fail. */
   locked: boolean;
+  /** Set only when this day was skipped by the business (a declared
+   * disruption) rather than by the customer's own skip/pause. */
+  disruptionReason: string | null;
 }
 
 export interface SubscriptionSummary {

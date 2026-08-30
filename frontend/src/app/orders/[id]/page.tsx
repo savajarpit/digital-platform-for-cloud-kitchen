@@ -10,6 +10,7 @@ import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 import { ORDER_STATUS_STYLES } from "@/lib/format/status-styles";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { OrderStatusStepper, type OrderStatus } from "@/components/ui/OrderStatusStepper";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -89,6 +90,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             {order.status.replace(/_/g, " ")}
           </span>
         </div>
+
+        {isPaid && (
+          <div className="mt-6 flex justify-center">
+            <OrderStatusStepper
+              status={order.status as OrderStatus}
+              fulfillmentType={order.fulfillmentType}
+            />
+          </div>
+        )}
 
         <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-400">
           {t("orderNumber")}: <span className="font-mono">{order.orderNumber}</span>

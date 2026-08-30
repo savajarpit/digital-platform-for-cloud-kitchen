@@ -74,7 +74,8 @@ export function defaultPlanFaqs() {
     },
     {
       question: 'What if I want to cancel?',
-      answer: "You can cancel anytime from your account. There's no lock-in period.",
+      answer:
+        "You can cancel anytime from your account. There's no lock-in period.",
       sortOrder: 1,
     },
     {

@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bull';
 import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionsService } from './subscriptions.service';
 import { SubscriptionsRepository } from './subscriptions.repository';
 import { SubscriptionsMaterializationScheduler } from './subscriptions-materialization.scheduler';
 import { SubscriptionMaterializationService } from './subscription-materialization.service';
+import { SubscriptionDisruptionService } from './subscription-disruption.service';
 import { AddressesModule } from '../addresses/addresses.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -20,6 +22,7 @@ import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
     FeaturesModule,
     RazorpayClientModule,
     TenantLimitsModule,
+    BullModule.registerQueue({ name: 'notifications' }),
   ],
   controllers: [SubscriptionsController],
   providers: [
@@ -27,8 +30,9 @@ import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
     SubscriptionsRepository,
     SubscriptionsMaterializationScheduler,
     SubscriptionMaterializationService,
+    SubscriptionDisruptionService,
     PaginationService,
   ],
-  exports: [SubscriptionsService],
+  exports: [SubscriptionsService, SubscriptionsRepository],
 })
 export class SubscriptionsModule {}

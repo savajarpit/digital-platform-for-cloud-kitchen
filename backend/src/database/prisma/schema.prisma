@@ -120,6 +120,18 @@ enum SubscriptionPlanSchedulingMode {
   WEEKLY_FIXED
 }
 
+// WEEKLY_FIXED only — governs how an "off day" (a real weekday with zero
+// decided meal slots across the whole plan) interacts with durationDays.
+// LOSS_DELIVERY (default, today's only behavior): cycleEnd is a flat
+// startDate + durationDays - 1, so off days simply eat into the paid
+// duration. EXTEND_TO_COMPENSATE: cycleEnd stretches past off days so the
+// subscriber still receives exactly durationDays real deliveries. See
+// PlanScheduleUtil.advanceRealDeliveryDays.
+enum SubscriptionOffDayHandling {
+  LOSS_DELIVERY
+  EXTEND_TO_COMPENSATE
+}
+
 /**
  * Which of the tenant's own semantic theme ramps accents a plan card —
  * never a raw hex, so a brand-color change in Settings reskins every plan
@@ -211,6 +223,7 @@ model Tenant {
   subscriptionPlans        SubscriptionPlan[]
   subscriptions            Subscription[]
   subscriptionInvoices     SubscriptionInvoice[]
+  subscriptionDisruptions  SubscriptionDisruption[]
   subscriptionSettings     SubscriptionSettings?
   instantDeliverySettings  InstantDeliverySettings?
   staticPages              StaticPage[]
@@ -1045,6 +1058,11 @@ model SubscriptionPlan {
   schedulingMode     SubscriptionPlanSchedulingMode @default(RELATIVE_DAY)
   weekCount          Int?
   scheduleAnchorDate String?
+  // See SubscriptionOffDayHandling. WEEKLY_FIXED only — freely editable at
+  // any time (unlike schedulingMode) since it only affects cycleEnd math at
+  // a NEW subscription's activation, never a live subscriber's existing
+  // cycleEnd.
+  offDayHandling SubscriptionOffDayHandling @default(LOSS_DELIVERY)
   // A plan can be published while some SubscriptionPlanSlots are still TBD
   // (mealId null) — lets an OWNER pre-sell before finishing later days.
   isPublished  Boolean              @default(false)
@@ -1063,9 +1081,10 @@ model SubscriptionPlan {
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
 
-  tenant        Tenant                @relation(fields: [tenantId], references: [id])
+  tenant        Tenant                     @relation(fields: [tenantId], references: [id])
   days          SubscriptionPlanDay[]
   subscriptions Subscription[]
+  disruptions   SubscriptionDisruption[]
 
   @@index([tenantId])
   @@index([tenantId, isPublished])
@@ -1184,12 +1203,50 @@ model SubscriptionSkip {
   dateFrom       String
   dateTo         String
   bankedDays     Int
+  // Set only for a tenant-declared disruption (never a customer's own
+  // skip/pause) — customer-visible, shown in place of the plain "Skipped"
+  // label. disruptionId links back to the audit row it was generated from;
+  // SetNull (not Cascade) so deleting that audit row can never resurrect a
+  // day this skip already gated out of materialization.
+  reason         String?
+  disruptionId   String?
   createdAt      DateTime @default(now())
 
-  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  subscription Subscription            @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  disruption   SubscriptionDisruption? @relation(fields: [disruptionId], references: [id], onDelete: SetNull)
 
   @@index([subscriptionId])
+  @@index([disruptionId])
   @@map("subscription_skips")
+}
+
+/**
+ * A tenant-declared, one-time real-world disruption (heavy rain, a kitchen
+ * emergency, "I can't cook today") — distinct from a customer's own
+ * skip/pause. One row per "declare disruption" admin action, purely for
+ * audit/listing; the actual per-subscriber effect is a normal
+ * SubscriptionSkip (reason + disruptionId set), so it automatically gates
+ * materialization with zero special-case code and never touches an
+ * already-existing Order. planId is null for a single-subscriber scope,
+ * set for a whole-plan (every currently-ACTIVE subscriber) scope.
+ */
+model SubscriptionDisruption {
+  id               String   @id @default(uuid())
+  tenantId         String
+  planId           String?
+  date             String
+  reason           String
+  compensationDays Int
+  createdByUserId  String
+  createdAt        DateTime @default(now())
+
+  tenant Tenant             @relation(fields: [tenantId], references: [id])
+  plan   SubscriptionPlan?  @relation(fields: [planId], references: [id])
+  skips  SubscriptionSkip[]
+
+  @@index([tenantId])
+  @@index([tenantId, planId])
+  @@map("subscription_disruptions")
 }
 
 /**

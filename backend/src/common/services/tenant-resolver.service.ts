@@ -42,7 +42,11 @@ export class TenantResolverService {
     const rootDomain = this.config
       .get<string>('app.platformRootDomain')
       ?.toLowerCase();
-    if (rootDomain && hostname !== rootDomain && hostname.endsWith(`.${rootDomain}`)) {
+    if (
+      rootDomain &&
+      hostname !== rootDomain &&
+      hostname.endsWith(`.${rootDomain}`)
+    ) {
       const slug = hostname.slice(0, hostname.length - rootDomain.length - 1);
       const bySlug = await this.prisma.tenant.findUnique({
         where: { slug },

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   CalendarClock,
   ChevronLeft,
   ChevronRight,
@@ -34,6 +35,7 @@ import {
   type PlanDayInput,
   type PlanInput,
   type SchedulingMode,
+  type OffDayHandling,
   type SubscriptionSettings,
   type TodaysDeliveries,
 } from "@/lib/api/admin-subscriptions";
@@ -55,6 +57,7 @@ import { MealCombobox } from "@/components/admin/MealCombobox";
 import { PlansPageSettingsCard } from "@/components/subscriptions-admin/PlansPageSettingsCard";
 import { PlanFeaturesManager } from "@/components/admin/PlanFeaturesManager";
 import { PlanFaqManager } from "@/components/admin/PlanFaqManager";
+import { DeclareDisruptionForm } from "@/components/admin/DeclareDisruptionForm";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -90,6 +93,7 @@ export default function AdminSubscriptionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [disruptionPlanId, setDisruptionPlanId] = useState<string | null>(null);
 
   useEffect(() => {
     listMeals({ limit: 100 })
@@ -160,29 +164,38 @@ export default function AdminSubscriptionsPage() {
             Subscription Plans
           </h2>
         </div>
-        {tab === "plans" && (
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-              <input
-                type="text"
-                value={planSearch}
-                onChange={(e) => {
-                  setPlanSearch(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="Search plans…"
-                className="input w-48 pl-8"
-              />
-            </div>
-            {canEdit && !creating && editingPlanId === null && (
-              <button type="button" onClick={() => setCreating(true)} className="btn-primary btn-sm">
-                <Plus className="h-4 w-4" />
-                New Plan
-              </button>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/subscriptions/disruptions"
+            className="flex items-center gap-1.5 text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
+          >
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Declared disruptions
+          </Link>
+          {tab === "plans" && (
+            <>
+              <div className="relative">
+                <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
+                <input
+                  type="text"
+                  value={planSearch}
+                  onChange={(e) => {
+                    setPlanSearch(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search plans…"
+                  className="input w-48 pl-8"
+                />
+              </div>
+              {canEdit && !creating && editingPlanId === null && (
+                <button type="button" onClick={() => setCreating(true)} className="btn-primary btn-sm">
+                  <Plus className="h-4 w-4" />
+                  New Plan
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
@@ -269,54 +282,74 @@ export default function AdminSubscriptionsPage() {
                 }}
               />
             ) : (
-              <div key={plan.id} className="card flex items-center justify-between gap-3 p-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      href={`/admin/subscriptions/plans/${plan.id}`}
-                      className="font-medium text-zinc-900 hover:text-primary-600 hover:underline dark:text-zinc-100"
-                    >
-                      {plan.name}
-                    </Link>
-                    <span
-                      className={`badge ${
-                        plan.isPublished
-                          ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
-                          : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
-                      }`}
-                    >
-                      {plan.isPublished ? "Published" : "Draft"}
-                    </span>
+              <div key={plan.id} className="card flex flex-col gap-3 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/admin/subscriptions/plans/${plan.id}`}
+                        className="font-medium text-zinc-900 hover:text-primary-600 hover:underline dark:text-zinc-100"
+                      >
+                        {plan.name}
+                      </Link>
+                      <span
+                        className={`badge ${
+                          plan.isPublished
+                            ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                        }`}
+                      >
+                        {plan.isPublished ? "Published" : "Draft"}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                      {plan.durationDays} days · {formatPriceFromPaise(plan.priceInPaise)}
+                    </p>
                   </div>
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                    {plan.durationDays} days · {formatPriceFromPaise(plan.priceInPaise)}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <Toggle
+                      checked={plan.isPublished}
+                      onChange={() => handleTogglePublish(plan)}
+                      disabled={!canEdit}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setDisruptionPlanId(disruptionPlanId === plan.id ? null : plan.id)}
+                      disabled={!canEdit}
+                      className="text-zinc-400 hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={`Declare disruption for ${plan.name}`}
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditingPlanId(plan.id)}
+                      disabled={!canEdit}
+                      className="text-zinc-400 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={`Edit ${plan.name}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(plan)}
+                      disabled={!canEdit}
+                      className="text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={`Delete ${plan.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Toggle
-                    checked={plan.isPublished}
-                    onChange={() => handleTogglePublish(plan)}
-                    disabled={!canEdit}
+                {disruptionPlanId === plan.id && (
+                  <DeclareDisruptionForm
+                    scope="PLAN"
+                    planId={plan.id}
+                    startOpen
+                    onDeclared={() => setDisruptionPlanId(null)}
+                    onCancel={() => setDisruptionPlanId(null)}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setEditingPlanId(plan.id)}
-                    disabled={!canEdit}
-                    className="text-zinc-400 hover:text-primary-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label={`Edit ${plan.name}`}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(plan)}
-                    disabled={!canEdit}
-                    className="text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label={`Delete ${plan.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
+                )}
               </div>
             ),
           )}
@@ -481,6 +514,30 @@ function PlanMetaForm({
                   onChange={(e) => setForm({ ...form, scheduleAnchorDate: e.target.value })}
                   className="input"
                 />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Off days (weekdays with no meals)
+                </label>
+                <Select
+                  value={form.offDayHandling ?? "LOSS_DELIVERY"}
+                  onValueChange={(v) =>
+                    setForm({ ...form, offDayHandling: v as OffDayHandling })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LOSS_DELIVERY">Count toward the paid duration</SelectItem>
+                    <SelectItem value="EXTEND_TO_COMPENSATE">Don&apos;t count — extend the plan</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-zinc-400">
+                  {(form.offDayHandling ?? "LOSS_DELIVERY") === "EXTEND_TO_COMPENSATE"
+                    ? "A subscriber still gets every paid delivery — the plan stretches past days with no meals scheduled."
+                    : "Days with no meals scheduled eat into the paid duration, same as today."}
+                </p>
               </div>
             </>
           )}
@@ -820,6 +877,7 @@ function PlanEditor({
           schedulingMode: plan.schedulingMode,
           weekCount: plan.weekCount ?? undefined,
           scheduleAnchorDate: plan.scheduleAnchorDate ?? undefined,
+          offDayHandling: plan.offDayHandling,
         }}
         onCancel={onClose}
         onSave={handleSaveMeta}

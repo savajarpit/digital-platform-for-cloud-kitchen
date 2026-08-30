@@ -31,7 +31,9 @@ export class PlanFeaturesController {
   @Public()
   @Get()
   @ResponseMessage('Plan features retrieved successfully')
-  @ApiOperation({ summary: 'Public: "Why subscribe?" cards for the /plans page' })
+  @ApiOperation({
+    summary: 'Public: "Why subscribe?" cards for the /plans page',
+  })
   findEnabled(@CurrentTenant('id') tenantId: string | undefined) {
     if (!tenantId)
       throw new NotFoundException('No tenant context for this request');
@@ -53,7 +55,10 @@ export class PlanFeaturesController {
   @ApiBearerAuth('access-token')
   @ResponseMessage('Plan feature added successfully')
   @ApiOperation({ summary: 'Admin: add a "Why subscribe?" card' })
-  create(@CurrentTenantId() tenantId: string, @Body() dto: UpsertPlanFeatureDto) {
+  create(
+    @CurrentTenantId() tenantId: string,
+    @Body() dto: UpsertPlanFeatureDto,
+  ) {
     return this.service.createFeature(tenantId, dto);
   }
 
@@ -62,7 +67,9 @@ export class PlanFeaturesController {
   @RequirePermission('subscriptions.manage')
   @ApiBearerAuth('access-token')
   @ResponseMessage('Plan feature updated successfully')
-  @ApiOperation({ summary: 'Admin: edit/enable/disable a "Why subscribe?" card' })
+  @ApiOperation({
+    summary: 'Admin: edit/enable/disable a "Why subscribe?" card',
+  })
   update(
     @CurrentTenantId() tenantId: string,
     @Param('id') id: string,

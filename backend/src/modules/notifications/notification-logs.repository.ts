@@ -8,7 +8,7 @@ export class NotificationLogsRepository {
 
   createMany(
     tenantId: string,
-    orderId: string,
+    orderId: string | null,
     attempts: NotificationAttempt[],
   ): Promise<unknown> {
     if (attempts.length === 0) return Promise.resolve();

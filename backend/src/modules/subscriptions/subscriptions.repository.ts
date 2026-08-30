@@ -8,6 +8,7 @@ import {
   Prisma,
   Subscription,
   SubscriptionDayOverride,
+  SubscriptionDisruption,
   SubscriptionInvoice,
   SubscriptionPlan,
   SubscriptionSettings,
@@ -355,6 +356,93 @@ export class SubscriptionsRepository {
     });
   }
 
+  /** Unpaginated — a whole-plan disruption needs every currently-ACTIVE
+   * subscriber at once, not a page of them. */
+  findActiveSubscriptionsForPlan(
+    tenantId: string,
+    planId: string,
+  ): Promise<Subscription[]> {
+    return this.prisma.subscription.findMany({
+      where: { tenantId, planId, status: SubscriptionStatus.ACTIVE },
+    });
+  }
+
+  /** One bulk query over every SubscriptionPlanDay+slot for a plan, reduced
+   * to the set of "{weekNumber}-{weekday}" keys that have >=1 decided
+   * (mealId set) slot — the plan's real WEEKLY_FIXED delivery days. Feeds
+   * PlanScheduleUtil.advanceRealDeliveryDays for both off-day-aware
+   * banking and EXTEND_TO_COMPENSATE cycleEnd math. RELATIVE_DAY plans
+   * never call this (no off-day concept there). */
+  async findPlanDeliveryDayKeys(planId: string): Promise<Set<string>> {
+    const days = await this.prisma.subscriptionPlanDay.findMany({
+      where: { planId, weekNumber: { not: null } },
+      include: { slots: { select: { mealId: true } } },
+    });
+    const keys = new Set<string>();
+    for (const day of days) {
+      if (day.slots.some((s) => s.mealId)) {
+        keys.add(`${day.weekNumber}-${day.weekday}`);
+      }
+    }
+    return keys;
+  }
+
+  /** Lightweight schedule-config fetch for the cycleEnd/banking math — no
+   * publish/active filter, since a plan can be unpublished while it still
+   * has live subscribers whose banking math must keep working. */
+  findPlanScheduleConfig(id: string) {
+    return this.prisma.subscriptionPlan.findUnique({
+      where: { id },
+      select: {
+        schedulingMode: true,
+        weekCount: true,
+        scheduleAnchorDate: true,
+        durationDays: true,
+        offDayHandling: true,
+      },
+    });
+  }
+
+  createDisruption(
+    data: Prisma.SubscriptionDisruptionUncheckedCreateInput,
+  ): Promise<SubscriptionDisruption> {
+    return this.prisma.subscriptionDisruption.create({ data });
+  }
+
+  async findDisruptionsForAdmin(
+    tenantId: string,
+    skip: number,
+    take: number,
+  ): Promise<[SubscriptionDisruption[], number]> {
+    return this.prisma.$transaction([
+      this.prisma.subscriptionDisruption.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+        include: {
+          plan: { select: { name: true } },
+          _count: { select: { skips: true } },
+        },
+      }),
+      this.prisma.subscriptionDisruption.count({ where: { tenantId } }),
+    ]);
+  }
+
+  /** Address/user/plan shape the disruption-notice notification job needs. */
+  findSubscriptionForNotification(tenantId: string, id: string) {
+    return this.prisma.subscription.findFirst({
+      where: { id, tenantId },
+      include: {
+        user: {
+          select: { firstName: true, lastName: true, email: true, phone: true },
+        },
+        address: { select: { contactPhone: true } },
+        plan: { select: { name: true } },
+      },
+    });
+  }
+
   // ─── Tenant subscription settings ────────────────────────
 
   findSettings(tenantId: string): Promise<SubscriptionSettings | null> {
@@ -403,7 +491,11 @@ export class SubscriptionsRepository {
   upsertDayOverride(
     subscriptionId: string,
     date: string,
-    data: { addressId?: string | null; deliverySlotId?: string | null; note?: string | null },
+    data: {
+      addressId?: string | null;
+      deliverySlotId?: string | null;
+      note?: string | null;
+    },
   ): Promise<SubscriptionDayOverride> {
     return this.prisma.subscriptionDayOverride.upsert({
       where: { subscriptionId_date: { subscriptionId, date } },
@@ -470,7 +562,11 @@ export class SubscriptionsRepository {
 
   /** WEEKLY_FIXED counterpart to findPlanDayWithSlots — looks up a day by
    * its fixed (week, real weekday) key instead of a relative dayNumber. */
-  findPlanDayByWeekAndWeekday(planId: string, weekNumber: number, weekday: number) {
+  findPlanDayByWeekAndWeekday(
+    planId: string,
+    weekNumber: number,
+    weekday: number,
+  ) {
     return this.prisma.subscriptionPlanDay.findUnique({
       where: { planId_weekNumber_weekday: { planId, weekNumber, weekday } },
       include: { slots: { include: { meal: true } } },

@@ -256,7 +256,11 @@ export class PlatformBillingService {
       billingCycle = plan.billingCycle;
       amountInPaise = plan.priceInPaise;
     } else {
-      if (!dto.planCode || !dto.billingCycle || dto.amountInPaise === undefined) {
+      if (
+        !dto.planCode ||
+        !dto.billingCycle ||
+        dto.amountInPaise === undefined
+      ) {
         throw new BadRequestException(
           'Provide either planId or planCode/billingCycle/amountInPaise',
         );
@@ -550,7 +554,9 @@ export class PlatformBillingService {
       // that a webhook is stuck, so this was previously a silent gap for
       // a billing system.
       if (existing?.status === 'FAILED') {
-        const alertEmail = this.config.get<string>('platformBilling.alertEmail');
+        const alertEmail = this.config.get<string>(
+          'platformBilling.alertEmail',
+        );
         if (alertEmail) {
           await this.enqueueWebhookFailedEmail({
             email: alertEmail,

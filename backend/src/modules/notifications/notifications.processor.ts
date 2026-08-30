@@ -6,10 +6,19 @@ import { buildGoogleMapsLink } from './templates/email/order-confirmation-custom
 import { NotificationLogsRepository } from './notification-logs.repository';
 import { OrdersRepository } from '../orders/orders.repository';
 import { SettingsRepository } from '../settings/settings.repository';
+import { SubscriptionsRepository } from '../subscriptions/subscriptions.repository';
 
 export interface OrderConfirmedJob {
   tenantId: string;
   orderId: string;
+}
+
+export interface SubscriptionDisruptedJob {
+  tenantId: string;
+  subscriptionId: string;
+  dateLabel: string;
+  reason: string;
+  compensationDays: number;
 }
 
 @Processor('notifications')
@@ -21,6 +30,7 @@ export class NotificationsProcessor {
     private readonly notificationLogsRepo: NotificationLogsRepository,
     private readonly ordersRepo: OrdersRepository,
     private readonly settingsRepo: SettingsRepository,
+    private readonly subscriptionsRepo: SubscriptionsRepository,
   ) {}
 
   @Process('order-confirmed')
@@ -55,7 +65,10 @@ export class NotificationsProcessor {
       : (order.address?.contactPhone ?? '');
     const mapLink = isPickup
       ? order.pickupKitchenZone
-        ? buildGoogleMapsLink(order.pickupKitchenZone.lat, order.pickupKitchenZone.lng)
+        ? buildGoogleMapsLink(
+            order.pickupKitchenZone.lat,
+            order.pickupKitchenZone.lng,
+          )
         : undefined
       : order.address?.lat != null && order.address?.lng != null
         ? buildGoogleMapsLink(order.address.lat, order.address.lng)
@@ -85,6 +98,49 @@ export class NotificationsProcessor {
     );
 
     await this.notificationLogsRepo.createMany(tenantId, orderId, attempts);
+  }
+
+  @Process('subscription-disrupted')
+  async handleSubscriptionDisrupted(
+    job: Job<SubscriptionDisruptedJob>,
+  ): Promise<void> {
+    const { tenantId, subscriptionId, dateLabel, reason, compensationDays } =
+      job.data;
+
+    const subscription =
+      await this.subscriptionsRepo.findSubscriptionForNotification(
+        tenantId,
+        subscriptionId,
+      );
+    if (!subscription) {
+      this.logger.warn(
+        `subscription-disrupted job for missing subscription ${subscriptionId}`,
+      );
+      return;
+    }
+
+    const settings = await this.settingsRepo.findNotificationSettings(tenantId);
+    const contactPhone =
+      subscription.address?.contactPhone ??
+      subscription.user.phone ??
+      undefined;
+
+    const attempts =
+      await this.notificationsService.sendSubscriptionDisruptionNotice(
+        settings,
+        {
+          customerName:
+            `${subscription.user.firstName} ${subscription.user.lastName ?? ''}`.trim(),
+          customerEmail: subscription.user.email,
+          customerWhatsAppNumber: contactPhone,
+          planName: subscription.plan.name,
+          dateLabel,
+          reason,
+          compensationDays,
+        },
+      );
+
+    await this.notificationLogsRepo.createMany(tenantId, null, attempts);
   }
 
   @OnQueueFailed()

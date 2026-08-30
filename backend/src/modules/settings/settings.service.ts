@@ -142,7 +142,8 @@ export class SettingsService {
       this.settingsRepo.findAllKitchenZones(tenantId),
     ]);
     const eligibleZones = zones.filter((z) => z.isActive && z.pickupEnabled);
-    const available = Boolean(profile?.pickupEnabled) && eligibleZones.length > 0;
+    const available =
+      Boolean(profile?.pickupEnabled) && eligibleZones.length > 0;
     return {
       available,
       zones: available

@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { SubscriptionsService } from './subscriptions.service';
+import { SubscriptionDisruptionService } from './subscription-disruption.service';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
 import { UpsertPlanDaysDto } from './dto/upsert-plan-days.dto';
@@ -27,6 +28,8 @@ import { SkipDayDto } from './dto/skip-day.dto';
 import { PauseDto } from './dto/pause.dto';
 import { SetDayOverrideDto } from './dto/set-day-override.dto';
 import { UpdateSubscriptionSettingsDto } from './dto/update-subscription-settings.dto';
+import { DeclareDisruptionDto } from './dto/declare-disruption.dto';
+import { OffsetPaginationDto } from '../../common/dto/pagination.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
@@ -40,7 +43,10 @@ import { Role } from '../../common/enums/role.enum';
 @ApiTags('subscriptions')
 @Controller({ path: 'subscriptions', version: '1' })
 export class SubscriptionsController {
-  constructor(private readonly subscriptionsService: SubscriptionsService) {}
+  constructor(
+    private readonly subscriptionsService: SubscriptionsService,
+    private readonly disruptionService: SubscriptionDisruptionService,
+  ) {}
 
   // ─── Admin plan authoring ─────────────────────────────────
 
@@ -272,6 +278,42 @@ export class SubscriptionsController {
       tenantId,
       query.planId,
       query.dayNumber,
+    );
+  }
+
+  @Post('admin/disruptions')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Disruption declared')
+  @ApiOperation({
+    summary:
+      'Admin: declare a real-world disruption (rain, an emergency) for a date — credits affected subscribers extra days and prevents that date from materializing, without touching any already-existing Order',
+  })
+  declareDisruption(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') userId: string,
+    @Body() dto: DeclareDisruptionDto,
+  ) {
+    return this.disruptionService.declareDisruption(tenantId, userId, dto);
+  }
+
+  @Get('admin/disruptions')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Disruptions retrieved successfully')
+  @ApiOperation({ summary: 'Admin: audit list of declared disruptions' })
+  listDisruptions(
+    @CurrentTenantId() tenantId: string,
+    @Query() query: OffsetPaginationDto,
+  ) {
+    return this.disruptionService.listDisruptions(
+      tenantId,
+      query.page,
+      query.limit,
     );
   }
 

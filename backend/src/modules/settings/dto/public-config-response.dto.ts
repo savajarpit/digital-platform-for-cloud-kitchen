@@ -112,7 +112,7 @@ export class PublicConfigResponseDto {
 
   @ApiPropertyOptional({
     description:
-      "Google Search Console verification content, rendered as a <meta name=\"google-site-verification\"> tag when set",
+      'Google Search Console verification content, rendered as a <meta name="google-site-verification"> tag when set',
   })
   @Expose()
   searchConsoleVerification?: string;

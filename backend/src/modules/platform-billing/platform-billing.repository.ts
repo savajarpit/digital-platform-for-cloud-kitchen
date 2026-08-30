@@ -299,13 +299,18 @@ export class PlatformBillingRepository {
    * - Nothing pending: a real cancellation (SUPER_ADMIN's `scheduleCancellation`
    *   reaching its cycle-end) — today's terminal-state behavior.
    */
-  async markCancelled(tenantId: string): Promise<{ downgradeHandoff: boolean }> {
+  async markCancelled(
+    tenantId: string,
+  ): Promise<{ downgradeHandoff: boolean }> {
     const subscription = await this.prisma.platformSubscription.findUnique({
       where: { tenantId },
       include: { scheduledPlan: true },
     });
 
-    if (subscription?.pendingRazorpaySubscriptionId && subscription.scheduledPlan) {
+    if (
+      subscription?.pendingRazorpaySubscriptionId &&
+      subscription.scheduledPlan
+    ) {
       const target = subscription.scheduledPlan;
       await this.finalizeScheduledPlanChange(tenantId, {
         planId: target.id,

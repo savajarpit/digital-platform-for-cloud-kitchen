@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { MapLink } from "@/components/ui/MapLink";
 import { PlanDayBreakdown } from "@/components/admin/PlanDayBreakdown";
 import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
+import { DeclareDisruptionForm } from "@/components/admin/DeclareDisruptionForm";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -28,6 +29,10 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
       .then(setSub)
       .catch(() => setNotFound(true));
   }, [id]);
+
+  function refresh() {
+    getAdminSubscription(id).then(setSub).catch(() => {});
+  }
 
   if (notFound) {
     return (
@@ -68,9 +73,14 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
             Subscribed {new Date(sub.createdAt).toLocaleDateString()}
           </p>
         </div>
-        <span className={`badge ${SUBSCRIPTION_STATUS_STYLES[sub.status] ?? ""}`}>
-          {sub.status.replace("_", " ")}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`badge ${SUBSCRIPTION_STATUS_STYLES[sub.status] ?? ""}`}>
+            {sub.status.replace("_", " ")}
+          </span>
+          {sub.status === "ACTIVE" && (
+            <DeclareDisruptionForm scope="SINGLE" subscriptionId={sub.id} onDeclared={refresh} />
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -188,8 +198,17 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
               <p className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">Skipped / paused</p>
               <div className="flex flex-wrap gap-1.5">
                 {sub.skips.map((skip) => (
-                  <span key={skip.id} className="badge bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                  <span
+                    key={skip.id}
+                    title={skip.reason ?? undefined}
+                    className={`badge ${
+                      skip.reason
+                        ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
+                        : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                    }`}
+                  >
                     {skip.dateFrom === skip.dateTo ? skip.dateFrom : `${skip.dateFrom} – ${skip.dateTo}`}
+                    {skip.reason && ` — ${skip.reason}`}
                   </span>
                 ))}
               </div>

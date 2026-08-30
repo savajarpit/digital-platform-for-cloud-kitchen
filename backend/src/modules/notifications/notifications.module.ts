@@ -9,6 +9,7 @@ import { EmailProviderFactory } from './providers/email/email-provider.factory';
 import { MailModule } from '../../shared-modules/mail/mail.module';
 import { OrdersModule } from '../orders/orders.module';
 import { SettingsModule } from '../settings/settings.module';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { SettingsModule } from '../settings/settings.module';
     BullModule.registerQueue({ name: 'notifications' }),
     OrdersModule,
     SettingsModule,
+    SubscriptionsModule,
   ],
   providers: [
     NotificationsService,

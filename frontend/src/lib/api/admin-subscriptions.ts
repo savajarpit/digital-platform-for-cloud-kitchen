@@ -28,6 +28,12 @@ export type PlanAccentColor = "PRIMARY" | "SECONDARY" | "ACCENT";
 // eating on the same real day gets the same dish — batch cooking.
 export type SchedulingMode = "RELATIVE_DAY" | "WEEKLY_FIXED";
 
+// WEEKLY_FIXED only — governs an "off day" (a real weekday with no decided
+// meals anywhere on the plan). LOSS_DELIVERY (default) — off days eat into
+// the paid durationDays. EXTEND_TO_COMPENSATE — the schedule stretches past
+// off days so every subscriber still gets exactly durationDays deliveries.
+export type OffDayHandling = "LOSS_DELIVERY" | "EXTEND_TO_COMPENSATE";
+
 export interface Plan {
   id: string;
   type: "CURATED" | "CUSTOM";
@@ -44,6 +50,7 @@ export interface Plan {
   schedulingMode: SchedulingMode;
   weekCount: number | null;
   scheduleAnchorDate: string | null;
+  offDayHandling: OffDayHandling;
   days?: PlanDay[];
 }
 
@@ -60,6 +67,7 @@ export interface PlanInput {
   schedulingMode?: SchedulingMode;
   weekCount?: number;
   scheduleAnchorDate?: string;
+  offDayHandling?: OffDayHandling;
 }
 
 export interface PlanSlotInput {
@@ -79,6 +87,8 @@ export interface SubscriptionSkip {
   dateFrom: string;
   dateTo: string;
   bankedDays: number;
+  reason: string | null;
+  disruptionId: string | null;
 }
 
 export interface SubscriptionDayOverride {
@@ -290,4 +300,48 @@ export function getPrepPlan(planId: string, dayNumber?: number): Promise<PrepPla
   const qs = new URLSearchParams({ planId });
   if (dayNumber != null) qs.set("dayNumber", String(dayNumber));
   return proxyFetch<PrepPlan>(`/subscriptions/admin/prep-plan?${qs.toString()}`);
+}
+
+// ── Tenant-declared disruptions (heavy rain, an emergency) ──────────
+
+export interface SubscriptionDisruption {
+  id: string;
+  planId: string | null;
+  date: string;
+  reason: string;
+  compensationDays: number;
+  createdAt: string;
+  plan: { name: string } | null;
+  _count: { skips: number };
+}
+
+export interface DeclareDisruptionInput {
+  date: string;
+  reason: string;
+  compensationDays?: number;
+  scope: "SINGLE" | "PLAN";
+  subscriptionId?: string;
+  planId?: string;
+}
+
+export function declareDisruption(
+  input: DeclareDisruptionInput,
+): Promise<SubscriptionDisruption> {
+  return proxyFetch<SubscriptionDisruption>("/subscriptions/admin/disruptions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function listDisruptions(params: { page?: number; limit?: number } = {}): Promise<{
+  data: SubscriptionDisruption[];
+  meta?: PaginationMeta;
+}> {
+  const search = new URLSearchParams();
+  if (params.page) search.set("page", String(params.page));
+  if (params.limit) search.set("limit", String(params.limit));
+  const qs = search.toString();
+  return proxyFetchPaginated<SubscriptionDisruption[]>(
+    `/subscriptions/admin/disruptions${qs ? `?${qs}` : ""}`,
+  );
 }

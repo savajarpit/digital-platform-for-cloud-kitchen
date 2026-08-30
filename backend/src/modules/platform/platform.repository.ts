@@ -92,7 +92,10 @@ export class PlatformRepository {
           data: { tenantId: tenant.id, ...defaultSubscriptionSettings() },
         }),
         tx.planFeature.createMany({
-          data: defaultPlanFeatures().map((f) => ({ tenantId: tenant.id, ...f })),
+          data: defaultPlanFeatures().map((f) => ({
+            tenantId: tenant.id,
+            ...f,
+          })),
         }),
         tx.planFaq.createMany({
           data: defaultPlanFaqs().map((f) => ({ tenantId: tenant.id, ...f })),

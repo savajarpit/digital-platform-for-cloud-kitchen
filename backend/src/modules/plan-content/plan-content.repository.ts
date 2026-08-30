@@ -71,7 +71,10 @@ export class PlanContentRepository {
     return this.prisma.planFaq.create({ data: { ...data, tenantId } });
   }
 
-  updateFaq(id: string, data: Prisma.PlanFaqUncheckedUpdateInput): Promise<PlanFaq> {
+  updateFaq(
+    id: string,
+    data: Prisma.PlanFaqUncheckedUpdateInput,
+  ): Promise<PlanFaq> {
     return this.prisma.planFaq.update({ where: { id }, data });
   }
 

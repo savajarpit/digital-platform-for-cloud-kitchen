@@ -51,7 +51,11 @@ export class PlanContentService {
     return this.repo.createFaq(tenantId, dto);
   }
 
-  async updateFaq(tenantId: string, id: string, dto: Partial<UpsertPlanFaqDto>) {
+  async updateFaq(
+    tenantId: string,
+    id: string,
+    dto: Partial<UpsertPlanFaqDto>,
+  ) {
     const faq = await this.repo.findFaqById(tenantId, id);
     if (!faq) throw new NotFoundException('Plan FAQ not found');
     return this.repo.updateFaq(id, dto);

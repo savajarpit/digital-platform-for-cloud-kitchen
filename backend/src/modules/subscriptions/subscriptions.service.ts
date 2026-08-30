@@ -16,7 +16,10 @@ import {
   PlanScheduleKey,
   PlanScheduleUtil,
 } from '../../common/utils/plan-schedule.util';
-import { SubscriptionPlanSchedulingMode } from '../../generated/prisma';
+import {
+  SubscriptionOffDayHandling,
+  SubscriptionPlanSchedulingMode,
+} from '../../generated/prisma';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
 import { UpsertPlanDaysDto } from './dto/upsert-plan-days.dto';
@@ -95,7 +98,7 @@ export class SubscriptionsService {
         await this.subscriptionsRepo.countSubscriptionsForPlan(id);
       if (subscriberCount > 0) {
         throw new BadRequestException(
-          'This plan already has subscribers, so its scheduling mode can\'t be changed — create a new plan instead.',
+          "This plan already has subscribers, so its scheduling mode can't be changed — create a new plan instead.",
         );
       }
     }
@@ -643,9 +646,11 @@ export class SubscriptionsService {
     const settings = await this.subscriptionsRepo.findSettings(tenantId);
     const startDateLeadDays = settings?.startDateLeadDays ?? 1;
     const startDate = DateUtil.addDays(DateUtil.now(), startDateLeadDays);
-    const cycleEnd = DateUtil.addDays(
+    const cycleEnd = await this.computeInitialCycleEnd(
+      tenantId,
+      subscription.planId,
       startDate,
-      subscription.durationDaysSnapshot - 1,
+      subscription.durationDaysSnapshot,
     );
     await this.subscriptionsRepo.activateSubscription(subscription.id, {
       startDate,
@@ -746,7 +751,12 @@ export class SubscriptionsService {
       dateTo: dto.date,
       bankedDays: 1,
     });
-    const newCycleEnd = DateUtil.addDays(subscription.cycleEnd as Date, 1);
+    const newCycleEnd = await this.bankExtraDays(
+      tenantId,
+      subscription.planId,
+      subscription.cycleEnd as Date,
+      1,
+    );
     return this.subscriptionsRepo.extendCycleEnd(
       subscription.id,
       newCycleEnd,
@@ -774,7 +784,9 @@ export class SubscriptionsService {
       dateTo: dto.dateTo,
       bankedDays,
     });
-    const newCycleEnd = DateUtil.addDays(
+    const newCycleEnd = await this.bankExtraDays(
+      tenantId,
+      subscription.planId,
       subscription.cycleEnd as Date,
       bankedDays,
     );
@@ -904,6 +916,77 @@ export class SubscriptionsService {
     const profile = await this.settingsRepo.findBusinessProfile(tenantId);
     return profile?.timezone ?? 'Asia/Kolkata';
   }
+
+  /** A NEW subscription's cycleEnd at activation. LOSS_DELIVERY (default,
+   * every plan today): today's exact existing flat startDate + durationDays
+   * - 1, byte-identical, zero regression risk. EXTEND_TO_COMPENSATE
+   * (WEEKLY_FIXED only): walks forward counting only real delivery days so
+   * the subscriber still receives exactly durationDaysSnapshot deliveries,
+   * regardless of how many off-weekdays fall inside the span. */
+  private async computeInitialCycleEnd(
+    tenantId: string,
+    planId: string,
+    startDate: Date,
+    durationDaysSnapshot: number,
+  ): Promise<Date> {
+    const plan = await this.subscriptionsRepo.findPlanScheduleConfig(planId);
+    if (
+      plan?.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED &&
+      plan.offDayHandling === SubscriptionOffDayHandling.EXTEND_TO_COMPENSATE
+    ) {
+      const timezone = await this.getTenantTimezone(tenantId);
+      const startDateStr = DateUtil.toTenantDateStr(startDate, timezone);
+      const deliveryDayKeys =
+        await this.subscriptionsRepo.findPlanDeliveryDayKeys(planId);
+      const cycleEndStr = PlanScheduleUtil.advanceRealDeliveryDays(
+        plan,
+        deliveryDayKeys,
+        startDateStr,
+        durationDaysSnapshot,
+        true,
+      );
+      return new Date(`${cycleEndStr}T00:00:00.000Z`);
+    }
+    return DateUtil.addDays(startDate, durationDaysSnapshot - 1);
+  }
+
+  /** Advances a subscription's cycleEnd by `bankedDaysDelta` REAL delivery
+   * days, skipping any WEEKLY_FIXED off-weekday along the way — landing a
+   * banked/credited day on a day with no deliveries at all would defeat
+   * the entire point of banking. Always applied, regardless of the plan's
+   * offDayHandling (that toggle only governs the INITIAL duration at
+   * activation, not what a credited day lands on). No-op behavior change
+   * for RELATIVE_DAY plans, which have no off-day concept. Shared by
+   * skipDay()/pause() and the tenant disruption tool. */
+  private async bankExtraDays(
+    tenantId: string,
+    planId: string,
+    currentCycleEnd: Date,
+    bankedDaysDelta: number,
+  ): Promise<Date> {
+    const plan = await this.subscriptionsRepo.findPlanScheduleConfig(planId);
+    if (
+      !plan ||
+      plan.schedulingMode !== SubscriptionPlanSchedulingMode.WEEKLY_FIXED
+    ) {
+      return DateUtil.addDays(currentCycleEnd, bankedDaysDelta);
+    }
+    const timezone = await this.getTenantTimezone(tenantId);
+    const currentCycleEndStr = DateUtil.toTenantDateStr(
+      currentCycleEnd,
+      timezone,
+    );
+    const deliveryDayKeys =
+      await this.subscriptionsRepo.findPlanDeliveryDayKeys(planId);
+    const newCycleEndStr = PlanScheduleUtil.advanceRealDeliveryDays(
+      plan,
+      deliveryDayKeys,
+      currentCycleEndStr,
+      bankedDaysDelta,
+      false,
+    );
+    return new Date(`${newCycleEndStr}T00:00:00.000Z`);
+  }
 }
 
 export interface PlanPreviewDay {
@@ -992,6 +1075,10 @@ export interface UpcomingPreviewDay {
    * already passed. The frontend should hide those controls and explain
    * why instead of letting the customer submit and hit a rejection. */
   locked: boolean;
+  /** Set only when this day was skipped by a tenant-declared disruption
+   * (never the customer's own skip/pause) — shown instead of the plain
+   * "Skipped" label so the customer understands why. */
+  disruptionReason: string | null;
 }
 
 /** Projects the next PREVIEW_DAYS_AHEAD calendar days (capped at cycleEnd) —
@@ -1009,7 +1096,7 @@ function buildUpcomingPreview(
     cycleEnd: Date | null;
     addressId: string;
     deliverySlotId: string | null;
-    skips: { dateFrom: string; dateTo: string }[];
+    skips: { dateFrom: string; dateTo: string; reason: string | null }[];
     dayOverrides: {
       date: string;
       addressId: string | null;
@@ -1079,6 +1166,7 @@ function buildUpcomingPreview(
         isOverridden: Boolean(override),
         note: override?.note ?? null,
         locked,
+        disruptionReason: skip.reason,
       });
     } else {
       const key = PlanScheduleUtil.resolveKey(subscription.plan, {
@@ -1104,6 +1192,7 @@ function buildUpcomingPreview(
         isOverridden: Boolean(override),
         note: override?.note ?? null,
         locked,
+        disruptionReason: null,
       });
       counter += 1;
     }

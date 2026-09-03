@@ -4,13 +4,26 @@ import { useState } from "react";
 
 const COUNTRY_CODE = "+91";
 
-/** Strips any "+91"/"91" prefix and non-digits, keeping at most the 10 local digits. */
+/**
+ * Strips a leading "+91" and non-digits, keeping at most the 10 local
+ * digits. The "+91" check is on the raw string, not a digit-count
+ * heuristic — a length-based check (e.g. "only strip once there are >10
+ * digits total") breaks for a partial, still-being-typed value: after
+ * typing just "9", the controlled round-trip feeds this "+919" (country
+ * code + the one digit so far), which only has 3 digits total, so a
+ * length>10 gate never strips the "91" and it leaks into the local number,
+ * showing "919" instead of "9". Checking the string itself for the "+91"
+ * marker has no such gap. A bare local number with no "+" (e.g. an
+ * uncontrolled `defaultValue` of "9123456789", which legitimately starts
+ * with "91") is left untouched either way, since it never has the "+".
+ */
 function toLocalDigits(value?: string | null): string {
   if (!value) return "";
-  const digitsOnly = value.replace(/\D/g, "");
-  const local =
-    digitsOnly.length > 10 && digitsOnly.startsWith("91") ? digitsOnly.slice(2) : digitsOnly;
-  return local.slice(0, 10);
+  const trimmed = value.trim();
+  const digitsOnly = (
+    trimmed.startsWith(COUNTRY_CODE) ? trimmed.slice(COUNTRY_CODE.length) : trimmed
+  ).replace(/\D/g, "");
+  return digitsOnly.slice(0, 10);
 }
 
 export interface PhoneInputProps {

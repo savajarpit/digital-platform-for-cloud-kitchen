@@ -383,7 +383,7 @@ export class SettingsService {
     tenantId: string,
     dto: UpdateNotificationSettingsDto,
   ): Promise<NotificationSettings> {
-    const { whatsappApiKey, emailConfig, ...rest } = dto;
+    const { whatsappApiKey, whatsappConfig, emailConfig, ...rest } = dto;
     const encryptionKey = this.requireEncryptionKey();
 
     return this.settingsRepo.upsertNotificationSettings(tenantId, {
@@ -392,6 +392,14 @@ export class SettingsService {
         ? {
             whatsappApiKeyEncrypted: CryptoUtil.encrypt(
               whatsappApiKey,
+              encryptionKey,
+            ),
+          }
+        : {}),
+      ...(whatsappConfig
+        ? {
+            whatsappConfigEncrypted: CryptoUtil.encrypt(
+              JSON.stringify(whatsappConfig),
               encryptionKey,
             ),
           }

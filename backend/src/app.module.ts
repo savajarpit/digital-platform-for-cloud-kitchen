@@ -72,6 +72,7 @@ import { PlanContentModule } from './modules/plan-content/plan-content.module';
 import { PlatformEmailTemplatesModule } from './modules/platform-email-templates/platform-email-templates.module';
 import { PlatformWhatsAppTemplatesModule } from './modules/platform-whatsapp-templates/platform-whatsapp-templates.module';
 import { NotificationTemplatesModule } from './modules/notification-templates/notification-templates.module';
+import { PlatformSettingsModule } from './modules/platform-settings/platform-settings.module';
 
 @Module({
   imports: [
@@ -169,6 +170,7 @@ import { NotificationTemplatesModule } from './modules/notification-templates/no
     PlatformEmailTemplatesModule,
     PlatformWhatsAppTemplatesModule,
     NotificationTemplatesModule,
+    PlatformSettingsModule,
   ],
 
   providers: [

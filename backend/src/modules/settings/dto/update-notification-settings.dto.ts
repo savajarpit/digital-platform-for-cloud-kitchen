@@ -28,11 +28,19 @@ export class UpdateNotificationSettingsDto {
 
   @ApiPropertyOptional({
     description:
-      'Plaintext in, encrypted before storage. Omit to leave unchanged.',
+      "Plaintext in, encrypted before storage. Omit to leave unchanged. The provider's single secret token — Interakt's API key, Twilio's Auth Token.",
   })
   @IsOptional()
   @IsString()
   whatsappApiKey?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Plaintext in (e.g. { accountSid } for Twilio), encrypted before storage. Omit to leave unchanged. Providers with only one secret (Interakt) never need this.',
+  })
+  @IsOptional()
+  @IsObject()
+  whatsappConfig?: Record<string, unknown>;
 
   @ApiPropertyOptional({
     description:

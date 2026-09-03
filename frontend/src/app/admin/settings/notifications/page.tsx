@@ -41,6 +41,7 @@ export default function NotificationsPage() {
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
   const [whatsappProvider, setWhatsappProvider] = useState<WhatsappProvider | "">("");
   const [whatsappApiKey, setWhatsappApiKey] = useState("");
+  const [whatsappAccountSid, setWhatsappAccountSid] = useState("");
   const [whatsappSenderNumber, setWhatsappSenderNumber] = useState("");
   const [ownerWhatsappNumber, setOwnerWhatsappNumber] = useState("");
 
@@ -86,6 +87,9 @@ export default function NotificationsPage() {
         whatsappEnabled,
         whatsappProvider: whatsappProvider || undefined,
         whatsappApiKey: whatsappApiKey || undefined,
+        ...(whatsappProvider === "TWILIO" && whatsappAccountSid
+          ? { whatsappConfig: { accountSid: whatsappAccountSid } }
+          : {}),
         whatsappSenderNumber: whatsappSenderNumber || undefined,
         ownerWhatsappNumber: ownerWhatsappNumber || undefined,
         emailEnabled,
@@ -107,6 +111,7 @@ export default function NotificationsPage() {
       });
       setSettings(updated);
       setWhatsappApiKey("");
+      setWhatsappAccountSid("");
       setSmtpHost("");
       setSmtpPort("");
       setSmtpUser("");
@@ -175,7 +180,7 @@ export default function NotificationsPage() {
               </div>
               <div>
                 <label className="mb-1 flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  API key
+                  {whatsappProvider === "TWILIO" ? "Auth Token" : "API key"}
                   <ConfiguredBadge configured={settings.whatsappApiKeyConfigured} />
                 </label>
                 <PasswordInput
@@ -185,6 +190,23 @@ export default function NotificationsPage() {
                   className="input w-full"
                 />
               </div>
+              {whatsappProvider === "TWILIO" && (
+                <div>
+                  <label className="mb-1 flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    Account SID
+                    <ConfiguredBadge configured={settings.whatsappConfigConfigured} />
+                  </label>
+                  <input
+                    type="text"
+                    value={whatsappAccountSid}
+                    onChange={(e) => setWhatsappAccountSid(e.target.value)}
+                    placeholder={
+                      settings.whatsappConfigConfigured ? "Leave blank to keep current" : "ACxxxxxxxxxxxxxxxx"
+                    }
+                    className="input w-full font-mono"
+                  />
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   Sender number

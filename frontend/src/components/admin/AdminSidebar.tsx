@@ -17,6 +17,7 @@ import {
   MapPin,
   MessageSquare,
   Package,
+  SlidersHorizontal,
   Store,
   Tag,
   UserPlus,
@@ -186,6 +187,17 @@ export function AdminSidebar() {
           >
             <MessageSquare className="h-4 w-4 shrink-0" />
             <span className="flex-1">WhatsApp Templates</span>
+          </Link>
+          <Link
+            href="/admin/platform/settings"
+            className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
+              pathname.startsWith("/admin/platform/settings")
+                ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <SlidersHorizontal className="h-4 w-4 shrink-0" />
+            <span className="flex-1">Platform Settings</span>
           </Link>
           <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
         </>

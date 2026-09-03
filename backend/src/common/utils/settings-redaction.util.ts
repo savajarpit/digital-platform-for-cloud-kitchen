@@ -6,13 +6,20 @@
  */
 export function redactNotificationSettings(settings: {
   whatsappApiKeyEncrypted: string | null;
+  whatsappConfigEncrypted: unknown;
   emailConfigEncrypted: unknown;
   [key: string]: unknown;
 }) {
-  const { whatsappApiKeyEncrypted, emailConfigEncrypted, ...safe } = settings;
+  const {
+    whatsappApiKeyEncrypted,
+    whatsappConfigEncrypted,
+    emailConfigEncrypted,
+    ...safe
+  } = settings;
   return {
     ...safe,
     whatsappApiKeyConfigured: Boolean(whatsappApiKeyEncrypted),
+    whatsappConfigConfigured: Boolean(whatsappConfigEncrypted),
     emailConfigConfigured: Boolean(emailConfigEncrypted),
   };
 }

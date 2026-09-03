@@ -1797,3 +1797,22 @@ model PlatformInvoice {
   @@index([platformSubscriptionId])
   @@map("platform_invoices")
 }
+
+// Single-row, platform-wide technical toggles — SUPER_ADMIN-only, apply to
+// every tenant at once (unlike Feature/TenantFeature, which are granted per
+// tenant). Always read/written against the fixed id "global"; the row is
+// created lazily with defaults on first read if it doesn't exist yet.
+model PlatformSettings {
+  id                 String   @id @default("global")
+  // Off by default — WhatsApp OTP delivery isn't trusted/approved yet
+  // (needs a real Meta-approved OTP template per BSP), so signup/login
+  // verification codes go out over email only until this is flipped on.
+  // Order-confirmation/subscription-disruption WhatsApp sends are
+  // unaffected — those stay gated by each tenant's own
+  // NotificationSettings.whatsappEnabled, as before.
+  whatsappOtpEnabled Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+  updatedByUserId    String?
+
+  @@map("platform_settings")
+}

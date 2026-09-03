@@ -326,6 +326,8 @@ export interface NotificationSettings {
   whatsappEnabled: boolean;
   whatsappProvider: WhatsappProvider | null;
   whatsappApiKeyConfigured: boolean;
+  /** Twilio-only — holds { accountSid }. Interakt has no use for this. */
+  whatsappConfigConfigured: boolean;
   whatsappSenderNumber: string | null;
   ownerWhatsappNumber: string | null;
   emailEnabled: boolean;
@@ -340,6 +342,7 @@ export interface UpdateNotificationSettingsInput {
   whatsappEnabled?: boolean;
   whatsappProvider?: WhatsappProvider;
   whatsappApiKey?: string;
+  whatsappConfig?: { accountSid: string };
   whatsappSenderNumber?: string;
   ownerWhatsappNumber?: string;
   emailEnabled?: boolean;

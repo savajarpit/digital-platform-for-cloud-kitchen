@@ -7,6 +7,7 @@ import { getTenantEmailBranding } from '../../shared-modules/email-layout/tenant
 import { PlatformEmailTemplateService } from '../../shared-modules/notification-templates/platform-email-template.service';
 import { TenantNotificationTemplateService } from '../../shared-modules/notification-templates/tenant-notification-template.service';
 import { PlatformWhatsAppTemplateService } from '../../shared-modules/notification-templates/platform-whatsapp-template.service';
+import { PlatformSettingsService } from '../../shared-modules/platform-settings/platform-settings.service';
 import { WhatsAppProviderFactory } from './providers/whatsapp/whatsapp-provider.factory';
 import { EmailProviderFactory } from './providers/email/email-provider.factory';
 import { OrderConfirmationTemplateData } from './templates/email/order-confirmation-customer.template';
@@ -57,20 +58,27 @@ export class NotificationsService {
     private readonly platformEmailTemplates: PlatformEmailTemplateService,
     private readonly tenantEmailTemplates: TenantNotificationTemplateService,
     private readonly whatsAppTemplates: PlatformWhatsAppTemplateService,
+    private readonly platformSettings: PlatformSettingsService,
   ) {}
 
   /**
-   * Signup OTP delivery (§4B): WhatsApp when the tenant has it configured,
-   * always email too — the tenant's own sender if configured, otherwise the
-   * platform's own SMTP, so signup never depends on tenant setup being done.
-   * Both channels carry the same code; the customer only needs to see one.
+   * Signup OTP delivery (§4B): email always; WhatsApp additionally, but
+   * only when BOTH the tenant has WhatsApp configured AND SUPER_ADMIN has
+   * flipped the platform-wide `whatsappOtpEnabled` kill-switch on (off by
+   * default — WhatsApp OTP isn't trusted/approved yet, so every tenant is
+   * email-only for OTP until this is enabled, regardless of their own
+   * WhatsApp setup). Order-confirmation/subscription-disruption WhatsApp
+   * sends are untouched by this switch — those stay purely per-tenant.
    */
   async sendOtp(
     settings: NotificationSettings | null,
     params: SendOtpParams,
   ): Promise<void> {
     const sends: Promise<void>[] = [this.sendOtpEmail(settings, params)];
-    if (settings?.whatsappEnabled) {
+    if (
+      settings?.whatsappEnabled &&
+      (await this.platformSettings.isWhatsAppOtpEnabled())
+    ) {
       sends.push(this.sendOtpWhatsApp(settings, params));
     }
 

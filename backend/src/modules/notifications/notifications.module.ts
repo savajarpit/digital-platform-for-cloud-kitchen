@@ -8,6 +8,7 @@ import { WhatsAppProviderFactory } from './providers/whatsapp/whatsapp-provider.
 import { EmailProviderFactory } from './providers/email/email-provider.factory';
 import { MailModule } from '../../shared-modules/mail/mail.module';
 import { NotificationTemplatesModule } from '../../shared-modules/notification-templates/notification-templates.module';
+import { PlatformSettingsModule } from '../../shared-modules/platform-settings/platform-settings.module';
 import { OrdersModule } from '../orders/orders.module';
 import { SettingsModule } from '../settings/settings.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
@@ -17,6 +18,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     HttpModule,
     MailModule,
     NotificationTemplatesModule,
+    PlatformSettingsModule,
     BullModule.registerQueue({ name: 'notifications' }),
     OrdersModule,
     SettingsModule,

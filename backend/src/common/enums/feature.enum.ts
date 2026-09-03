@@ -57,4 +57,10 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
     description:
       'Lets OWNER/STAFF edit the home page hero/CTA/reviews-section copy and the Plans page header + Why-subscribe/FAQ/contact sections. Without this, the storefront uses sensible defaults and the admin editors are hidden entirely.',
   },
+  {
+    key: 'custom-notification-templates',
+    name: 'Custom Notification Templates',
+    description:
+      'Lets OWNER/STAFF (with the matching permission) customize their own order-confirmation/welcome/reset-password email wording and pick among SUPER_ADMIN-approved WhatsApp message variants. Off by default — the tenant still gets fully tenant-branded emails, just with platform-authored default wording.',
+  },
 ];

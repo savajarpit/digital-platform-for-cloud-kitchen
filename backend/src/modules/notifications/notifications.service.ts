@@ -1,23 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotificationSettings } from '../../generated/prisma';
+import { PrismaService } from '../../database/prisma/prisma.service';
 import { MailService } from '../../shared-modules/mail/mail.service';
+import { renderEmailShell } from '../../shared-modules/email-layout/email-layout.util';
+import { getTenantEmailBranding } from '../../shared-modules/email-layout/tenant-branding.util';
+import { PlatformEmailTemplateService } from '../../shared-modules/notification-templates/platform-email-template.service';
+import { TenantNotificationTemplateService } from '../../shared-modules/notification-templates/tenant-notification-template.service';
+import { PlatformWhatsAppTemplateService } from '../../shared-modules/notification-templates/platform-whatsapp-template.service';
 import { WhatsAppProviderFactory } from './providers/whatsapp/whatsapp-provider.factory';
 import { EmailProviderFactory } from './providers/email/email-provider.factory';
-import { otpEmailTemplate } from './templates/email/otp.template';
-import {
-  orderConfirmationCustomerEmailTemplate,
-  OrderConfirmationTemplateData,
-} from './templates/email/order-confirmation-customer.template';
-import { orderConfirmationOwnerEmailTemplate } from './templates/email/order-confirmation-owner.template';
+import { OrderConfirmationTemplateData } from './templates/email/order-confirmation-customer.template';
 import { orderConfirmationCustomerWhatsAppTemplate } from './templates/whatsapp/order-confirmation-customer.template';
 import { orderConfirmationOwnerWhatsAppTemplate } from './templates/whatsapp/order-confirmation-owner.template';
-import {
-  subscriptionDisruptionEmailTemplate,
-  SubscriptionDisruptionTemplateData,
-} from './templates/email/subscription-disruption.template';
+import { SubscriptionDisruptionTemplateData } from './templates/email/subscription-disruption.template';
 import { subscriptionDisruptionWhatsAppTemplate } from './templates/whatsapp/subscription-disruption.template';
 
 export interface SendOtpParams {
+  tenantId: string;
   recipientEmail: string;
   recipientName: string;
   recipientWhatsAppNumber?: string;
@@ -54,6 +53,10 @@ export class NotificationsService {
     private readonly whatsAppFactory: WhatsAppProviderFactory,
     private readonly emailFactory: EmailProviderFactory,
     private readonly mailService: MailService,
+    private readonly prisma: PrismaService,
+    private readonly platformEmailTemplates: PlatformEmailTemplateService,
+    private readonly tenantEmailTemplates: TenantNotificationTemplateService,
+    private readonly whatsAppTemplates: PlatformWhatsAppTemplateService,
   ) {}
 
   /**
@@ -85,9 +88,13 @@ export class NotificationsService {
     try {
       const provider = this.whatsAppFactory.create(settings);
       if (!provider) return;
+      const templateKey = await this.whatsAppTemplates.resolveTemplateKey(
+        'signup-otp',
+        'signup_otp',
+      );
       await provider.sendTemplateMessage({
         to: params.recipientWhatsAppNumber,
-        templateKey: 'signup_otp',
+        templateKey,
         params: { name: params.recipientName, otp: params.otp },
       });
     } catch (error) {
@@ -102,9 +109,21 @@ export class NotificationsService {
     settings: NotificationSettings | null,
     params: SendOtpParams,
   ): Promise<void> {
-    const { subject, html } = otpEmailTemplate({
-      name: params.recipientName,
-      otp: params.otp,
+    const branding = await getTenantEmailBranding(this.prisma, params.tenantId);
+    // OTP is never tenant-overridable, any role — always the SUPER_ADMIN
+    // platform-default wording, just wrapped in the tenant's own branding.
+    const { subject, html: innerHtml } =
+      await this.platformEmailTemplates.render('otp', {
+        name: params.recipientName,
+        otp: params.otp,
+        businessName: branding.businessName,
+      });
+    const html = renderEmailShell({
+      brandName: branding.businessName,
+      brandLogoUrl: branding.logoUrl,
+      bodyHtml: innerHtml,
+      ownerLine: branding.businessName,
+      showPoweredBy: branding.showPoweredBy,
     });
 
     const tenantProvider = settings ? this.emailFactory.create(settings) : null;
@@ -119,6 +138,34 @@ export class NotificationsService {
     await this.mailService.send(params.recipientEmail, subject, html);
   }
 
+  private buildOrderConfirmationTokens(
+    params: OrderConfirmationParams,
+  ): Record<string, string> {
+    const itemsHtml = params.items
+      .map(
+        (item) =>
+          `<tr><td style="padding:4px 0;">${item.name} × ${item.quantity}</td></tr>`,
+      )
+      .join('');
+    const total = (params.totalInPaise / 100).toFixed(2);
+    const mapLinkHtml = params.mapLink
+      ? ` — <a href="${params.mapLink}" style="color:#16a34a;"><strong>Get directions</strong></a>`
+      : '';
+    return {
+      customerName: params.customerName,
+      orderNumber: params.orderNumber,
+      total,
+      itemsHtml,
+      deliverySlotName: params.deliverySlotName,
+      deliveryWindowStart: params.deliveryWindowStart,
+      deliveryWindowEnd: params.deliveryWindowEnd,
+      deliveryDateLabel: params.deliveryDateLabel,
+      deliveryAddress: params.deliveryAddress,
+      deliveryContactPhone: params.deliveryContactPhone,
+      mapLinkHtml,
+    };
+  }
+
   /**
    * Fired once per confirmed order. Unlike sendOtp, this is fully gated by
    * each tenant toggle (whatsappEnabled/emailEnabled) — a tenant with
@@ -126,7 +173,7 @@ export class NotificationsService {
    * business-config gap, not a system failure worth forcing a fallback for.
    * Every attempt (success or failure) is collected and returned so the
    * caller can persist it to NotificationLog — this service has no DB
-   * access of its own.
+   * access of its own for that part.
    */
   async sendOrderConfirmation(
     settings: NotificationSettings | null,
@@ -135,49 +182,87 @@ export class NotificationsService {
     const attempts: NotificationAttempt[] = [];
     if (!settings) return attempts;
 
+    const tokens = this.buildOrderConfirmationTokens(params);
+    const branding = await getTenantEmailBranding(
+      this.prisma,
+      settings.tenantId,
+    );
     const tasks: Promise<void>[] = [];
 
     if (settings.whatsappEnabled && params.customerWhatsAppNumber) {
       tasks.push(
-        this.trySendWhatsApp(
+        this.trySendWhatsAppFromDefault(
           settings,
+          'order-confirmation-customer',
+          orderConfirmationCustomerWhatsAppTemplate(params),
           'CUSTOMER',
           params.customerWhatsAppNumber,
-          orderConfirmationCustomerWhatsAppTemplate(params),
           attempts,
         ),
       );
     }
     if (settings.whatsappEnabled && settings.ownerWhatsappNumber) {
       tasks.push(
-        this.trySendWhatsApp(
+        this.trySendWhatsAppFromDefault(
           settings,
+          'order-confirmation-owner',
+          orderConfirmationOwnerWhatsAppTemplate(params),
           'OWNER',
           settings.ownerWhatsappNumber,
-          orderConfirmationOwnerWhatsAppTemplate(params),
           attempts,
         ),
       );
     }
     if (settings.emailEnabled) {
       tasks.push(
-        this.trySendEmail(
-          settings,
-          'CUSTOMER',
-          params.customerEmail,
-          orderConfirmationCustomerEmailTemplate(params),
-          attempts,
-        ),
+        (async () => {
+          const rendered = await this.tenantEmailTemplates.renderEmail(
+            settings.tenantId,
+            'order-confirmation-customer',
+            { ...tokens, businessName: branding.businessName },
+          );
+          await this.trySendEmail(
+            settings,
+            'CUSTOMER',
+            params.customerEmail,
+            {
+              subject: rendered.subject,
+              html: renderEmailShell({
+                brandName: branding.businessName,
+                brandLogoUrl: branding.logoUrl,
+                bodyHtml: rendered.html,
+                ownerLine: branding.businessName,
+                showPoweredBy: branding.showPoweredBy,
+              }),
+            },
+            attempts,
+          );
+        })(),
       );
       if (settings.ownerNotificationEmail) {
         tasks.push(
-          this.trySendEmail(
-            settings,
-            'OWNER',
-            settings.ownerNotificationEmail,
-            orderConfirmationOwnerEmailTemplate(params),
-            attempts,
-          ),
+          (async () => {
+            const rendered = await this.platformEmailTemplates.render(
+              'order-confirmation-owner',
+              tokens,
+            );
+            await this.trySendEmail(
+              settings,
+              'OWNER',
+              settings.ownerNotificationEmail as string,
+              {
+                subject: rendered.subject,
+                html: renderEmailShell({
+                  brandName: branding.businessName,
+                  brandLogoUrl: branding.logoUrl,
+                  bodyHtml: rendered.html,
+                  ownerLine: branding.businessName,
+                  showPoweredBy: branding.showPoweredBy,
+                }),
+              },
+              attempts,
+            );
+          })(),
         );
       }
     }
@@ -199,33 +284,87 @@ export class NotificationsService {
     const attempts: NotificationAttempt[] = [];
     if (!settings) return attempts;
 
+    const dayWord = params.compensationDays === 1 ? 'day' : 'days';
+    const tokens = {
+      customerName: params.customerName,
+      planName: params.planName,
+      dateLabel: params.dateLabel,
+      reason: params.reason,
+      compensationDays: String(params.compensationDays),
+      dayWord,
+    };
+    const branding = await getTenantEmailBranding(
+      this.prisma,
+      settings.tenantId,
+    );
     const tasks: Promise<void>[] = [];
 
     if (settings.whatsappEnabled && params.customerWhatsAppNumber) {
       tasks.push(
-        this.trySendWhatsApp(
+        this.trySendWhatsAppFromDefault(
           settings,
+          'subscription-disruption',
+          subscriptionDisruptionWhatsAppTemplate(params),
           'CUSTOMER',
           params.customerWhatsAppNumber,
-          subscriptionDisruptionWhatsAppTemplate(params),
           attempts,
         ),
       );
     }
     if (settings.emailEnabled) {
       tasks.push(
-        this.trySendEmail(
-          settings,
-          'CUSTOMER',
-          params.customerEmail,
-          subscriptionDisruptionEmailTemplate(params),
-          attempts,
-        ),
+        (async () => {
+          const rendered = await this.platformEmailTemplates.render(
+            'subscription-disruption',
+            tokens,
+          );
+          await this.trySendEmail(
+            settings,
+            'CUSTOMER',
+            params.customerEmail,
+            {
+              subject: rendered.subject,
+              html: renderEmailShell({
+                brandName: branding.businessName,
+                brandLogoUrl: branding.logoUrl,
+                bodyHtml: rendered.html,
+                ownerLine: branding.businessName,
+                showPoweredBy: branding.showPoweredBy,
+              }),
+            },
+            attempts,
+          );
+        })(),
       );
     }
 
     await Promise.all(tasks);
     return attempts;
+  }
+
+  /** WhatsApp params are computed by the existing per-key template
+   * functions (correct order/values for the real approved template) — only
+   * the template *name* is swapped for whatever SUPER_ADMIN has registered,
+   * never the param order (see PlatformWhatsAppTemplateService). */
+  private async trySendWhatsAppFromDefault(
+    settings: NotificationSettings,
+    key: string,
+    template: { templateKey: string; params: Record<string, string> },
+    recipientType: NotificationRecipientType,
+    to: string,
+    attempts: NotificationAttempt[],
+  ): Promise<void> {
+    const templateKey = await this.whatsAppTemplates.resolveTemplateKey(
+      key,
+      template.templateKey,
+    );
+    await this.trySendWhatsApp(
+      settings,
+      recipientType,
+      to,
+      { templateKey, params: template.params },
+      attempts,
+    );
   }
 
   private async trySendWhatsApp(

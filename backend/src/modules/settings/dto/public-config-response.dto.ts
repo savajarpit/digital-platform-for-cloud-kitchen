@@ -128,6 +128,14 @@ export class PublicConfigResponseDto {
   @Expose()
   showReviewsOnHomepage: boolean;
 
+  @ApiProperty({
+    example: true,
+    description:
+      'SUPER_ADMIN-controlled — whether the "Powered by OkaySync" line shows in the footer. Never editable by the tenant.',
+  })
+  @Expose()
+  poweredByBrandingEnabled: boolean;
+
   @ApiPropertyOptional({ example: 'Fresh & healthy' })
   @Expose()
   heroTagline?: string;

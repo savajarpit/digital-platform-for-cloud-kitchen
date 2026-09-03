@@ -7,6 +7,7 @@ import { NotificationLogsRepository } from './notification-logs.repository';
 import { WhatsAppProviderFactory } from './providers/whatsapp/whatsapp-provider.factory';
 import { EmailProviderFactory } from './providers/email/email-provider.factory';
 import { MailModule } from '../../shared-modules/mail/mail.module';
+import { NotificationTemplatesModule } from '../../shared-modules/notification-templates/notification-templates.module';
 import { OrdersModule } from '../orders/orders.module';
 import { SettingsModule } from '../settings/settings.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
@@ -15,6 +16,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
   imports: [
     HttpModule,
     MailModule,
+    NotificationTemplatesModule,
     BullModule.registerQueue({ name: 'notifications' }),
     OrdersModule,
     SettingsModule,

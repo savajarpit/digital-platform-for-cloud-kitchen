@@ -149,10 +149,20 @@ export async function Footer({
               <span>FSSAI Lic. No: {config.fssaiLicenseNumber}</span>
             </div>
           )}
-          <p className="text-xs text-zinc-600">
-            Powered by {process.env.NEXT_PUBLIC_PLATFORM_NAME ?? "our platform"} — orders and content
-            on this site are provided by {config.displayName}.
-          </p>
+          {config.poweredByBrandingEnabled && (
+            <p className="text-xs text-zinc-600">
+              Powered by{" "}
+              <a
+                href="https://okaysync.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline transition-colors hover:text-primary-400"
+              >
+                OkaySync
+              </a>{" "}
+              — orders and content on this site are provided by {config.displayName}.
+            </p>
+          )}
         </div>
       </div>
     </footer>

@@ -72,4 +72,16 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     description: 'View customer accounts and their order history',
     category: 'operations',
   },
+  {
+    key: 'notification-templates.email.edit',
+    description:
+      'Edit the wording of your customer emails (order confirmation, welcome, reset-password) — only takes effect once SUPER_ADMIN has granted the Custom Notification Templates feature',
+    category: 'settings',
+  },
+  {
+    key: 'notification-templates.whatsapp.edit',
+    description:
+      'Preview and pick between SUPER_ADMIN-approved WhatsApp message formats for order confirmations — only takes effect once SUPER_ADMIN has granted the Custom Notification Templates feature',
+    category: 'settings',
+  },
 ];

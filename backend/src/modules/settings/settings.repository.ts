@@ -21,6 +21,16 @@ export class SettingsRepository {
     return this.prisma.businessProfile.findUnique({ where: { tenantId } });
   }
 
+  /** Just the SUPER_ADMIN-controlled "powered by" flag — used by the public
+   * storefront config, never editable through this tenant-scoped module. */
+  async findPoweredByBrandingEnabled(tenantId: string): Promise<boolean> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { poweredByBrandingEnabled: true },
+    });
+    return tenant?.poweredByBrandingEnabled ?? true;
+  }
+
   updateBusinessProfile(
     tenantId: string,
     data: Prisma.BusinessProfileUpdateInput,

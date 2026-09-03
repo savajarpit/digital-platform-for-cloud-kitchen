@@ -5,11 +5,13 @@ import { MailService } from '../../mail/mail.service';
 
 export interface WelcomeEmailJob {
   email: string;
+  tenantId: string;
   firstName: string;
 }
 
 export interface ResetPasswordEmailJob {
   email: string;
+  tenantId: string;
   resetUrl: string;
 }
 
@@ -74,16 +76,20 @@ export class MailProcessor {
 
   @Process('send-welcome')
   async sendWelcome(job: Job<WelcomeEmailJob>) {
-    await this.mailService.sendWelcome(job.data.email, {
+    await this.mailService.sendWelcome(job.data.email, job.data.tenantId, {
       firstName: job.data.firstName,
     });
   }
 
   @Process('send-reset-password')
   async sendResetPassword(job: Job<ResetPasswordEmailJob>) {
-    await this.mailService.sendResetPassword(job.data.email, {
-      resetUrl: job.data.resetUrl,
-    });
+    await this.mailService.sendResetPassword(
+      job.data.email,
+      job.data.tenantId,
+      {
+        resetUrl: job.data.resetUrl,
+      },
+    );
   }
 
   @Process('send-platform-activation-invite')

@@ -32,6 +32,9 @@ export interface PublicConfig {
   searchConsoleVerification?: string;
   maxAdvanceOrderDays: number;
   showReviewsOnHomepage: boolean;
+  /** SUPER_ADMIN-controlled — whether the "Powered by OkaySync" line shows
+   * in the footer. Never editable by the tenant. */
+  poweredByBrandingEnabled: boolean;
   heroTagline?: string;
   heroTitle?: string;
   heroSubtitle?: string;
@@ -58,6 +61,7 @@ export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   currency: "INR",
   maxAdvanceOrderDays: 2,
   showReviewsOnHomepage: false,
+  poweredByBrandingEnabled: true,
   heroTagline: "Fresh & healthy",
   heroSubtitle: "Fresh, healthy meals delivered to your door.",
   heroImageUrls: [],

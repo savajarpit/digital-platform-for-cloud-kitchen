@@ -100,6 +100,9 @@ function BasicsCard({
   const [businessName, setBusinessName] = useState(tenant.name);
   const [customDomain, setCustomDomain] = useState(tenant.customDomain ?? "");
   const [status, setStatus] = useState(tenant.status);
+  const [poweredByBrandingEnabled, setPoweredByBrandingEnabled] = useState(
+    tenant.poweredByBrandingEnabled,
+  );
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -110,6 +113,7 @@ function BasicsCard({
         businessName,
         customDomain: customDomain || undefined,
         status: status as "ACTIVE" | "INACTIVE" | "SUSPENDED",
+        poweredByBrandingEnabled,
       });
       onSaved({ ...tenant, ...updated });
       showToast("Tenant updated", "success");
@@ -161,6 +165,18 @@ function BasicsCard({
             </SelectContent>
           </Select>
         </div>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border border-zinc-200 px-3.5 py-2.5 dark:border-zinc-800">
+        <div>
+          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+            &ldquo;Powered by OkaySync&rdquo; branding
+          </p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Shown on this tenant&apos;s storefront footer and customer emails. Never editable by the
+            tenant.
+          </p>
+        </div>
+        <Toggle checked={poweredByBrandingEnabled} onChange={setPoweredByBrandingEnabled} />
       </div>
       <div className="text-xs text-zinc-500 dark:text-zinc-400">
         Owner login: <span className="font-mono">{tenant.users[0]?.email ?? "—"}</span>

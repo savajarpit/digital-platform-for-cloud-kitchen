@@ -37,6 +37,9 @@ export interface TenantListItem {
 
 export interface TenantDetail extends TenantListItem {
   updatedAt: string;
+  /** SUPER_ADMIN-only — whether the "Powered by OkaySync" line shows on
+   * this tenant's storefront footer and customer-facing emails. */
+  poweredByBrandingEnabled: boolean;
   businessProfile: {
     displayName: string;
     description: string | null;
@@ -85,6 +88,7 @@ export interface UpdateTenantInput {
   businessName?: string;
   customDomain?: string;
   status?: "ACTIVE" | "INACTIVE" | "SUSPENDED";
+  poweredByBrandingEnabled?: boolean;
 }
 
 export function listTenants(): Promise<TenantListItem[]> {

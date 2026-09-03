@@ -54,10 +54,12 @@ export class SettingsService {
       throw new NotFoundException('No tenant context for this request');
     }
 
-    const [profile, homePageContent] = await Promise.all([
-      this.settingsRepo.findBusinessProfile(tenantId),
-      this.settingsRepo.findHomePageContent(tenantId),
-    ]);
+    const [profile, homePageContent, poweredByBrandingEnabled] =
+      await Promise.all([
+        this.settingsRepo.findBusinessProfile(tenantId),
+        this.settingsRepo.findHomePageContent(tenantId),
+        this.settingsRepo.findPoweredByBrandingEnabled(tenantId),
+      ]);
     if (!profile) {
       throw new NotFoundException('Business profile not configured yet');
     }
@@ -94,6 +96,7 @@ export class SettingsService {
       searchConsoleVerification: profile.searchConsoleVerification ?? undefined,
       maxAdvanceOrderDays: profile.maxAdvanceOrderDays,
       showReviewsOnHomepage: profile.showReviewsOnHomepage,
+      poweredByBrandingEnabled,
       heroTagline: homePageContent?.heroTagline ?? heroDefaults.heroTagline,
       heroTitle: homePageContent?.heroTitle ?? undefined,
       heroSubtitle: homePageContent?.heroSubtitle ?? heroDefaults.heroSubtitle,

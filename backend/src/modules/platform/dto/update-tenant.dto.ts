@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
@@ -26,4 +27,12 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsEnum(Status)
   status?: Status;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether the "Powered by OkaySync" line shows on this tenant\'s storefront footer and customer-facing emails — SUPER_ADMIN-only, never editable by the tenant itself',
+  })
+  @IsOptional()
+  @IsBoolean()
+  poweredByBrandingEnabled?: boolean;
 }

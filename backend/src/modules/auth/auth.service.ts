@@ -155,6 +155,7 @@ export class AuthService {
 
     const welcomeJob: WelcomeEmailJob = {
       email: verifiedUser.email,
+      tenantId: verifiedUser.tenantId,
       firstName: verifiedUser.firstName,
     };
     await withTimeout(
@@ -231,7 +232,11 @@ export class AuthService {
     );
 
     const resetUrl = `${this.config.get<string>('app.frontendUrl')}/reset-password?token=${token}`;
-    const job: ResetPasswordEmailJob = { email: user.email, resetUrl };
+    const job: ResetPasswordEmailJob = {
+      email: user.email,
+      tenantId: user.tenantId,
+      resetUrl,
+    };
     await withTimeout(
       this.mailQueue.add('send-reset-password', job, {
         attempts: 3,
@@ -281,6 +286,7 @@ export class AuthService {
 
     const settings = await this.settingsRepo.findNotificationSettings(tenantId);
     const sendPromise = this.notificationsService.sendOtp(settings, {
+      tenantId,
       recipientEmail: email,
       recipientName: firstName,
       recipientWhatsAppNumber: phone ?? undefined,

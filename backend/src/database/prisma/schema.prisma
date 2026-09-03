@@ -192,54 +192,63 @@ enum PlatformInvoiceStatus {
 // ─── Tenant ──────────────────────────────────────────────
 
 model Tenant {
-  id           String   @id @default(uuid())
-  name         String
-  slug         String   @unique
-  customDomain String?  @unique
-  plan         Plan     @default(FREE)
-  status       Status   @default(ACTIVE)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                       String   @id @default(uuid())
+  name                     String
+  slug                     String   @unique
+  customDomain             String?  @unique
+  plan                     Plan     @default(FREE)
+  status                   Status   @default(ACTIVE)
+  // SUPER_ADMIN-only, per-tenant switch for the "Powered by OkaySync"
+  // disclaimer on this tenant's storefront footer and customer-facing
+  // emails (order confirmation, welcome, reset-password, OTP) — never a
+  // Feature/Permission since those grant capabilities *to* a tenant, and
+  // this is the reverse: something SUPER_ADMIN controls *about* a tenant
+  // that the tenant can never touch. Platform-ops emails (billing/invoice)
+  // always carry OkaySync branding regardless of this flag.
+  poweredByBrandingEnabled Boolean  @default(true)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
-  users                    User[]
-  businessProfile          BusinessProfile?
-  orderAcceptanceSettings  OrderAcceptanceSettings?
-  notificationSettings     NotificationSettings?
-  paymentSettings          PaymentSettings?
-  serviceablePincodes      ServiceablePincode[]
-  kitchenZones             KitchenZone[]
-  rolePermissions          RolePermission[]
-  tenantFeatures           TenantFeature[]
-  categories               Category[]
-  meals                    Meal[]
-  addresses                Address[]
-  orders                   Order[]
-  deliverySlots            DeliverySlot[]
-  notificationLogs         NotificationLog[]
-  coupons                  Coupon[]
-  couponRedemptions        CouponRedemption[]
-  planCouponRedemptions    PlanCouponRedemption[]
-  promotions               Promotion[]
-  subscriptionPlans        SubscriptionPlan[]
-  subscriptions            Subscription[]
-  subscriptionInvoices     SubscriptionInvoice[]
-  subscriptionDisruptions  SubscriptionDisruption[]
-  subscriptionSettings     SubscriptionSettings?
-  instantDeliverySettings  InstantDeliverySettings?
-  staticPages              StaticPage[]
-  platformTermsAcceptances PlatformTermsAcceptance[]
-  platformSubscription     PlatformSubscription?
-  activationInvites        TenantActivationInvite[]
-  platformInvoices         PlatformInvoice[]
-  tenantLimits             TenantLimits?
-  platformLeads            PlatformLead[]
-  cancellationRequests     PlatformCancellationRequest[]
-  homeSections             HomeSection[]
-  reviews                  Review[]
-  socialLinks              SocialLink[]
-  homePageContent          HomePageContent?
-  planFeatures             PlanFeature[]
-  planFaqs                 PlanFaq[]
+  users                       User[]
+  businessProfile             BusinessProfile?
+  orderAcceptanceSettings     OrderAcceptanceSettings?
+  notificationSettings        NotificationSettings?
+  paymentSettings             PaymentSettings?
+  serviceablePincodes         ServiceablePincode[]
+  kitchenZones                KitchenZone[]
+  rolePermissions             RolePermission[]
+  tenantFeatures              TenantFeature[]
+  categories                  Category[]
+  meals                       Meal[]
+  addresses                   Address[]
+  orders                      Order[]
+  deliverySlots               DeliverySlot[]
+  notificationLogs            NotificationLog[]
+  coupons                     Coupon[]
+  couponRedemptions           CouponRedemption[]
+  planCouponRedemptions       PlanCouponRedemption[]
+  promotions                  Promotion[]
+  subscriptionPlans           SubscriptionPlan[]
+  subscriptions               Subscription[]
+  subscriptionInvoices        SubscriptionInvoice[]
+  subscriptionDisruptions     SubscriptionDisruption[]
+  subscriptionSettings        SubscriptionSettings?
+  instantDeliverySettings     InstantDeliverySettings?
+  staticPages                 StaticPage[]
+  platformTermsAcceptances    PlatformTermsAcceptance[]
+  platformSubscription        PlatformSubscription?
+  activationInvites           TenantActivationInvite[]
+  platformInvoices            PlatformInvoice[]
+  tenantLimits                TenantLimits?
+  platformLeads               PlatformLead[]
+  cancellationRequests        PlatformCancellationRequest[]
+  homeSections                HomeSection[]
+  reviews                     Review[]
+  socialLinks                 SocialLink[]
+  homePageContent             HomePageContent?
+  planFeatures                PlanFeature[]
+  planFaqs                    PlanFaq[]
+  tenantNotificationTemplates TenantNotificationTemplate[]
 
   @@map("tenants")
 }
@@ -603,6 +612,77 @@ model TenantFeature {
   @@map("tenant_features")
 }
 
+// ─── Notification templates (email + WhatsApp) ────────────
+// PlatformEmailTemplate is the single SUPER_ADMIN edit surface for every
+// email in the system: the 7 platform-to-tenant ops emails (scope
+// PLATFORM_OPS, always OkaySync-branded) and the default wording for the 6
+// customer-facing ones (scope CUSTOMER_DEFAULT — order confirmation x2,
+// welcome, reset-password, OTP, subscription-disruption). A tenant may only
+// ever override the 3 keys covered by TenantNotificationTemplate below, and
+// only once SUPER_ADMIN has granted them the `custom-notification-templates`
+// Feature plus the matching Permission.
+enum EmailTemplateScope {
+  PLATFORM_OPS
+  CUSTOMER_DEFAULT
+}
+
+model PlatformEmailTemplate {
+  id              String             @id @default(uuid())
+  key             String             @unique
+  name            String
+  description     String
+  scope           EmailTemplateScope
+  subject         String
+  bodyHtml        String
+  availableVars   String[]           @default([])
+  updatedByUserId String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@map("platform_email_templates")
+}
+
+// A tenant's own override of one of the 3 customer-facing keys eligible for
+// customization (order-confirmation-customer / welcome / reset-password).
+// Absent row = falls back to PlatformEmailTemplate's CUSTOMER_DEFAULT row
+// for the same key. OTP and subscription-disruption deliberately have no
+// override path here — never tenant-editable, any role, any feature grant.
+model TenantNotificationTemplate {
+  id              String   @id @default(uuid())
+  tenantId        String
+  key             String
+  subject         String
+  bodyHtml        String
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("tenant_notification_templates")
+}
+
+// SUPER_ADMIN-only registry of the real Meta/Interakt-approved WhatsApp
+// template per notification key. The approved template's actual wording
+// lives outside this app (Interakt dashboard, Meta-reviewed) — this row
+// only records which approved template name to send and how our own data
+// maps onto its numbered placeholders, so a tenant with the WhatsApp
+// permission can preview the exact message (and pick among variants, if
+// more than one is ever registered for the same key) without being able to
+// change wording that isn't ours to change.
+model PlatformWhatsAppTemplate {
+  id           String   @id @default(uuid())
+  key          String   @unique
+  templateKey  String
+  placeholders Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("platform_whatsapp_templates")
+}
+
 // ─── Menu (Category + Meal) ──────────────────────────────
 
 model Category {
@@ -624,29 +704,29 @@ model Category {
 }
 
 model Meal {
-  id                 String    @id @default(uuid())
+  id                 String          @id @default(uuid())
   tenantId           String
   categoryId         String?
   name               String
   description        String?
   imageUrl           String?
   priceInPaise       Int
-  nutrition          Json      @default("{}")
-  isVegetarian       Boolean   @default(true)
-  isAvailable        Boolean   @default(true)
+  nutrition          Json            @default("{}")
+  isVegetarian       Boolean         @default(true)
+  isAvailable        Boolean         @default(true)
   // Admin-curated "Popular" flag — mirrors SubscriptionPlan.isPopular. Drives
   // a storefront badge and the menu page's Popular filter; not computed from
   // real order analytics.
-  isPopular          Boolean   @default(false)
+  isPopular          Boolean         @default(false)
   // Both null unless the admin explicitly sets a weight — the menu card
   // only shows a weight badge when both are present.
   weightValue        Float?
   weightUnit         MealWeightUnit?
   dailyQuantityLimit Int?
-  sortOrder          Int       @default(0)
+  sortOrder          Int             @default(0)
   deletedAt          DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   tenant                Tenant                 @relation(fields: [tenantId], references: [id])
   category              Category?              @relation(fields: [categoryId], references: [id])
@@ -826,7 +906,7 @@ model Address {
 }
 
 model Order {
-  id                  String        @id @default(uuid())
+  id                  String               @id @default(uuid())
   tenantId            String
   userId              String
   // Required for DELIVERY, null for PICKUP — enforced in the service layer,
@@ -837,19 +917,19 @@ model Order {
   // Required for PICKUP, null for DELIVERY.
   pickupKitchenZoneId String?
   orderNumber         String
-  status              OrderStatus   @default(PENDING_PAYMENT)
-  paymentStatus       PaymentStatus @default(PENDING)
+  status              OrderStatus          @default(PENDING_PAYMENT)
+  paymentStatus       PaymentStatus        @default(PENDING)
   subtotalInPaise     Int
   // Sum of all applied discounts (scheduled promos + BOGO/free-item retail
   // value + coupon), always computed server-side, never trusted from the
   // client. subtotalInPaise already includes any free items at their real
   // retail price, so totalInPaise = subtotalInPaise - discountInPaise +
   // deliveryFeeInPaise.
-  discountInPaise     Int           @default(0)
+  discountInPaise     Int                  @default(0)
   // Snapshotted like item price/name — a later coupon edit never rewrites
   // past order history.
   couponCode          String?
-  deliveryFeeInPaise  Int           @default(0)
+  deliveryFeeInPaise  Int                  @default(0)
   totalInPaise        Int
   // The chosen calendar day, and a snapshot of the slot's name/window at
   // order time — snapshotted like OrderItem's price/name, so a tenant
@@ -859,7 +939,7 @@ model Order {
   deliverySlotName    String
   deliveryWindowStart String
   deliveryWindowEnd   String
-  razorpayOrderId     String?       @unique
+  razorpayOrderId     String?              @unique
   razorpayPaymentId   String?
   notes               String?
   // Set only for a nightly-materialized subscription delivery — lets the
@@ -870,9 +950,9 @@ model Order {
   // day/slot — deliverySlotId is null and deliveryWindowStart/End are a
   // snapshot of now + the tenant's configured ETA at order time, not a
   // named DeliverySlot's fixed window.
-  isInstant           Boolean       @default(false)
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  isInstant           Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   tenant            Tenant            @relation(fields: [tenantId], references: [id])
   user              User              @relation(fields: [userId], references: [id])
@@ -1038,14 +1118,14 @@ model Promotion {
 // reserved for a later pass) ──────────────────────────────
 
 model SubscriptionPlan {
-  id           String               @id @default(uuid())
-  tenantId     String
-  type         SubscriptionPlanType @default(CURATED)
-  name         String
-  description  String?
-  durationDays Int
-  priceInPaise Int
-  isActive     Boolean              @default(true)
+  id                 String                         @id @default(uuid())
+  tenantId           String
+  type               SubscriptionPlanType           @default(CURATED)
+  name               String
+  description        String?
+  durationDays       Int
+  priceInPaise       Int
+  isActive           Boolean                        @default(true)
   // See SubscriptionPlanSchedulingMode. WEEKLY_FIXED only — weekCount is
   // how many distinct authored weeks exist before the template loops back
   // to week 1 (kept separate from durationDays, which keeps meaning "paid
@@ -1062,10 +1142,10 @@ model SubscriptionPlan {
   // any time (unlike schedulingMode) since it only affects cycleEnd math at
   // a NEW subscription's activation, never a live subscriber's existing
   // cycleEnd.
-  offDayHandling SubscriptionOffDayHandling @default(LOSS_DELIVERY)
+  offDayHandling     SubscriptionOffDayHandling     @default(LOSS_DELIVERY)
   // A plan can be published while some SubscriptionPlanSlots are still TBD
   // (mealId null) — lets an OWNER pre-sell before finishing later days.
-  isPublished  Boolean              @default(false)
+  isPublished        Boolean                        @default(false)
   // Storefront card display — bullet points (e.g. "Free delivery", "Skip or
   // pause anytime"), a highlight badge, and which of the tenant's own
   // semantic theme ramps (never a raw hex) accents the card. Ported from
@@ -1074,14 +1154,14 @@ model SubscriptionPlan {
   // which would break "changing brand colors reskins everything instantly"
   // — accentColor is a ramp choice instead, resolved to real classes by a
   // lookup map on the frontend so Tailwind's JIT scanner can still see them.
-  features     String[]             @default([])
-  badgeText    String?
-  isPopular    Boolean              @default(false)
-  accentColor  PlanAccentColor      @default(PRIMARY)
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  features           String[]                       @default([])
+  badgeText          String?
+  isPopular          Boolean                        @default(false)
+  accentColor        PlanAccentColor                @default(PRIMARY)
+  createdAt          DateTime                       @default(now())
+  updatedAt          DateTime                       @updatedAt
 
-  tenant        Tenant                     @relation(fields: [tenantId], references: [id])
+  tenant        Tenant                   @relation(fields: [tenantId], references: [id])
   days          SubscriptionPlanDay[]
   subscriptions Subscription[]
   disruptions   SubscriptionDisruption[]
@@ -1092,19 +1172,19 @@ model SubscriptionPlan {
 }
 
 model SubscriptionPlanDay {
-  id        String   @id @default(uuid())
-  planId    String
+  id         String   @id @default(uuid())
+  planId     String
   // RELATIVE_DAY rows only. WEEKLY_FIXED rows instead carry
   // weekNumber+weekday — a plan is always exclusively one mode, so a given
   // plan's rows never actually mix populated dayNumber with populated
   // weekNumber/weekday.
-  dayNumber Int?
+  dayNumber  Int?
   // WEEKLY_FIXED rows only, 1-based.
   weekNumber Int?
   // WEEKLY_FIXED rows only, 0=Sun..6=Sat — matches Promotion.daysOfWeek /
   // DateUtil.getTenantDayOfWeek's convention.
   weekday    Int?
-  createdAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   plan  SubscriptionPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
   slots SubscriptionPlanSlot[]
@@ -1640,12 +1720,12 @@ enum PlatformCancellationRequestStatus {
 // only he actually schedules the cancellation (via the existing
 // PlatformSubscription cancelAtPeriodEnd flow) once he's talked to them.
 model PlatformCancellationRequest {
-  id        String                             @id @default(uuid())
+  id        String                            @id @default(uuid())
   tenantId  String
   reason    String
-  status    PlatformCancellationRequestStatus  @default(PENDING)
-  createdAt DateTime                           @default(now())
-  updatedAt DateTime                           @updatedAt
+  status    PlatformCancellationRequestStatus @default(PENDING)
+  createdAt DateTime                          @default(now())
+  updatedAt DateTime                          @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 

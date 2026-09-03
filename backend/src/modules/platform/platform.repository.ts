@@ -180,7 +180,12 @@ export class PlatformRepository {
 
   updateTenant(
     id: string,
-    data: { name?: string; customDomain?: string; status?: Status },
+    data: {
+      name?: string;
+      customDomain?: string;
+      status?: Status;
+      poweredByBrandingEnabled?: boolean;
+    },
   ): Promise<Tenant> {
     return this.prisma.tenant.update({ where: { id }, data });
   }

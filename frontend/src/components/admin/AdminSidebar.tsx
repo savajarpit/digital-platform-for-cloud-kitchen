@@ -13,7 +13,9 @@ import {
   Gauge,
   LayoutGrid,
   Lock,
+  Mail,
   MapPin,
+  MessageSquare,
   Package,
   Store,
   Tag,
@@ -58,6 +60,12 @@ const SETTINGS_NAV: NavItem[] = [
   { href: "/admin/settings/notifications", label: "Notifications", icon: Bell, permission: PERMISSIONS.NOTIFICATIONS_EDIT },
   { href: "/admin/settings/payment", label: "Payment", icon: CreditCard, permission: PERMISSIONS.PAYMENT_EDIT },
   { href: "/admin/settings/content", label: "Legal Pages", icon: FileText, permission: PERMISSIONS.CONTENT_EDIT },
+  {
+    href: "/admin/settings/notification-templates",
+    label: "Message Templates",
+    icon: Mail,
+    feature: "custom-notification-templates",
+  },
   { href: "/admin/settings/plan", label: "My Plan", icon: Gauge },
 ];
 
@@ -156,6 +164,28 @@ export function AdminSidebar() {
           >
             <XCircle className="h-4 w-4 shrink-0" />
             <span className="flex-1">Cancellation Requests</span>
+          </Link>
+          <Link
+            href="/admin/platform/email-templates"
+            className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
+              pathname.startsWith("/admin/platform/email-templates")
+                ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <Mail className="h-4 w-4 shrink-0" />
+            <span className="flex-1">Email Templates</span>
+          </Link>
+          <Link
+            href="/admin/platform/whatsapp-templates"
+            className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
+              pathname.startsWith("/admin/platform/whatsapp-templates")
+                ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            }`}
+          >
+            <MessageSquare className="h-4 w-4 shrink-0" />
+            <span className="flex-1">WhatsApp Templates</span>
           </Link>
           <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
         </>

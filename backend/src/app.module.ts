@@ -69,6 +69,9 @@ import { HomeSectionsModule } from './modules/home-sections/home-sections.module
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SocialLinksModule } from './modules/social-links/social-links.module';
 import { PlanContentModule } from './modules/plan-content/plan-content.module';
+import { PlatformEmailTemplatesModule } from './modules/platform-email-templates/platform-email-templates.module';
+import { PlatformWhatsAppTemplatesModule } from './modules/platform-whatsapp-templates/platform-whatsapp-templates.module';
+import { NotificationTemplatesModule } from './modules/notification-templates/notification-templates.module';
 
 @Module({
   imports: [
@@ -163,6 +166,9 @@ import { PlanContentModule } from './modules/plan-content/plan-content.module';
     ReviewsModule,
     SocialLinksModule,
     PlanContentModule,
+    PlatformEmailTemplatesModule,
+    PlatformWhatsAppTemplatesModule,
+    NotificationTemplatesModule,
   ],
 
   providers: [

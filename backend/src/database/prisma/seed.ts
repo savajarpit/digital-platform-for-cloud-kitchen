@@ -22,6 +22,10 @@ import {
   defaultPlanFeatures,
   defaultPlanFaqs,
 } from '../../common/constants/tenant-default-content';
+import {
+  PLATFORM_EMAIL_TEMPLATE_DEFAULTS,
+  PLATFORM_WHATSAPP_TEMPLATE_DEFAULTS,
+} from '../../common/constants/notification-template-defaults';
 
 dotenv.config({
   path: path.resolve(
@@ -158,6 +162,45 @@ async function main() {
       });
     }
     console.log(`Feature catalog synced (${FEATURE_CATALOG.length} entries).`);
+
+    // Email/WhatsApp template defaults — same "create if missing, refresh
+    // only catalog metadata (never the editable subject/bodyHtml/
+    // templateKey/placeholders)" rule as permissions/features above, so a
+    // restart never silently discards a real SUPER_ADMIN edit.
+    for (const row of PLATFORM_EMAIL_TEMPLATE_DEFAULTS) {
+      const existing = await prisma.platformEmailTemplate.findUnique({
+        where: { key: row.key },
+      });
+      if (existing) {
+        await prisma.platformEmailTemplate.update({
+          where: { key: row.key },
+          data: {
+            name: row.name,
+            description: row.description,
+            scope: row.scope,
+            availableVars: row.availableVars,
+          },
+        });
+      } else {
+        await prisma.platformEmailTemplate.create({ data: row });
+      }
+    }
+    console.log(
+      `Email template catalog synced (${PLATFORM_EMAIL_TEMPLATE_DEFAULTS.length} entries).`,
+    );
+
+    for (const row of PLATFORM_WHATSAPP_TEMPLATE_DEFAULTS) {
+      const existing = await prisma.platformWhatsAppTemplate.findUnique({
+        where: { key: row.key },
+      });
+      if (!existing) {
+        await prisma.platformWhatsAppTemplate.create({ data: row });
+      }
+    }
+    console.log(
+      `WhatsApp template catalog synced (${PLATFORM_WHATSAPP_TEMPLATE_DEFAULTS.length} entries).`,
+    );
+
     // No default TenantFeature rows are created here — a new tenant simply
     // has no rows, which the features service already treats as "disabled"
     // for every key. Premium features are opt-in per sale (SUPER_ADMIN

@@ -128,6 +128,7 @@ export class PlatformService {
       name: dto.businessName,
       customDomain: dto.customDomain,
       status: dto.status,
+      poweredByBrandingEnabled: dto.poweredByBrandingEnabled,
     });
   }
 

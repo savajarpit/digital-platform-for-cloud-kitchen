@@ -13,6 +13,8 @@ export interface SmtpProviderConfig {
   password?: string;
   fromAddress: string;
   fromName: string;
+  /** DEV ONLY — skip TLS chain verification (see mail.config allowSelfSignedTls). */
+  allowSelfSignedTls?: boolean;
 }
 
 export class SmtpProvider implements EmailProvider {
@@ -26,6 +28,9 @@ export class SmtpProvider implements EmailProvider {
       auth: config.user
         ? { user: config.user, pass: config.password }
         : undefined,
+      ...(config.allowSelfSignedTls
+        ? { tls: { rejectUnauthorized: false } }
+        : {}),
     });
   }
 

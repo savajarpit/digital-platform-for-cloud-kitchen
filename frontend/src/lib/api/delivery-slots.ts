@@ -11,6 +11,11 @@ export interface DeliverySlot {
 export interface DeliverySlotsConfig {
   maxAdvanceOrderDays: number;
   slots: DeliverySlot[];
+  /** "Today" (YYYY-MM-DD) and minutes-since-midnight in the tenant's
+   * timezone — the checkout day/slot pickers must anchor to these, not the
+   * browser clock, or a near-midnight order gets rejected server-side. */
+  todayStr: string;
+  nowMinutes: number;
 }
 
 /** Public, client-side — drives the checkout page's day/slot pickers. */

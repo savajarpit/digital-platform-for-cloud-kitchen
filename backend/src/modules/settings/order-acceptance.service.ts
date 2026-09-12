@@ -120,12 +120,17 @@ export class OrderAcceptanceService {
     }
 
     const timezone = profile?.timezone ?? 'Asia/Kolkata';
+    // `hourCycle: 'h23'`, NOT `hour12: false` — the latter renders the
+    // midnight hour as "24" in en-US (00:18 → "24:18"), so every night
+    // between 00:00 and 00:59 currentMinutes lands at 1440+ and trips the
+    // `>= closeMinutes` check, reporting the kitchen closed regardless of
+    // operating hours. 'h23' gives a real 00–23.
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
       weekday: 'short',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
+      hourCycle: 'h23',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

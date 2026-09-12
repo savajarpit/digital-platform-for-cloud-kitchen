@@ -12,6 +12,10 @@ import { TwilioProvider } from './twilio.provider';
 
 interface TwilioSecrets {
   accountSid: string;
+  /** Optional templateKey → Twilio Content Template SID (`HX…`) map — see
+   * TwilioProviderConfig.contentSids. Stored inside the same encrypted
+   * whatsappConfig blob as accountSid. */
+  contentSids?: Record<string, string>;
 }
 
 /**
@@ -71,6 +75,7 @@ export class WhatsAppProviderFactory {
             encryptionKey,
           ),
           senderNumber: settings.whatsappSenderNumber,
+          contentSids: secrets.contentSids,
         });
       }
 

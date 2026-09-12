@@ -37,6 +37,16 @@ import { UpdateDeliverySlotDto } from './dto/update-delivery-slot.dto';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
 import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
 import { CryptoUtil } from '../../common/utils/crypto.util';
+import { DateUtil } from '../../common/utils/date.util';
+
+/** Client-facing shape of the instant-delivery settings — the editable
+ * fields only, matching UpdateInstantDeliverySettingsDto so the storefront
+ * can round-trip it through the PATCH without tripping forbidNonWhitelisted. */
+export interface InstantDeliveryView {
+  isEnabled: boolean;
+  etaMinMinutes: number;
+  etaMaxMinutes: number;
+}
 
 @Injectable()
 export class SettingsService {
@@ -122,14 +132,29 @@ export class SettingsService {
     });
   }
 
-  async getDeliverySlots(
-    tenantId: string,
-  ): Promise<{ maxAdvanceOrderDays: number; slots: DeliverySlot[] }> {
+  async getDeliverySlots(tenantId: string): Promise<{
+    maxAdvanceOrderDays: number;
+    slots: DeliverySlot[];
+    todayStr: string;
+    nowMinutes: number;
+  }> {
     const [profile, slots] = await Promise.all([
       this.settingsRepo.findBusinessProfile(tenantId),
       this.settingsRepo.findActiveDeliverySlots(tenantId),
     ]);
-    return { maxAdvanceOrderDays: profile?.maxAdvanceOrderDays ?? 2, slots };
+    // The checkout day-picker must anchor to "today" in the tenant's
+    // timezone — the exact same value orders.service validates against.
+    // A browser building the list from its own clock (or worse, from
+    // toISOString(), which is UTC) offers the wrong day near midnight and
+    // the order is rejected with "Delivery date must be between …".
+    const { dateStr: todayStr, minutesSinceMidnight: nowMinutes } =
+      DateUtil.getTenantNow(profile?.timezone ?? 'Asia/Kolkata');
+    return {
+      maxAdvanceOrderDays: profile?.maxAdvanceOrderDays ?? 2,
+      slots,
+      todayStr,
+      nowMinutes,
+    };
   }
 
   /** Pickup is only actually offered when BOTH the tenant-wide master
@@ -236,27 +261,36 @@ export class SettingsService {
 
   async getInstantDeliverySettings(
     tenantId: string,
-  ): Promise<InstantDeliverySettings> {
+  ): Promise<InstantDeliveryView> {
     const settings =
       await this.settingsRepo.findInstantDeliverySettings(tenantId);
-    return (
-      settings ?? {
-        id: '',
-        tenantId,
-        isEnabled: false,
-        etaMinMinutes: 30,
-        etaMaxMinutes: 45,
-        createdAt: new Date(0),
-        updatedAt: new Date(0),
-      }
-    );
+    return this.toInstantDeliveryView(settings);
   }
 
-  updateInstantDeliverySettings(
+  async updateInstantDeliverySettings(
     tenantId: string,
     dto: UpdateInstantDeliverySettingsDto,
-  ): Promise<InstantDeliverySettings> {
-    return this.settingsRepo.upsertInstantDeliverySettings(tenantId, dto);
+  ): Promise<InstantDeliveryView> {
+    const saved = await this.settingsRepo.upsertInstantDeliverySettings(
+      tenantId,
+      dto,
+    );
+    return this.toInstantDeliveryView(saved);
+  }
+
+  /** Only the client-editable fields — never the raw row. The storefront
+   * echoes this object straight back into the PATCH, and the global
+   * ValidationPipe runs `forbidNonWhitelisted`, so leaking `id`/`tenantId`/
+   * `createdAt`/`updatedAt` here makes the very next save 400 with
+   * "property id should not exist". */
+  private toInstantDeliveryView(
+    settings: InstantDeliverySettings | null,
+  ): InstantDeliveryView {
+    return {
+      isEnabled: settings?.isEnabled ?? false,
+      etaMinMinutes: settings?.etaMinMinutes ?? 30,
+      etaMaxMinutes: settings?.etaMaxMinutes ?? 45,
+    };
   }
 
   // ── Delivery zones (kitchen geo, fees, advance-order window) ─

@@ -28,7 +28,11 @@ export class DateUtil {
       timeZone: timezone,
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false,
+      // 'h23' not `hour12: false`: en-US renders the midnight hour as "24"
+      // with the latter (00:18 → "24:18"), which makes minutesSinceMidnight
+      // 1440+ for the whole 00:00–00:59 window and breaks every caller
+      // (order window, instant-delivery ETA, daily cutoffs).
+      hourCycle: 'h23',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',

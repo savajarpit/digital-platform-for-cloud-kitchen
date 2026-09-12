@@ -57,6 +57,8 @@
     "orderSummary": "Order summary",
     "paymentFailed": "Payment failed or was cancelled — your order hasn't been charged.",
     "verifyingPayment": "Confirming your payment…",
+    "paymentReceived": "Payment received",
+    "settingUpOrder": "Setting up your order…",
     "deliveryDay": "Delivery day",
     "deliverySlot": "Delivery slot",
     "selectDay": "Select a day",

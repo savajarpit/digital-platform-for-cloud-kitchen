@@ -26,7 +26,13 @@ export function InstantDeliveryCard({ canEdit }: { canEdit: boolean }) {
     if (!settings) return;
     setSaving(true);
     try {
-      const updated = await updateInstantDeliverySettings(settings);
+      // Send only the editable fields — never spread `settings` straight in,
+      // the backend rejects any stray `id`/`tenantId`/timestamps.
+      const updated = await updateInstantDeliverySettings({
+        isEnabled: settings.isEnabled,
+        etaMinMinutes: settings.etaMinMinutes,
+        etaMaxMinutes: settings.etaMaxMinutes,
+      });
       setSettings(updated);
       showToast("Instant delivery settings saved", "success");
     } catch (err) {

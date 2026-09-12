@@ -9,8 +9,8 @@ import { ApiError, getOrder, type Order } from "@/lib/api/orders";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 import { ORDER_STATUS_STYLES } from "@/lib/format/status-styles";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { OrderStatusStepper, type OrderStatus } from "@/components/ui/OrderStatusStepper";
+import { OrderDetailSkeleton } from "@/components/orders/OrderDetailSkeleton";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -44,15 +44,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   if (!order) {
-    return (
-      <main className="container-app flex-1 py-16">
-        <div className="card mx-auto max-w-xl p-8">
-          <Skeleton className="mx-auto h-12 w-12 rounded-full" />
-          <Skeleton className="mx-auto mt-4 h-6 w-48" />
-          <Skeleton className="mx-auto mt-2 h-4 w-64" />
-        </div>
-      </main>
-    );
+    return <OrderDetailSkeleton />;
   }
 
   const isPaid = order.paymentStatus === "PAID";

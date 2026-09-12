@@ -57,6 +57,7 @@ export class EmailProviderFactory {
       fromAddress:
         settings.emailFromAddress ?? secrets.user ?? 'no-reply@example.com',
       fromName: settings.emailFromName ?? 'Storefront',
+      allowSelfSignedTls: this.config.get<boolean>('mail.allowSelfSignedTls'),
     });
   }
 }

@@ -8,6 +8,7 @@ import {
   Matches,
   MaxLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { EmailProvider, WhatsappProvider } from '../../../generated/prisma';
 import {
@@ -32,6 +33,15 @@ export class UpdateNotificationSettingsDto {
   })
   @IsOptional()
   @IsString()
+  // A copy-pasted secret carrying a stray leading/trailing space or
+  // newline (easy to pick up from a console's "select the text" flow
+  // instead of its copy-icon) silently corrupts the value — Twilio in
+  // particular returns a bare 401 with no useful body for a mangled
+  // Account SID, which is a nasty one to debug blind. Trimming here
+  // removes an entire class of "credentials look right but don't work".
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   whatsappApiKey?: string;
 
   @ApiPropertyOptional({
@@ -40,6 +50,17 @@ export class UpdateNotificationSettingsDto {
   })
   @IsOptional()
   @IsObject()
+  // Every string value gets the same trim as whatsappApiKey above, same
+  // reasoning — accountSid is exactly as prone to a stray pasted space.
+  @Transform(({ value }: { value: unknown }) => {
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+        k,
+        typeof v === 'string' ? v.trim() : v,
+      ]),
+    );
+  })
   whatsappConfig?: Record<string, unknown>;
 
   @ApiPropertyOptional({
@@ -49,6 +70,9 @@ export class UpdateNotificationSettingsDto {
   @IsOptional()
   @IsString()
   @MaxLength(20)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   whatsappSenderNumber?: string;
 
   @ApiPropertyOptional({

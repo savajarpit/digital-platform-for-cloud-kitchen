@@ -24,6 +24,7 @@ import { buildGoogleMapsLink } from "@/lib/format/maps-link";
 import { formatTime12h, hhmmToMinutes } from "@/lib/format/time";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { AddressForm } from "@/components/addresses/AddressForm";
+import { PaymentConfirmingScreen } from "@/components/checkout/PaymentConfirmingScreen";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
@@ -49,6 +50,10 @@ export default function CheckoutPage() {
   const [windowClosed, setWindowClosed] = useState<string | null>(null);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  // True from the moment Razorpay reports success until the order-page
+  // redirect commits — keeps the page from flashing blank in that gap
+  // (clearCart() empties the cart, so the normal render path bails to null).
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [slots, setSlots] = useState<DeliverySlot[] | null>(null);
   const [dayOptions, setDayOptions] = useState<{ value: string; label: string }[]>([]);
   const [selectedDay, setSelectedDay] = useState("");
@@ -90,20 +95,28 @@ export default function CheckoutPage() {
       .catch(() => setInstantStatus({ available: false, etaMinMinutes: 30, etaMaxMinutes: 45 }));
 
     getDeliverySlots().then((config) => {
-      const now = new Date();
-      setTodayStr(now.toISOString().slice(0, 10));
-      setNowMinutes(now.getHours() * 60 + now.getMinutes());
+      // Anchor to the tenant's "today", not the browser's — see
+      // DeliverySlotsConfig. UTC-parse the YYYY-MM-DD so day-stepping can't
+      // be shifted by the local timezone.
+      setTodayStr(config.todayStr);
+      setNowMinutes(config.nowMinutes);
       setSlots(config.slots);
 
+      const [ty, tm, td] = config.todayStr.split("-").map(Number);
       const days = Array.from({ length: config.maxAdvanceOrderDays + 1 }, (_, i) => {
-        const date = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
+        const date = new Date(Date.UTC(ty, tm - 1, td + i));
         const value = date.toISOString().slice(0, 10);
         const label =
           i === 0
             ? t("today")
             : i === 1
               ? t("tomorrow")
-              : date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+              : date.toLocaleDateString(undefined, {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  timeZone: "UTC",
+                });
         return { value, label };
       });
       setDayOptions(days);
@@ -233,6 +246,11 @@ export default function CheckoutPage() {
       });
 
       await loadRazorpayScript();
+      // Local flag (not React state) so `ondismiss`'s closure reads the
+      // current value — Razorpay fires ondismiss right after a successful
+      // handler too, and a stale state read there would flash a bogus
+      // "payment failed" toast over the redirect.
+      let paymentSucceeded = false;
       const razorpay = new window.Razorpay({
         key: razorpayKeyId,
         amount: order.totalInPaise,
@@ -241,6 +259,8 @@ export default function CheckoutPage() {
         name: "Order payment",
         description: `Order ${order.orderNumber}`,
         handler: (response) => {
+          paymentSucceeded = true;
+          setIsConfirmingPayment(true);
           verifyPayment({
             razorpayOrderId: response.razorpay_order_id,
             razorpayPaymentId: response.razorpay_payment_id,
@@ -248,15 +268,16 @@ export default function CheckoutPage() {
           })
             .then(() => {
               clearCart();
-              router.push(`/orders/${order.id}`);
+              router.replace(`/orders/${order.id}`);
             })
             .catch(() => {
+              setIsConfirmingPayment(false);
               showToast(t("paymentFailed"), "error");
             });
         },
         modal: {
           ondismiss: () => {
-            showToast(t("paymentFailed"), "error");
+            if (!paymentSucceeded) showToast(t("paymentFailed"), "error");
           },
         },
       });
@@ -267,6 +288,11 @@ export default function CheckoutPage() {
       setIsPlacingOrder(false);
     }
   }
+
+  // Payment done — hold this screen until the order-page navigation takes
+  // over. Checked before the empty-cart bail below, since clearCart() runs
+  // first and would otherwise render null here for a beat.
+  if (isConfirmingPayment) return <PaymentConfirmingScreen />;
 
   if (items.length === 0) return null;
 

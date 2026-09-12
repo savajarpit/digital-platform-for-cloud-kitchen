@@ -32,6 +32,15 @@ export class MailService {
     this.fromAddress = this.config.get<string>('mail.fromAddress') as string;
     this.fromName = this.config.get<string>('mail.fromName') as string;
 
+    const allowSelfSignedTls = this.config.get<boolean>(
+      'mail.allowSelfSignedTls',
+    );
+    if (allowSelfSignedTls) {
+      this.logger.warn(
+        'SMTP_ALLOW_SELF_SIGNED is on — TLS certificate verification is DISABLED for outbound mail. Dev only.',
+      );
+    }
+
     this.transporter = nodemailer.createTransport({
       host: this.config.get<string>('mail.host'),
       port: this.config.get<number>('mail.port'),
@@ -42,6 +51,7 @@ export class MailService {
             pass: this.config.get<string>('mail.password'),
           }
         : undefined,
+      ...(allowSelfSignedTls ? { tls: { rejectUnauthorized: false } } : {}),
     });
   }
 

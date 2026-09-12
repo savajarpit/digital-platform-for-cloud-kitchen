@@ -22,6 +22,7 @@ const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   poweredByBrandingEnabled: true,
   heroImageUrls: [],
   ctaEnabled: true,
+  mapsProvider: "osm",
 };
 
 /**

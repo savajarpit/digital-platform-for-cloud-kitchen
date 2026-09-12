@@ -36,6 +36,11 @@ enum WhatsappProvider {
   TWILIO
 }
 
+enum MapsProvider {
+  OSM
+  GOOGLE
+}
+
 enum EmailProvider {
   RESEND
   SMTP
@@ -1811,8 +1816,22 @@ model PlatformSettings {
   // unaffected — those stay gated by each tenant's own
   // NotificationSettings.whatsappEnabled, as before.
   whatsappOtpEnabled Boolean  @default(false)
-  updatedAt          DateTime @updatedAt
-  updatedByUserId    String?
+  // Which map provider every tenant's storefront (address picker, kitchen
+  // zone picker) renders — platform-wide, not per-tenant, same reasoning as
+  // whatsappOtpEnabled: this is a technical integration credential, owned by
+  // SUPER_ADMIN. OSM (Leaflet + Nominatim) needs no key/billing and is the
+  // default; GOOGLE needs googleMapsApiKeyEncrypted set below plus the Maps
+  // JavaScript + Places APIs enabled on that Google Cloud project.
+  mapsProvider              MapsProvider @default(OSM)
+  // Not a traditional secret — this key is necessarily sent to every
+  // storefront visitor's browser to call Google's Maps/Places APIs client
+  // side, restricted by HTTP-referrer rules on the Google Cloud Console
+  // side, not by secrecy. Still encrypted at rest here for the same reason
+  // every other provider credential in this table is: defense in depth
+  // against a raw DB dump.
+  googleMapsApiKeyEncrypted String?
+  updatedAt                 DateTime @updatedAt
+  updatedByUserId           String?
 
   @@map("platform_settings")
 }

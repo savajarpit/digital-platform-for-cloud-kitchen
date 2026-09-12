@@ -10,16 +10,9 @@ export const PUBLIC_API_URL =
  * PLATFORM_ROOT_DOMAIN (see TenantResolverService). Undefined until set. */
 export const PLATFORM_ROOT_DOMAIN = process.env.NEXT_PUBLIC_PLATFORM_ROOT_DOMAIN;
 
-/** Needs the Maps JavaScript API + Places API enabled on the same key.
- * Undefined until set — every map-picker component falls back to a plain
- * manual-entry form instead of crashing when this is missing. */
-export const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-/** Which map provider the location pickers render. "osm" (OpenStreetMap +
- * Leaflet + Nominatim) needs no API key/billing and is the default; "google"
- * needs GOOGLE_MAPS_API_KEY plus billing enabled on that Cloud project.
- * Coordinates captured under either provider are plain lat/lng (WGS84) —
- * fully interchangeable, so switching this at any time is always safe. */
-export type MapsProvider = "google" | "osm";
-export const MAPS_PROVIDER: MapsProvider =
-  process.env.NEXT_PUBLIC_MAPS_PROVIDER === "google" ? "google" : "osm";
+// Which map provider renders (Google vs OSM/Leaflet) and the Google Maps
+// API key are no longer build-time env vars — both are SUPER_ADMIN-managed
+// platform settings (Platform settings → Maps), fetched at runtime via
+// getPublicConfig()/fetchPublicConfig() so a switch takes effect
+// immediately for every tenant, with no rebuild/redeploy. See
+// PlatformSettingsCard.tsx and components/maps/LocationPickerMap.tsx.

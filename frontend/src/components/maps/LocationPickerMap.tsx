@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { MAPS_PROVIDER } from "@/lib/config/env";
+import { fetchPublicConfig } from "@/lib/api/settings-client";
 
 /** Address parts a provider can hand back alongside lat/lng when it already
  * knows them (a search-result pick) — lets the caller skip a redundant
@@ -36,12 +37,34 @@ const OsmLocationPickerMap = dynamic(
   { ssr: false },
 );
 
-/** Renders whichever map provider `NEXT_PUBLIC_MAPS_PROVIDER` selects — every
- * caller (kitchen location, customer address picker) uses this single
- * component and never needs to know which provider is active. */
+/** Renders whichever map provider SUPER_ADMIN has selected (Platform
+ * settings → Maps) — every caller (kitchen location, customer address
+ * picker) uses this single component and never needs to know which
+ * provider is active. Fetched at runtime (not a build-time env var), so
+ * flipping the admin switch takes effect immediately for every tenant,
+ * no rebuild/redeploy. */
 export function LocationPickerMap(props: LocationPickerMapProps) {
-  return MAPS_PROVIDER === "google" ? (
-    <GoogleLocationPickerMap {...props} />
+  const [config, setConfig] = useState<{ provider: "google" | "osm"; apiKey?: string } | null>(
+    null,
+  );
+
+  useEffect(() => {
+    fetchPublicConfig().then((c) =>
+      setConfig({ provider: c.mapsProvider, apiKey: c.googleMapsApiKey }),
+    );
+  }, []);
+
+  if (!config) {
+    return (
+      <div
+        className="animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-800"
+        style={{ height: props.height ?? 320 }}
+      />
+    );
+  }
+
+  return config.provider === "google" ? (
+    <GoogleLocationPickerMap {...props} apiKey={config.apiKey ?? ""} />
   ) : (
     <OsmLocationPickerMap {...props} />
   );

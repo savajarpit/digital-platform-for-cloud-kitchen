@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
-import { PlatformSettings } from '../../generated/prisma';
+import { MapsProvider, PlatformSettings } from '../../generated/prisma';
 
 const SINGLETON_ID = 'global';
 
@@ -22,6 +22,8 @@ export class PlatformSettingsRepository {
 
   update(data: {
     whatsappOtpEnabled?: boolean;
+    mapsProvider?: MapsProvider;
+    googleMapsApiKeyEncrypted?: string;
     updatedByUserId?: string;
   }): Promise<PlatformSettings> {
     return this.prisma.platformSettings.upsert({

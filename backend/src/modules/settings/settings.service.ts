@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SettingsRepository } from './settings.repository';
+import { PlatformSettingsService } from '../../shared-modules/platform-settings/platform-settings.service';
 import {
   BusinessProfile,
   DeliverySlot,
@@ -53,6 +54,7 @@ export class SettingsService {
   constructor(
     private readonly settingsRepo: SettingsRepository,
     private readonly config: ConfigService,
+    private readonly platformSettings: PlatformSettingsService,
   ) {}
 
   async getPublicConfig(
@@ -64,11 +66,14 @@ export class SettingsService {
       throw new NotFoundException('No tenant context for this request');
     }
 
-    const [profile, homePageContent, poweredByBrandingEnabled] =
+    const [profile, homePageContent, poweredByBrandingEnabled, mapsConfig] =
       await Promise.all([
         this.settingsRepo.findBusinessProfile(tenantId),
         this.settingsRepo.findHomePageContent(tenantId),
         this.settingsRepo.findPoweredByBrandingEnabled(tenantId),
+        // Platform-wide, not per-tenant — SUPER_ADMIN's one map-provider
+        // switch (see PlatformSettingsService) applies to every storefront.
+        this.platformSettings.getMapsConfig(),
       ]);
     if (!profile) {
       throw new NotFoundException('Business profile not configured yet');
@@ -129,6 +134,8 @@ export class SettingsService {
         homePageContent?.ctaSecondaryLabel ?? heroDefaults.ctaSecondaryLabel,
       ctaSecondaryLink:
         homePageContent?.ctaSecondaryLink ?? heroDefaults.ctaSecondaryLink,
+      mapsProvider: mapsConfig.mapsProvider,
+      googleMapsApiKey: mapsConfig.googleMapsApiKey,
     });
   }
 

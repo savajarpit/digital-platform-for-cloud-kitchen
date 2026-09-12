@@ -24,6 +24,17 @@ export function redactNotificationSettings(settings: {
   };
 }
 
+export function redactPlatformSettings(settings: {
+  googleMapsApiKeyEncrypted: string | null;
+  [key: string]: unknown;
+}) {
+  const { googleMapsApiKeyEncrypted, ...safe } = settings;
+  return {
+    ...safe,
+    googleMapsApiKeyConfigured: Boolean(googleMapsApiKeyEncrypted),
+  };
+}
+
 export function redactPaymentSettings(settings: {
   razorpayKeySecretEncrypted: string | null;
   razorpayWebhookSecretEncrypted: string | null;

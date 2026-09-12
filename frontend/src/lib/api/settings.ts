@@ -48,6 +48,13 @@ export interface PublicConfig {
   ctaPrimaryLink?: string;
   ctaSecondaryLabel?: string;
   ctaSecondaryLink?: string;
+  /** SUPER_ADMIN-controlled, platform-wide (not per-tenant) — which map
+   * provider every location picker should render. Fetched at runtime so
+   * flipping the switch in /admin/platform takes effect immediately, no
+   * rebuild/redeploy needed. */
+  mapsProvider: "google" | "osm";
+  /** Only present when mapsProvider is "google" and a key is configured. */
+  googleMapsApiKey?: string;
 }
 
 export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
@@ -72,6 +79,7 @@ export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   ctaPrimaryLink: "/plans",
   ctaSecondaryLabel: "Order a Single Meal",
   ctaSecondaryLink: "/menu",
+  mapsProvider: "osm",
 };
 
 /**

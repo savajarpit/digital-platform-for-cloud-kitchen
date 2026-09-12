@@ -188,6 +188,17 @@ export class PublicConfigResponseDto {
   @Expose()
   ctaSecondaryLink?: string;
 
+  @ApiProperty({ enum: ['google', 'osm'], example: 'osm' })
+  @Expose()
+  mapsProvider: 'google' | 'osm';
+
+  @ApiPropertyOptional({
+    description:
+      'Only present when mapsProvider is "google" and SUPER_ADMIN has configured a key.',
+  })
+  @Expose()
+  googleMapsApiKey?: string;
+
   constructor(partial: Partial<PublicConfigResponseDto>) {
     Object.assign(this, partial);
   }

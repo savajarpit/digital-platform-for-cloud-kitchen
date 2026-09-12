@@ -3,9 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { Circle, GoogleMap, Marker, useJsApiLoader } from "@react-google-maps/api";
 import { LocateFixed, Search } from "lucide-react";
-import { GOOGLE_MAPS_API_KEY } from "@/lib/config/env";
 import { extractGoogleAddressParts } from "@/lib/format/google-address";
 import type { LocationPickerMapProps } from "./LocationPickerMap";
+
+interface GoogleLocationPickerMapProps extends LocationPickerMapProps {
+  /** Fetched at runtime from the platform's public config (SUPER_ADMIN's
+   * Maps settings) — never a build-time env var, so switching providers or
+   * rotating the key takes effect without a rebuild. */
+  apiKey: string;
+}
 
 const LIBRARIES: "places"[] = ["places"];
 // India's rough centroid — only used as the map's starting view when no
@@ -29,9 +35,10 @@ export function GoogleLocationPickerMap({
   onChange,
   radiusMeters,
   height = 320,
-}: LocationPickerMapProps) {
+  apiKey,
+}: GoogleLocationPickerMapProps) {
   const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY ?? "",
+    googleMapsApiKey: apiKey,
     libraries: LIBRARIES,
   });
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -130,11 +137,11 @@ export function GoogleLocationPickerMap({
     setQuery(place.formattedAddress ?? place.displayName ?? "");
   }
 
-  if (!GOOGLE_MAPS_API_KEY) {
+  if (!apiKey) {
     return (
       <div className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 p-4 text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
-        Map picker unavailable — add a Google Maps API key
-        (<code className="font-mono">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code>) to enable it.
+        Map picker unavailable — add a Google Maps API key under Platform settings → Maps to
+        enable it.
       </div>
     );
   }

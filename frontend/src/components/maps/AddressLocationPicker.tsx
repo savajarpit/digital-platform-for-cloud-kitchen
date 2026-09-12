@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { LocationPickerMap, type AddressHint } from "@/components/maps/LocationPickerMap";
 import { extractGoogleAddressParts } from "@/lib/format/google-address";
 import { extractNominatimAddressParts } from "@/lib/format/nominatim-address";
-import { GOOGLE_MAPS_API_KEY, MAPS_PROVIDER } from "@/lib/config/env";
+import { fetchPublicConfig } from "@/lib/api/settings-client";
 
 export interface PickedAddress extends AddressHint {
   lat: number;
@@ -16,11 +16,15 @@ export interface PickedAddress extends AddressHint {
 // is billing-gated the same way legacy Places Autocomplete was, while v4 is
 // covered by a plain (even a free demo) API key. CORS-enabled for direct
 // browser fetch, confirmed via a real request with an Origin header.
-async function reverseGeocodeGoogle(lat: number, lng: number): Promise<AddressHint> {
-  if (!GOOGLE_MAPS_API_KEY) return {};
+async function reverseGeocodeGoogle(
+  lat: number,
+  lng: number,
+  apiKey: string | undefined,
+): Promise<AddressHint> {
+  if (!apiKey) return {};
   try {
     const res = await fetch(
-      `https://geocode.googleapis.com/v4/geocode/location/${lat},${lng}?key=${GOOGLE_MAPS_API_KEY}`,
+      `https://geocode.googleapis.com/v4/geocode/location/${lat},${lng}?key=${apiKey}`,
     );
     if (!res.ok) return {};
     const data = (await res.json()) as {
@@ -60,7 +64,8 @@ async function reverseGeocodeNominatim(lat: number, lng: number): Promise<Addres
  * text fields auto-fill but stay editable rather than being locked. A
  * search-result pick already carries its own address breakdown (`hint`) —
  * used directly, skipping a redundant reverse-geocode round trip. Uses
- * whichever provider `NEXT_PUBLIC_MAPS_PROVIDER` selects. */
+ * whichever provider SUPER_ADMIN has selected (Platform settings → Maps),
+ * fetched at runtime — never a build-time env var. */
 export function AddressLocationPicker({
   lat,
   lng,
@@ -71,6 +76,16 @@ export function AddressLocationPicker({
   onPicked: (result: PickedAddress) => void;
 }) {
   const [geocoding, setGeocoding] = useState(false);
+  const [mapsConfig, setMapsConfig] = useState<{
+    provider: "google" | "osm";
+    apiKey?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    fetchPublicConfig().then((c) =>
+      setMapsConfig({ provider: c.mapsProvider, apiKey: c.googleMapsApiKey }),
+    );
+  }, []);
 
   async function handleChange(nextLat: number, nextLng: number, hint?: AddressHint) {
     if (hint) {
@@ -79,8 +94,8 @@ export function AddressLocationPicker({
     }
     setGeocoding(true);
     const parts =
-      MAPS_PROVIDER === "google"
-        ? await reverseGeocodeGoogle(nextLat, nextLng)
+      mapsConfig?.provider === "google"
+        ? await reverseGeocodeGoogle(nextLat, nextLng, mapsConfig.apiKey)
         : await reverseGeocodeNominatim(nextLat, nextLng);
     setGeocoding(false);
     onPicked({ lat: nextLat, lng: nextLng, ...parts });

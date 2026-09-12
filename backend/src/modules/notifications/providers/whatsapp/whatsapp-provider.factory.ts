@@ -9,6 +9,7 @@ import { CryptoUtil } from '../../../../common/utils/crypto.util';
 import { WhatsAppProvider } from '../../interfaces/whatsapp-provider.interface';
 import { InteraktProvider } from './interakt.provider';
 import { TwilioProvider } from './twilio.provider';
+import { AiSensyProvider } from './aisensy.provider';
 
 interface TwilioSecrets {
   accountSid: string;
@@ -16,6 +17,11 @@ interface TwilioSecrets {
    * TwilioProviderConfig.contentSids. Stored inside the same encrypted
    * whatsappConfig blob as accountSid. */
   contentSids?: Record<string, string>;
+}
+
+interface AiSensySecrets {
+  /** templateKey → AiSensy Campaign name. See AiSensyProviderConfig. */
+  campaignNames: Record<string, string>;
 }
 
 /**
@@ -76,6 +82,28 @@ export class WhatsAppProviderFactory {
           ),
           senderNumber: settings.whatsappSenderNumber,
           contentSids: secrets.contentSids,
+        });
+      }
+
+      case WhatsappProviderType.AISENSY: {
+        if (!settings.whatsappConfigEncrypted) {
+          this.logger.warn(
+            `Tenant ${settings.tenantId} selected AiSensy but has no campaign config stored — skipping`,
+          );
+          return null;
+        }
+        const secrets = JSON.parse(
+          CryptoUtil.decrypt(
+            settings.whatsappConfigEncrypted as unknown as string,
+            encryptionKey,
+          ),
+        ) as AiSensySecrets;
+        return new AiSensyProvider(this.httpService, {
+          apiKey: CryptoUtil.decrypt(
+            settings.whatsappApiKeyEncrypted,
+            encryptionKey,
+          ),
+          campaignNames: secrets.campaignNames ?? {},
         });
       }
 

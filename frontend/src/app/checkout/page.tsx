@@ -126,7 +126,12 @@ export default function CheckoutPage() {
     listAddresses()
       .then((list) => {
         setAddresses(list);
-        const defaultAddress = list.find((a) => a.isDefault) ?? list[0];
+        // Never auto-select an address the tenant no longer delivers to —
+        // prefer the default/first one that's still serviceable, matching
+        // what the picker itself allows the customer to click.
+        const serviceableList = list.filter((a) => a.serviceable);
+        const defaultAddress =
+          serviceableList.find((a) => a.isDefault) ?? serviceableList[0];
         if (defaultAddress) setSelectedAddressId(defaultAddress.id);
         if (list.length === 0) setShowAddressForm(true);
       })
@@ -415,18 +420,21 @@ export default function CheckoutPage() {
                 {addresses.map((address) => (
                   <label
                     key={address.id}
-                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${
-                      selectedAddressId === address.id
-                        ? "border-primary-600 bg-primary-50 dark:bg-primary-950"
-                        : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-700"
+                    className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${
+                      !address.serviceable
+                        ? "cursor-not-allowed border-zinc-200 opacity-60 dark:border-zinc-700"
+                        : selectedAddressId === address.id
+                          ? "cursor-pointer border-primary-600 bg-primary-50 dark:bg-primary-950"
+                          : "cursor-pointer border-zinc-200 hover:border-zinc-300 dark:border-zinc-700"
                     }`}
                   >
                     <input
                       type="radio"
                       name="address"
                       checked={selectedAddressId === address.id}
+                      disabled={!address.serviceable}
                       onChange={() => setSelectedAddressId(address.id)}
-                      className="mt-1 h-4 w-4 accent-primary-600"
+                      className="mt-1 h-4 w-4 accent-primary-600 disabled:cursor-not-allowed"
                     />
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-center gap-2">
@@ -434,6 +442,11 @@ export default function CheckoutPage() {
                         <span className="min-w-0 truncate font-medium text-zinc-900 dark:text-zinc-100">
                           {address.label || address.city}
                         </span>
+                        {!address.serviceable && (
+                          <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-400">
+                            {t("addressNotDeliverable")}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 wrap-break-word text-sm text-zinc-600 dark:text-zinc-400">
                         {address.line1}, {address.city}, {address.state} — {address.pincode}

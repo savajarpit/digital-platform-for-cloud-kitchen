@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import {
+  Address,
   Order,
   OrderFulfillmentType,
   OrderStatus,
@@ -16,11 +17,23 @@ export interface OrderItemInput {
   isFreeItem?: boolean;
 }
 
+export interface AddressSnapshotInput {
+  line1: string;
+  line2?: string | null;
+  city: string;
+  state: string;
+  pincode: string;
+  contactPhone: string;
+  lat?: number | null;
+  lng?: number | null;
+}
+
 export interface CreateOrderInput {
   tenantId: string;
   userId: string;
   fulfillmentType: OrderFulfillmentType;
   addressId?: string;
+  addressSnapshot?: AddressSnapshotInput;
   pickupKitchenZoneId?: string;
   orderNumber: string;
   subtotalInPaise: number;
@@ -80,6 +93,35 @@ export type OrderWithAdminDetails = Prisma.OrderGetPayload<{
   include: typeof ORDER_ADMIN_INCLUDE;
 }>;
 
+/**
+ * Overlays the snapshotted delivery-address fields (captured at order time)
+ * onto the live `address` relation, so every display surface shows what was
+ * actually delivered to — not a later edit to that Address row. Falls back
+ * to the live relation untouched for a PICKUP order or a pre-snapshot
+ * historical order (addressLine1Snapshot null), since there's nothing to
+ * retroactively snapshot for those.
+ */
+export function withAddressSnapshot<
+  T extends { address: Address | null } & Order,
+>(order: T): T {
+  if (!order.address || !order.addressLine1Snapshot) return order;
+  return {
+    ...order,
+    address: {
+      ...order.address,
+      line1: order.addressLine1Snapshot,
+      line2: order.addressLine2Snapshot,
+      city: order.addressCitySnapshot ?? order.address.city,
+      state: order.addressStateSnapshot ?? order.address.state,
+      pincode: order.addressPincodeSnapshot ?? order.address.pincode,
+      contactPhone:
+        order.addressContactPhoneSnapshot ?? order.address.contactPhone,
+      lat: order.addressLatSnapshot ?? order.address.lat,
+      lng: order.addressLngSnapshot ?? order.address.lng,
+    },
+  };
+}
+
 @Injectable()
 export class OrdersRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -92,6 +134,14 @@ export class OrdersRepository {
           userId: input.userId,
           fulfillmentType: input.fulfillmentType,
           addressId: input.addressId,
+          addressLine1Snapshot: input.addressSnapshot?.line1,
+          addressLine2Snapshot: input.addressSnapshot?.line2,
+          addressCitySnapshot: input.addressSnapshot?.city,
+          addressStateSnapshot: input.addressSnapshot?.state,
+          addressPincodeSnapshot: input.addressSnapshot?.pincode,
+          addressContactPhoneSnapshot: input.addressSnapshot?.contactPhone,
+          addressLatSnapshot: input.addressSnapshot?.lat,
+          addressLngSnapshot: input.addressSnapshot?.lng,
           pickupKitchenZoneId: input.pickupKitchenZoneId,
           orderNumber: input.orderNumber,
           subtotalInPaise: input.subtotalInPaise,
@@ -131,33 +181,35 @@ export class OrdersRepository {
         });
       }
 
-      return order;
+      return withAddressSnapshot(order);
     });
   }
 
-  findById(
+  async findById(
     tenantId: string,
     userId: string,
     id: string,
   ): Promise<OrderWithDetails | null> {
-    return this.prisma.order.findFirst({
+    const order = await this.prisma.order.findFirst({
       where: { id, tenantId, userId },
       include: ORDER_INCLUDE,
     });
+    return order && withAddressSnapshot(order);
   }
 
   findByRazorpayOrderId(razorpayOrderId: string): Promise<Order | null> {
     return this.prisma.order.findUnique({ where: { razorpayOrderId } });
   }
 
-  findForNotification(
+  async findForNotification(
     tenantId: string,
     id: string,
   ): Promise<OrderWithNotificationDetails | null> {
-    return this.prisma.order.findFirst({
+    const order = await this.prisma.order.findFirst({
       where: { id, tenantId },
       include: ORDER_NOTIFICATION_INCLUDE,
     });
+    return order && withAddressSnapshot(order);
   }
 
   /**
@@ -178,7 +230,7 @@ export class OrdersRepository {
       userId,
       status: { not: OrderStatus.PENDING_PAYMENT },
     };
-    return this.prisma.$transaction([
+    const [data, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
         skip,
@@ -188,6 +240,7 @@ export class OrdersRepository {
       }),
       this.prisma.order.count({ where }),
     ]);
+    return [data.map(withAddressSnapshot), total];
   }
 
   /** Idempotent — a second call for an already-confirmed order is a no-op. */
@@ -226,7 +279,7 @@ export class OrdersRepository {
       status: status ?? { not: OrderStatus.PENDING_PAYMENT },
       ...(fulfillmentType ? { fulfillmentType } : {}),
     };
-    return this.prisma.$transaction([
+    const [data, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
         where,
         skip,
@@ -236,16 +289,18 @@ export class OrdersRepository {
       }),
       this.prisma.order.count({ where }),
     ]);
+    return [data.map(withAddressSnapshot), total];
   }
 
-  findByIdForTenant(
+  async findByIdForTenant(
     tenantId: string,
     id: string,
   ): Promise<OrderWithAdminDetails | null> {
-    return this.prisma.order.findFirst({
+    const order = await this.prisma.order.findFirst({
       where: { id, tenantId },
       include: ORDER_ADMIN_INCLUDE,
     });
+    return order && withAddressSnapshot(order);
   }
 
   updateStatus(id: string, status: OrderStatus): Promise<Order> {

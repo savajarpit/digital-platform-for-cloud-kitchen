@@ -45,6 +45,19 @@ export class AddressesRepository {
     return this.prisma.address.delete({ where: { id } });
   }
 
+  /** True if any Order/Subscription/SubscriptionDayOverride still points at
+   * this address — deleting it out from under one of those would either
+   * corrupt a past order's delivery record (pre-snapshot rows) or break a
+   * live subscription's default address entirely. */
+  async isReferenced(id: string): Promise<boolean> {
+    const [orderCount, subscriptionCount, overrideCount] = await Promise.all([
+      this.prisma.order.count({ where: { addressId: id } }),
+      this.prisma.subscription.count({ where: { addressId: id } }),
+      this.prisma.subscriptionDayOverride.count({ where: { addressId: id } }),
+    ]);
+    return orderCount + subscriptionCount + overrideCount > 0;
+  }
+
   /** Clears isDefault on every other address for this user (before setting a new default). */
   clearDefaultForUser(
     tenantId: string,

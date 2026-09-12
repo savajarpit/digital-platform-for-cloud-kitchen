@@ -9,6 +9,7 @@ import {
   OrderItemInput,
   OrderWithAdminDetails,
   OrderWithDetails,
+  CreateOrderInput,
 } from './orders.repository';
 import { CreateOrderDto, OrderItemInputDto } from './dto/create-order.dto';
 import { PreviewOrderDto } from './dto/preview-order.dto';
@@ -186,6 +187,7 @@ export class OrdersService {
     let deliveryFeeInPaise = 0;
     let minOrderAmountInPaise = 0;
     let freeDeliveryAboveAmountInPaise: number | undefined;
+    let addressSnapshot: CreateOrderInput['addressSnapshot'];
     if (isPickup) {
       const zone = await this.settingsRepo.findKitchenZoneById(
         tenantId,
@@ -219,6 +221,16 @@ export class OrdersService {
       minOrderAmountInPaise = serviceability.minOrderAmountInPaise ?? 0;
       freeDeliveryAboveAmountInPaise =
         serviceability.freeDeliveryAboveAmountInPaise;
+      addressSnapshot = {
+        line1: address.line1,
+        line2: address.line2,
+        city: address.city,
+        state: address.state,
+        pincode: address.pincode,
+        contactPhone: address.contactPhone,
+        lat: address.lat,
+        lng: address.lng,
+      };
     }
 
     // Prices and names are always recomputed server-side from the current
@@ -343,6 +355,7 @@ export class OrdersService {
       userId,
       fulfillmentType: dto.fulfillmentType ?? 'DELIVERY',
       addressId: isPickup ? undefined : dto.addressId,
+      addressSnapshot,
       pickupKitchenZoneId: isPickup ? dto.pickupKitchenZoneId : undefined,
       orderNumber,
       subtotalInPaise: pricing.subtotalInPaise,

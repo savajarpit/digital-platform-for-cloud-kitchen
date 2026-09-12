@@ -16,6 +16,10 @@ export interface Address {
   lat: number | null;
   lng: number | null;
   isDefault: boolean;
+  // Checked live against the tenant's *current* serviceable areas on every
+  // list fetch — can be false even for an address that was serviceable when
+  // saved, if the tenant has since disabled that pincode/zone.
+  serviceable: boolean;
 }
 
 export interface AddressInput {

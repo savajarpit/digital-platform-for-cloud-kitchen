@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
+import { withAddressSnapshot } from '../orders/orders.repository';
 import {
   DeliverySlot,
   Order,
@@ -645,12 +646,27 @@ export class SubscriptionsRepository {
       0,
     );
     const today = new Date();
+    // Snapshot the address as it stands right now, at materialization time —
+    // same rule as a regular customer-placed order (see Order model
+    // comment): a later edit/delete of this Address must never rewrite or
+    // break an already-materialized day's order.
+    const address = await this.prisma.address.findUniqueOrThrow({
+      where: { id: input.addressId },
+    });
     return this.prisma.order.create({
       data: {
         tenantId: input.tenantId,
         userId: input.userId,
         subscriptionId: input.subscriptionId,
         addressId: input.addressId,
+        addressLine1Snapshot: address.line1,
+        addressLine2Snapshot: address.line2,
+        addressCitySnapshot: address.city,
+        addressStateSnapshot: address.state,
+        addressPincodeSnapshot: address.pincode,
+        addressContactPhoneSnapshot: address.contactPhone,
+        addressLatSnapshot: address.lat,
+        addressLngSnapshot: address.lng,
         orderNumber: input.orderNumber,
         status: OrderStatus.CONFIRMED,
         paymentStatus: PaymentStatus.PAID,
@@ -689,12 +705,12 @@ export class SubscriptionsRepository {
   /** Widened ±1 day at the DB level (same over-fetch-then-filter-exact
    * principle as the overview chart's date bucketing) — the caller filters
    * to the exact tenant-local date string. */
-  findSubscriptionOrdersInRange(
+  async findSubscriptionOrdersInRange(
     tenantId: string,
     queryStart: Date,
     queryEnd: Date,
   ) {
-    return this.prisma.order.findMany({
+    const orders = await this.prisma.order.findMany({
       where: {
         tenantId,
         subscriptionId: { not: null },
@@ -708,5 +724,6 @@ export class SubscriptionsRepository {
       },
       orderBy: { createdAt: 'asc' },
     });
+    return orders.map(withAddressSnapshot);
   }
 }

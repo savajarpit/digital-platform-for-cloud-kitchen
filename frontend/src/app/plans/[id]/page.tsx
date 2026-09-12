@@ -57,7 +57,8 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
     listAddresses()
       .then((list) => {
         setAddresses(list);
-        const def = list.find((a) => a.isDefault) ?? list[0];
+        const serviceableList = list.filter((a) => a.serviceable);
+        const def = serviceableList.find((a) => a.isDefault) ?? serviceableList[0];
         if (def) setSelectedAddressId(def.id);
       })
       .catch((err: unknown) => {
@@ -335,9 +336,10 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                   </SelectTrigger>
                   <SelectContent>
                     {addresses.map((addr) => (
-                      <SelectItem key={addr.id} value={addr.id}>
+                      <SelectItem key={addr.id} value={addr.id} disabled={!addr.serviceable}>
                         {addr.label ? `${addr.label} — ` : ""}
                         {addr.line1}, {addr.city}
+                        {!addr.serviceable ? " (not deliverable)" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

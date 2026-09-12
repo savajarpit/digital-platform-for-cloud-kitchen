@@ -26,8 +26,32 @@ export interface ServiceabilityQuery {
 export class AddressesService {
   constructor(private readonly addressesRepo: AddressesRepository) {}
 
-  findAll(tenantId: string, userId: string): Promise<Address[]> {
-    return this.addressesRepo.findAllForUser(tenantId, userId);
+  /**
+   * Each saved address is checked against the tenant's *current* serviceable
+   * areas — a tenant may have disabled a pincode/zone since this address was
+   * saved, so `serviceable` here can legitimately flip to false without the
+   * address itself ever having been edited. Lets the picker grey out and
+   * block selection of an address that would fail at checkout anyway,
+   * instead of the customer only finding out after selecting it.
+   */
+  async findAll(
+    tenantId: string,
+    userId: string,
+  ): Promise<(Address & { serviceable: boolean })[]> {
+    const addresses = await this.addressesRepo.findAllForUser(
+      tenantId,
+      userId,
+    );
+    return Promise.all(
+      addresses.map(async (address) => {
+        const result = await this.checkServiceability(tenantId, {
+          pincode: address.pincode,
+          lat: address.lat ?? undefined,
+          lng: address.lng ?? undefined,
+        });
+        return { ...address, serviceable: result.serviceable };
+      }),
+    );
   }
 
   async findOne(
@@ -81,6 +105,11 @@ export class AddressesService {
   async remove(tenantId: string, userId: string, id: string): Promise<void> {
     const address = await this.addressesRepo.findById(tenantId, userId, id);
     if (!address) throw new NotFoundException('Address not found');
+    if (await this.addressesRepo.isReferenced(id)) {
+      throw new BadRequestException(
+        'This address is used by a past order or an active subscription and cannot be deleted. You can still edit it.',
+      );
+    }
     await this.addressesRepo.delete(id);
   }
 

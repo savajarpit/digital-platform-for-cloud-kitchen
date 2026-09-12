@@ -129,6 +129,11 @@ export default function AddressesPage() {
                         {t("default")}
                       </span>
                     )}
+                    {!address.serviceable && (
+                      <span className="badge bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400">
+                        {t("notDeliverable")}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     <button

@@ -911,53 +911,66 @@ model Address {
 }
 
 model Order {
-  id                  String               @id @default(uuid())
-  tenantId            String
-  userId              String
+  id                          String               @id @default(uuid())
+  tenantId                    String
+  userId                      String
   // Required for DELIVERY, null for PICKUP — enforced in the service layer,
   // not the DB, same convention as SubscriptionPlanDay's mode-conditional
   // fields.
-  addressId           String?
-  fulfillmentType     OrderFulfillmentType @default(DELIVERY)
+  addressId                   String?
+  fulfillmentType             OrderFulfillmentType @default(DELIVERY)
   // Required for PICKUP, null for DELIVERY.
-  pickupKitchenZoneId String?
-  orderNumber         String
-  status              OrderStatus          @default(PENDING_PAYMENT)
-  paymentStatus       PaymentStatus        @default(PENDING)
-  subtotalInPaise     Int
+  pickupKitchenZoneId         String?
+  orderNumber                 String
+  status                      OrderStatus          @default(PENDING_PAYMENT)
+  paymentStatus               PaymentStatus        @default(PENDING)
+  subtotalInPaise             Int
   // Sum of all applied discounts (scheduled promos + BOGO/free-item retail
   // value + coupon), always computed server-side, never trusted from the
   // client. subtotalInPaise already includes any free items at their real
   // retail price, so totalInPaise = subtotalInPaise - discountInPaise +
   // deliveryFeeInPaise.
-  discountInPaise     Int                  @default(0)
+  discountInPaise             Int                  @default(0)
   // Snapshotted like item price/name — a later coupon edit never rewrites
   // past order history.
-  couponCode          String?
-  deliveryFeeInPaise  Int                  @default(0)
-  totalInPaise        Int
+  couponCode                  String?
+  deliveryFeeInPaise          Int                  @default(0)
+  totalInPaise                Int
+  // Snapshotted from Address at order time, same rule as couponCode/
+  // deliverySlotName below — a later address edit (or delete) must never
+  // rewrite or break a past order's delivery record. Null for PICKUP orders
+  // and for any order placed before this snapshot existed (addressId's own
+  // live join is the only fallback for those).
+  addressLine1Snapshot        String?
+  addressLine2Snapshot        String?
+  addressCitySnapshot         String?
+  addressStateSnapshot        String?
+  addressPincodeSnapshot      String?
+  addressContactPhoneSnapshot String?
+  addressLatSnapshot          Float?
+  addressLngSnapshot          Float?
   // The chosen calendar day, and a snapshot of the slot's name/window at
   // order time — snapshotted like OrderItem's price/name, so a tenant
   // editing DeliverySlot later never rewrites past order history.
-  deliveryDate        DateTime
-  deliverySlotId      String?
-  deliverySlotName    String
-  deliveryWindowStart String
-  deliveryWindowEnd   String
-  razorpayOrderId     String?              @unique
-  razorpayPaymentId   String?
-  notes               String?
+  deliveryDate                DateTime
+  deliverySlotId              String?
+  deliverySlotName            String
+  deliveryWindowStart         String
+  deliveryWindowEnd           String
+  razorpayOrderId             String?              @unique
+  razorpayPaymentId           String?
+  notes                       String?
   // Set only for a nightly-materialized subscription delivery — lets the
   // admin "Today's Deliveries" view query real Order rows directly instead
   // of pattern-matching the notes text.
-  subscriptionId      String?
+  subscriptionId              String?
   // True when placed via the instant-delivery option instead of a picked
   // day/slot — deliverySlotId is null and deliveryWindowStart/End are a
   // snapshot of now + the tenant's configured ETA at order time, not a
   // named DeliverySlot's fixed window.
-  isInstant           Boolean              @default(false)
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  isInstant                   Boolean              @default(false)
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
 
   tenant            Tenant            @relation(fields: [tenantId], references: [id])
   user              User              @relation(fields: [userId], references: [id])
@@ -1808,14 +1821,14 @@ model PlatformInvoice {
 // tenant). Always read/written against the fixed id "global"; the row is
 // created lazily with defaults on first read if it doesn't exist yet.
 model PlatformSettings {
-  id                 String   @id @default("global")
+  id                        String       @id @default("global")
   // Off by default — WhatsApp OTP delivery isn't trusted/approved yet
   // (needs a real Meta-approved OTP template per BSP), so signup/login
   // verification codes go out over email only until this is flipped on.
   // Order-confirmation/subscription-disruption WhatsApp sends are
   // unaffected — those stay gated by each tenant's own
   // NotificationSettings.whatsappEnabled, as before.
-  whatsappOtpEnabled Boolean  @default(false)
+  whatsappOtpEnabled        Boolean      @default(false)
   // Which map provider every tenant's storefront (address picker, kitchen
   // zone picker) renders — platform-wide, not per-tenant, same reasoning as
   // whatsappOtpEnabled: this is a technical integration credential, owned by
@@ -1830,7 +1843,7 @@ model PlatformSettings {
   // every other provider credential in this table is: defense in depth
   // against a raw DB dump.
   googleMapsApiKeyEncrypted String?
-  updatedAt                 DateTime @updatedAt
+  updatedAt                 DateTime     @updatedAt
   updatedByUserId           String?
 
   @@map("platform_settings")

@@ -191,6 +191,7 @@ function OrdersTable({
             <th className="px-5 py-3">Customer</th>
             <th className="px-5 py-3">Fulfillment</th>
             <th className="px-5 py-3">Total</th>
+            <th className="px-5 py-3">Coupon</th>
             <th className="px-5 py-3">Payment</th>
             <th className="px-5 py-3">Status</th>
           </tr>
@@ -236,6 +237,9 @@ function OrdersTable({
                 <td className="px-5 py-3 font-medium text-zinc-900 dark:text-zinc-100">
                   {formatPriceFromPaise(order.totalInPaise)}
                 </td>
+                <td className="px-5 py-3 text-xs text-zinc-500 dark:text-zinc-400">
+                  {order.couponCode ? <span className="font-mono">{order.couponCode}</span> : "—"}
+                </td>
                 <td className="px-5 py-3">
                   <span
                     className={`badge ${
@@ -276,7 +280,7 @@ function OrdersTable({
           })}
           {orders.length === 0 && (
             <tr>
-              <td colSpan={6} className="px-5 py-8 text-center text-zinc-500 dark:text-zinc-400">
+              <td colSpan={7} className="px-5 py-8 text-center text-zinc-500 dark:text-zinc-400">
                 No orders found.
               </td>
             </tr>

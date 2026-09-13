@@ -37,6 +37,7 @@ export interface AdminOrder {
   orderNumber: string;
   status: string;
   paymentStatus: string;
+  couponCode: string | null;
   subtotalInPaise: number;
   deliveryFeeInPaise: number;
   totalInPaise: number;
@@ -56,7 +57,6 @@ export interface AdminOrder {
 
 export interface AdminOrderDetail extends AdminOrder {
   discountInPaise: number;
-  couponCode: string | null;
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   notes: string | null;

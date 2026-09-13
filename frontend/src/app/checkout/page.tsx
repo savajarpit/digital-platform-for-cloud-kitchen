@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { CheckCircle2, Clock, MapPin, Plus, Zap } from "lucide-react";
-import { cartLineUnitPrice, useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
+import { useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
 import { useCartAvailability } from "@/lib/hooks/useCartAvailability";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { ApiError, listAddresses, checkServiceability, type Address, type ServiceabilityResult } from "@/lib/api/addresses";
@@ -652,18 +652,27 @@ export default function CheckoutPage() {
           <h2 className="mb-4 font-semibold text-zinc-900 dark:text-zinc-100">{t("orderSummary")}</h2>
           <ul className="flex flex-col gap-2 text-sm">
             {items.map((item) => (
-              <li key={item.lineKey} className="flex justify-between gap-3 text-zinc-600 dark:text-zinc-400">
-                <span className="min-w-0 wrap-break-word">
-                  {item.name} × {item.quantity}
-                  {item.addons && item.addons.length > 0 && (
-                    <span className="block text-xs text-zinc-400">
-                      {item.addons.map((a) => `+ ${a.name} ×${a.quantity}`).join(", ")}
-                    </span>
-                  )}
-                </span>
-                <span className="shrink-0">
-                  {formatPriceFromPaise(cartLineUnitPrice(item) * item.quantity)}
-                </span>
+              <li key={item.lineKey} className="flex flex-col gap-1 text-zinc-600 dark:text-zinc-400">
+                <div className="flex justify-between gap-3">
+                  <span className="min-w-0 wrap-break-word">
+                    {item.name} × {item.quantity}
+                  </span>
+                  <span className="shrink-0">
+                    {formatPriceFromPaise(item.priceInPaise * item.quantity)}
+                  </span>
+                </div>
+                {item.addons && item.addons.length > 0 && (
+                  <ul className="flex flex-col gap-0.5 pl-3 text-xs text-zinc-400">
+                    {item.addons.map((a) => (
+                      <li key={a.addonItemId} className="flex justify-between gap-2">
+                        <span>
+                          + {a.name} × {a.quantity}
+                        </span>
+                        <span>{formatPriceFromPaise(a.priceInPaise * a.quantity * item.quantity)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

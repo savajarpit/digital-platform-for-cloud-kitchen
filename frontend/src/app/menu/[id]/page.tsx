@@ -27,7 +27,13 @@ export default async function MealDetailPage({ params }: { params: Promise<{ id:
 
   if (!meal) notFound();
 
-  const images = meal.imageUrls.length > 0 ? meal.imageUrls : meal.imageUrl ? [meal.imageUrl] : [];
+  // Thumbnail always leads the gallery — it's the image customers already
+  // recognize the meal by from the card/cart — followed by the rest of the
+  // gallery, de-duplicated in case the same URL was uploaded to both.
+  const images = [
+    ...(meal.imageUrl ? [meal.imageUrl] : []),
+    ...meal.imageUrls.filter((url) => url !== meal.imageUrl),
+  ];
   const discountPercentage = meal.activePromotion?.discountPercentage ?? 0;
   const discountedPriceInPaise =
     discountPercentage > 0

@@ -157,10 +157,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   </span>
                 </div>
                 {item.addons && item.addons.length > 0 && (
-                  <ul className="pl-3 text-xs text-zinc-400">
+                  <ul className="flex flex-col gap-0.5 pl-3 text-xs text-zinc-400">
                     {item.addons.map((a) => (
-                      <li key={a.id}>
-                        + {a.nameSnapshot} × {a.quantity}
+                      <li key={a.id} className="flex justify-between gap-2">
+                        <span>
+                          + {a.nameSnapshot} × {a.quantity}
+                        </span>
+                        <span>{formatPriceFromPaise(a.priceInPaiseSnapshot * a.quantity * item.quantity)}</span>
                       </li>
                     ))}
                   </ul>

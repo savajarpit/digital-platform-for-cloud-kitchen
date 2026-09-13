@@ -70,16 +70,31 @@ export default function CartPage() {
                       {item.name}
                     </p>
                     <p className="text-sm text-primary-700 dark:text-primary-400">
-                      {formatPriceFromPaise(cartLineUnitPrice(item))}
+                      {formatPriceFromPaise(item.priceInPaise)}
                     </p>
                     {item.addons && item.addons.length > 0 && (
-                      <ul className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                        {item.addons.map((a) => (
-                          <li key={a.addonItemId}>
-                            + {a.name} × {a.quantity}
-                          </li>
-                        ))}
-                      </ul>
+                      <>
+                        <ul className="mt-0.5 flex flex-col gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                          {item.addons.map((a) => (
+                            <li key={a.addonItemId} className="flex justify-between gap-2">
+                              <span>
+                                + {a.name} × {a.quantity}
+                              </span>
+                              <span>{formatPriceFromPaise(a.priceInPaise * a.quantity)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-0.5 flex justify-between gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                          <span>Add-ons total</span>
+                          <span>
+                            {formatPriceFromPaise(cartLineUnitPrice(item) - item.priceInPaise)}
+                          </span>
+                        </p>
+                        <p className="mt-1 flex justify-between gap-2 border-t border-zinc-100 pt-1 text-sm font-semibold text-primary-700 dark:border-zinc-800 dark:text-primary-400">
+                          <span>Per item</span>
+                          <span>{formatPriceFromPaise(cartLineUnitPrice(item))}</span>
+                        </p>
+                      </>
                     )}
                   </Link>
                   {(mealsById.get(item.mealId)?.addonGroups ?? []).some(

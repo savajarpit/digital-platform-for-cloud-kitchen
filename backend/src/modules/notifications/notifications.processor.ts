@@ -42,6 +42,9 @@ export class NotificationsProcessor {
       this.logger.warn(`order-confirmed job for missing order ${orderId}`);
       return;
     }
+    // Guest DINE_IN/TAKEAWAY orders have no linked account — nothing to
+    // send a confirmation email/WhatsApp to.
+    if (!order.user) return;
 
     const settings = await this.settingsRepo.findNotificationSettings(tenantId);
 

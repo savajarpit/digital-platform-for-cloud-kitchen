@@ -12,6 +12,7 @@ import { PaginationService } from '../../common/services/pagination.service';
 import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
 import { FeaturesModule } from '../features/features.module';
 import { RefundsModule } from '../../shared-modules/refunds/refunds.module';
+import { DineInModule } from '../dine-in/dine-in.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RefundsModule } from '../../shared-modules/refunds/refunds.module';
     TenantLimitsModule,
     FeaturesModule,
     RefundsModule,
+    DineInModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService, OrdersRepository, PaginationService],

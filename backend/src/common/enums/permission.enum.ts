@@ -120,4 +120,15 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
       'Preview and pick between SUPER_ADMIN-approved WhatsApp message formats for order confirmations — only takes effect once SUPER_ADMIN has granted the Custom Notification Templates feature',
     category: 'settings',
   },
+  {
+    key: 'dine-in.manage',
+    description: 'Create and manage tables and outlets for dine-in service',
+    category: 'operations',
+  },
+  {
+    key: 'dine-in.order-create',
+    description:
+      'Take a dine-in or takeaway order at the counter, manage the waitlist queue, and seat waiting guests to a table',
+    category: 'operations',
+  },
 ];

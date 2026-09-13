@@ -69,4 +69,10 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
     description:
       "Lets OWNER/STAFF (with the matching permission) issue a real refund straight to the customer via the tenant's own Razorpay account when cancelling an order or subscription — not just record a manual refund for the books. Off by default.",
   },
+  {
+    key: 'dine-in',
+    name: 'Dine-in & Takeaway',
+    description:
+      'In-store ordering at physical tables and counter takeaway — table management, a waitlist queue for walk-ins, and staff-taken orders settled by cash/UPI. Off by default.',
+  },
 ];

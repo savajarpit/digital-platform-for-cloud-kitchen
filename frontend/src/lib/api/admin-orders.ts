@@ -23,13 +23,18 @@ export interface AdminOrderAddress {
   lng: number | null;
 }
 
-export type AdminOrderFulfillmentType = "DELIVERY" | "PICKUP";
+export type AdminOrderFulfillmentType = "DELIVERY" | "PICKUP" | "DINE_IN" | "TAKEAWAY";
 export type AdminOrderPaymentMethod = "RAZORPAY" | "CASH" | "UPI";
 
 export interface AdminOrderPickupZone {
   pickupAddress: string | null;
   lat: number;
   lng: number;
+}
+
+export interface AdminDineInZone {
+  id: string;
+  name: string;
 }
 
 export interface AdminOrder {
@@ -50,7 +55,12 @@ export interface AdminOrder {
   fulfillmentType: AdminOrderFulfillmentType;
   address: AdminOrderAddress | null;
   pickupKitchenZone: AdminOrderPickupZone | null;
-  user: { firstName: string; lastName: string | null; email: string };
+  // Null only for a DINE_IN/TAKEAWAY walk-in with no linked account —
+  // guestName/guestPhone carry identity instead in that case.
+  user: { firstName: string; lastName: string | null; email: string } | null;
+  guestName: string | null;
+  guestPhone: string | null;
+  tableLabelSnapshot: string | null;
   paymentMethod: AdminOrderPaymentMethod;
   createdByUserId: string | null;
 }
@@ -62,10 +72,51 @@ export interface AdminOrderDetail extends AdminOrder {
   notes: string | null;
   isInstant: boolean;
   subscriptionId: string | null;
-  userId: string;
+  userId: string | null;
+  tableId: string | null;
+  dineInKitchenZone: AdminDineInZone | null;
   cancelledAt: string | null;
   cancellationReason: string | null;
   refunds: Refund[];
+}
+
+/** DELIVERY only ever settles PENDING_PAYMENT via the payment-verify flow —
+ * every fulfillment type shares the same admin-settable list, except
+ * OUT_FOR_DELIVERY, which only makes sense when something is actually being
+ * driven somewhere. */
+export function getSettableStatusesFor(
+  fulfillmentType: AdminOrderFulfillmentType,
+): typeof ADMIN_SETTABLE_STATUSES[number][] {
+  if (fulfillmentType === "DELIVERY") return [...ADMIN_SETTABLE_STATUSES];
+  return ADMIN_SETTABLE_STATUSES.filter((s) => s !== "OUT_FOR_DELIVERY");
+}
+
+const COMPLETION_LABEL: Record<AdminOrderFulfillmentType, string> = {
+  DELIVERY: "Delivered",
+  PICKUP: "Picked Up",
+  DINE_IN: "Served",
+  TAKEAWAY: "Picked Up",
+};
+
+/** DELIVERED is the one shared "done" terminal status across every
+ * fulfillment type — just relabeled per type in the UI, no new backend
+ * status. Every other status reads the same everywhere. */
+export function getOrderStatusLabel(
+  status: string,
+  fulfillmentType: AdminOrderFulfillmentType,
+): string {
+  if (status === "DELIVERED") return COMPLETION_LABEL[fulfillmentType];
+  return status.replace(/_/g, " ");
+}
+
+/** "Sharma" for a guest, the linked account's name otherwise, or a plain
+ * "Walk-in guest" when neither is on record. */
+export function getOrderCustomerLabel(order: {
+  user: { firstName: string; lastName: string | null } | null;
+  guestName?: string | null;
+}): string {
+  if (order.user) return `${order.user.firstName} ${order.user.lastName ?? ""}`.trim();
+  return order.guestName?.trim() || "Walk-in guest";
 }
 
 export type AdminOrdersMeta = PaginationMeta;
@@ -130,8 +181,17 @@ export function createManualOrder(
   );
 }
 
-export function markOrderPaid(id: string): Promise<AdminOrderDetail> {
-  return proxyFetch<AdminOrderDetail>(`/orders/admin/${id}/mark-paid`, { method: "POST" });
+/** `paymentMethod` only takes effect for DINE_IN/TAKEAWAY — the tenant
+ * genuinely doesn't know cash-vs-UPI until the guest settles the bill.
+ * Every other manual order already committed to a method at creation. */
+export function markOrderPaid(
+  id: string,
+  paymentMethod?: "CASH" | "UPI",
+): Promise<AdminOrderDetail> {
+  return proxyFetch<AdminOrderDetail>(`/orders/admin/${id}/mark-paid`, {
+    method: "POST",
+    body: JSON.stringify({ paymentMethod }),
+  });
 }
 
 export function cancelOrderRefund(

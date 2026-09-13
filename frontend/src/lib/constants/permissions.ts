@@ -21,4 +21,6 @@ export const PERMISSIONS = {
   CUSTOMERS_VIEW: "customers.view",
   NOTIFICATION_TEMPLATES_EMAIL_EDIT: "notification-templates.email.edit",
   NOTIFICATION_TEMPLATES_WHATSAPP_EDIT: "notification-templates.whatsapp.edit",
+  DINE_IN_MANAGE: "dine-in.manage",
+  DINE_IN_ORDER_CREATE: "dine-in.order-create",
 } as const;

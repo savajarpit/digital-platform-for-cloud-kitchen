@@ -4,14 +4,17 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Clock, FileText, MapPin, Phone, User } from "lucide-react";
 import {
-  ADMIN_SETTABLE_STATUSES,
   ApiError,
   getAdminOrder,
+  getOrderCustomerLabel,
+  getOrderStatusLabel,
+  getSettableStatusesFor,
   markOrderPaid,
   updateOrderStatus,
   type AdminOrderDetail,
 } from "@/lib/api/admin-orders";
 import { usePermission } from "@/context/PermissionsContext";
+import { useFeatures } from "@/context/FeaturesContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -22,6 +25,7 @@ import { ShareOrderDetailsButton } from "@/components/ui/ShareOrderDetailsButton
 import { OrderStatusStepper, type OrderStatus } from "@/components/ui/OrderStatusStepper";
 import { CancelRefundForm } from "@/components/admin/CancelRefundForm";
 import { RefundHistoryCard } from "@/components/admin/RefundHistoryCard";
+import { DineInOrderPanel } from "@/components/admin/DineInOrderPanel";
 import { ORDER_STATUS_STYLES as STATUS_STYLES } from "@/lib/format/status-styles";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
@@ -31,10 +35,13 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const canEdit = usePermission(PERMISSIONS.ORDERS_MANAGE);
   const canCancelRefund = usePermission(PERMISSIONS.ORDERS_CANCEL_REFUND);
   const canRecordPayment = usePermission(PERMISSIONS.PAYMENTS_MANUAL_RECORD);
+  const canOrderCreate = usePermission(PERMISSIONS.DINE_IN_ORDER_CREATE);
+  const { has: hasFeature } = useFeatures();
   const { showToast } = useToast();
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [dineInPaymentMethod, setDineInPaymentMethod] = useState<"CASH" | "UPI">("CASH");
 
   useEffect(() => {
     getAdminOrder(id)
@@ -50,7 +57,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     if (!order) return;
     setMarkingPaid(true);
     try {
-      await markOrderPaid(order.id);
+      await markOrderPaid(order.id, isDineInLike ? dineInPaymentMethod : undefined);
       showToast("Order marked as paid", "success");
       refresh();
     } catch (err) {
@@ -95,6 +102,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
   const isPaid = order.paymentStatus === "PAID";
   const isFinal = order.status === "DELIVERED" || order.status === "CANCELLED";
+  const isDineInLike = order.fulfillmentType === "DINE_IN" || order.fulfillmentType === "TAKEAWAY";
 
   return (
     <div className="flex flex-col gap-6">
@@ -110,25 +118,33 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           <ShareOrderDetailsButton
             details={{
               heading: `Order #${order.orderNumber}`,
-              customerName: `${order.user.firstName} ${order.user.lastName ?? ""}`.trim(),
+              customerName: getOrderCustomerLabel(order),
               itemLines: order.items.map((item) => `${item.nameSnapshot} x${item.quantity}`),
-              deliverySlotName: order.isInstant ? "Instant delivery" : order.deliverySlotName,
-              deliveryWindowStart: order.isInstant ? null : order.deliveryWindowStart,
-              deliveryWindowEnd: order.isInstant ? null : order.deliveryWindowEnd,
-              deliveryDateLabel: new Date(order.deliveryDate).toLocaleDateString(undefined, {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              }),
+              deliverySlotName: isDineInLike ? undefined : order.isInstant ? "Instant delivery" : order.deliverySlotName,
+              deliveryWindowStart: isDineInLike || order.isInstant ? null : order.deliveryWindowStart,
+              deliveryWindowEnd: isDineInLike || order.isInstant ? null : order.deliveryWindowEnd,
+              deliveryDateLabel: isDineInLike
+                ? undefined
+                : new Date(order.deliveryDate).toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  }),
               totalLabel: formatPriceFromPaise(order.totalInPaise),
               note: order.notes,
-              ...(order.fulfillmentType === "PICKUP"
+              ...(isDineInLike
                 ? {
-                    pickupAddress: order.pickupKitchenZone?.pickupAddress,
-                    pickupLat: order.pickupKitchenZone?.lat,
-                    pickupLng: order.pickupKitchenZone?.lng,
+                    locationLabel: [order.tableLabelSnapshot, order.dineInKitchenZone?.name]
+                      .filter(Boolean)
+                      .join(" — "),
                   }
-                : { address: order.address! }),
+                : order.fulfillmentType === "PICKUP"
+                  ? {
+                      pickupAddress: order.pickupKitchenZone?.pickupAddress,
+                      pickupLat: order.pickupKitchenZone?.lat,
+                      pickupLng: order.pickupKitchenZone?.lng,
+                    }
+                  : { address: order.address! }),
             }}
           />
           <Link href={`/admin/orders/${order.id}/invoice`} className="btn-outline btn-sm">
@@ -159,14 +175,27 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             {order.paymentStatus}
           </span>
           {canRecordPayment && order.paymentMethod !== "RAZORPAY" && !isPaid && (
-            <button
-              type="button"
-              onClick={handleMarkPaid}
-              disabled={markingPaid}
-              className="btn-primary btn-sm cursor-pointer"
-            >
-              {markingPaid ? "Marking…" : "Mark Paid"}
-            </button>
+            <>
+              {isDineInLike && (
+                <Select value={dineInPaymentMethod} onValueChange={(v) => setDineInPaymentMethod(v as "CASH" | "UPI")}>
+                  <SelectTrigger className="w-24 py-1.5 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH">Cash</SelectItem>
+                    <SelectItem value="UPI">UPI</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <button
+                type="button"
+                onClick={handleMarkPaid}
+                disabled={markingPaid}
+                className="btn-primary btn-sm cursor-pointer"
+              >
+                {markingPaid ? "Marking…" : "Mark Paid"}
+              </button>
+            </>
           )}
           {canEdit && isPaid && !isFinal ? (
             <Select value={order.status} onValueChange={handleStatusChange}>
@@ -174,17 +203,21 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={order.status}>{order.status.replace(/_/g, " ")}</SelectItem>
-                {ADMIN_SETTABLE_STATUSES.filter((s) => s !== order.status).map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {s.replace(/_/g, " ")}
-                  </SelectItem>
-                ))}
+                <SelectItem value={order.status}>
+                  {getOrderStatusLabel(order.status, order.fulfillmentType)}
+                </SelectItem>
+                {getSettableStatusesFor(order.fulfillmentType)
+                  .filter((s) => s !== order.status)
+                  .map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {getOrderStatusLabel(s, order.fulfillmentType)}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           ) : (
             <span className={`badge ${STATUS_STYLES[order.status] ?? ""}`}>
-              {order.status.replace(/_/g, " ")}
+              {getOrderStatusLabel(order.status, order.fulfillmentType)}
             </span>
           )}
         </div>
@@ -256,70 +289,99 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               <User className="h-4 w-4" />
               Customer
             </h3>
-            <Link
-              href={`/admin/customers/${order.userId}`}
-              className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
-            >
-              {order.user.firstName} {order.user.lastName ?? ""}
-            </Link>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">{order.user.email}</p>
-          </div>
-
-          <div className="card flex flex-col gap-2 p-6 text-sm">
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              {order.fulfillmentType === "PICKUP" ? "Pickup" : "Delivery"}
-            </h3>
-            {order.fulfillmentType === "PICKUP" ? (
-              <div className="flex min-w-0 items-start gap-2 text-zinc-600 dark:text-zinc-400">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
-                <div className="min-w-0">
-                  <span className="wrap-break-word">
-                    {order.pickupKitchenZone?.pickupAddress ?? "Pickup location unavailable"}
-                  </span>
-                  {order.pickupKitchenZone && (
-                    <div className="mt-0.5">
-                      <MapLink lat={order.pickupKitchenZone.lat} lng={order.pickupKitchenZone.lng} />
-                    </div>
-                  )}
-                </div>
-              </div>
+            {order.user ? (
+              <>
+                <Link
+                  href={`/admin/customers/${order.userId}`}
+                  className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
+                >
+                  {order.user.firstName} {order.user.lastName ?? ""}
+                </Link>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">{order.user.email}</p>
+              </>
             ) : (
               <>
+                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                  {order.guestName?.trim() || "Walk-in guest"}
+                </p>
+                {order.guestPhone && (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{order.guestPhone}</p>
+                )}
+              </>
+            )}
+          </div>
+
+          {isDineInLike ? (
+            <div className="card flex flex-col gap-2 p-6 text-sm">
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {order.fulfillmentType === "DINE_IN" ? "Dine-in" : "Takeaway"}
+              </h3>
+              {order.dineInKitchenZone && (
+                <p className="text-zinc-600 dark:text-zinc-400">{order.dineInKitchenZone.name}</p>
+              )}
+              {order.fulfillmentType === "DINE_IN" && (
+                <p className="text-zinc-600 dark:text-zinc-400">
+                  {order.tableLabelSnapshot ? `Table: ${order.tableLabelSnapshot}` : "No table assigned yet"}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="card flex flex-col gap-2 p-6 text-sm">
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {order.fulfillmentType === "PICKUP" ? "Pickup" : "Delivery"}
+              </h3>
+              {order.fulfillmentType === "PICKUP" ? (
                 <div className="flex min-w-0 items-start gap-2 text-zinc-600 dark:text-zinc-400">
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
                   <div className="min-w-0">
                     <span className="wrap-break-word">
-                      {order.address!.line1}
-                      {order.address!.line2 ? `, ${order.address!.line2}` : ""}, {order.address!.city},{" "}
-                      {order.address!.state} — {order.address!.pincode}
+                      {order.pickupKitchenZone?.pickupAddress ?? "Pickup location unavailable"}
                     </span>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs">
-                      <MapLink lat={order.address!.lat} lng={order.address!.lng} />
-                      <ShareAddressButton address={order.address!} className="text-xs" />
-                    </div>
+                    {order.pickupKitchenZone && (
+                      <div className="mt-0.5">
+                        <MapLink lat={order.pickupKitchenZone.lat} lng={order.pickupKitchenZone.lng} />
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="flex min-w-0 items-center gap-2 text-zinc-600 dark:text-zinc-400">
-                  <Phone className="h-4 w-4 shrink-0 text-primary-600" />
-                  <span className="wrap-break-word">{order.address!.contactPhone}</span>
-                </div>
-              </>
-            )}
-            <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
-              <Clock className="h-4 w-4 shrink-0 text-primary-600" />
-              <span>
-                {order.isInstant
-                  ? "Instant delivery"
-                  : `${order.deliverySlotName} (${formatTime12h(order.deliveryWindowStart)}–${formatTime12h(order.deliveryWindowEnd)})`}
-                {" · "}
-                {new Date(order.deliveryDate).toLocaleDateString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </span>
+              ) : (
+                <>
+                  <div className="flex min-w-0 items-start gap-2 text-zinc-600 dark:text-zinc-400">
+                    <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary-600" />
+                    <div className="min-w-0">
+                      <span className="wrap-break-word">
+                        {order.address!.line1}
+                        {order.address!.line2 ? `, ${order.address!.line2}` : ""}, {order.address!.city},{" "}
+                        {order.address!.state} — {order.address!.pincode}
+                      </span>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs">
+                        <MapLink lat={order.address!.lat} lng={order.address!.lng} />
+                        <ShareAddressButton address={order.address!} className="text-xs" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex min-w-0 items-center gap-2 text-zinc-600 dark:text-zinc-400">
+                    <Phone className="h-4 w-4 shrink-0 text-primary-600" />
+                    <span className="wrap-break-word">{order.address!.contactPhone}</span>
+                  </div>
+                </>
+              )}
+              <div className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
+                <Clock className="h-4 w-4 shrink-0 text-primary-600" />
+                <span>
+                  {order.isInstant
+                    ? "Instant delivery"
+                    : `${order.deliverySlotName} (${formatTime12h(order.deliveryWindowStart)}–${formatTime12h(order.deliveryWindowEnd)})`}
+                  {" · "}
+                  {new Date(order.deliveryDate).toLocaleDateString(undefined, {
+                    weekday: "short",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
 
           {(order.razorpayOrderId || order.subscriptionId) && (
             <div className="card flex flex-col gap-1.5 p-6 text-xs text-zinc-500 dark:text-zinc-400">
@@ -338,6 +400,10 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
       </div>
+
+      {isDineInLike && canOrderCreate && hasFeature("dine-in") && (
+        <DineInOrderPanel order={order} onChanged={refresh} />
+      )}
     </div>
   );
 }

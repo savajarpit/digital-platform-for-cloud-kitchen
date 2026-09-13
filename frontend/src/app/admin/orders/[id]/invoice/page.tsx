@@ -105,13 +105,23 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
               Billed to
             </h3>
             <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
-              {order.user.firstName} {order.user.lastName ?? ""}
+              {order.user ? `${order.user.firstName} ${order.user.lastName ?? ""}` : order.guestName?.trim() || "Walk-in guest"}
             </p>
-            <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">{order.user.email}</p>
+            {order.user ? (
+              <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">{order.user.email}</p>
+            ) : (
+              order.guestPhone && (
+                <p className="text-sm text-zinc-700 dark:text-zinc-300 print:text-black">{order.guestPhone}</p>
+              )
+            )}
             <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300 print:text-black">
               {order.fulfillmentType === "PICKUP"
                 ? `Pickup: ${order.pickupKitchenZone?.pickupAddress ?? "—"}`
-                : `${order.address!.line1}${order.address!.line2 ? `, ${order.address!.line2}` : ""}, ${order.address!.city}, ${order.address!.state} — ${order.address!.pincode}`}
+                : order.fulfillmentType === "DINE_IN" || order.fulfillmentType === "TAKEAWAY"
+                  ? [order.tableLabelSnapshot ? `Table ${order.tableLabelSnapshot}` : null, order.dineInKitchenZone?.name]
+                      .filter(Boolean)
+                      .join(" — ")
+                  : `${order.address!.line1}${order.address!.line2 ? `, ${order.address!.line2}` : ""}, ${order.address!.city}, ${order.address!.state} — ${order.address!.pincode}`}
             </p>
           </div>
           <div>

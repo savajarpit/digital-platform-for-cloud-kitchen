@@ -416,9 +416,12 @@ export class SubscriptionsService {
     const dispatch = todaysOrders.map((order) => ({
       orderId: order.id,
       orderNumber: order.orderNumber,
+      // Non-null assert: a materialized subscription order always belongs
+      // to a real subscriber account — userId is only ever null for a
+      // DINE_IN/TAKEAWAY guest walk-in, which materialization never creates.
       customerName:
-        `${order.user.firstName} ${order.user.lastName ?? ''}`.trim(),
-      customerEmail: order.user.email,
+        `${order.user!.firstName} ${order.user!.lastName ?? ''}`.trim(),
+      customerEmail: order.user!.email,
       planName: order.subscription?.planNameSnapshot ?? 'Subscription',
       // Full structured address (not just a flat "line1, city" string) so
       // the dispatch card can both display and share() the complete,

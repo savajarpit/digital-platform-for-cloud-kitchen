@@ -27,6 +27,26 @@ const PICKUP_STAGES: Stage[] = [
   { status: "DELIVERED", label: "Picked Up" },
 ];
 
+// No OUT_FOR_DELIVERY leg at all — nothing gets driven anywhere for in-store
+// service, so that stage is skipped entirely rather than relabeled.
+const DINE_IN_STAGES: Stage[] = [
+  { status: "CONFIRMED", label: "Confirmed" },
+  { status: "PREPARING", label: "Preparing" },
+  { status: "DELIVERED", label: "Served" },
+];
+
+const TAKEAWAY_STAGES: Stage[] = [
+  { status: "CONFIRMED", label: "Confirmed" },
+  { status: "PREPARING", label: "Preparing" },
+  { status: "DELIVERED", label: "Picked Up" },
+];
+
+const STAGES_BY_FULFILLMENT_TYPE: Record<string, Stage[]> = {
+  PICKUP: PICKUP_STAGES,
+  DINE_IN: DINE_IN_STAGES,
+  TAKEAWAY: TAKEAWAY_STAGES,
+};
+
 /** Visual stage-progress indicator for an order's lifecycle. Reuses the
  * existing OrderStatus enum values as-is (OUT_FOR_DELIVERY/DELIVERED just
  * get pickup-appropriate labels) — no new backend states. CANCELLED is a
@@ -37,7 +57,7 @@ export function OrderStatusStepper({
   fulfillmentType,
 }: {
   status: OrderStatus;
-  fulfillmentType: "PICKUP" | "DELIVERY";
+  fulfillmentType: "PICKUP" | "DELIVERY" | "DINE_IN" | "TAKEAWAY";
 }) {
   if (status === "CANCELLED") {
     return (
@@ -48,7 +68,7 @@ export function OrderStatusStepper({
   }
   if (status === "PENDING_PAYMENT") return null;
 
-  const stages = fulfillmentType === "PICKUP" ? PICKUP_STAGES : DELIVERY_STAGES;
+  const stages = STAGES_BY_FULFILLMENT_TYPE[fulfillmentType] ?? DELIVERY_STAGES;
   const activeIndex = stages.findIndex((s) => s.status === status);
 
   return (

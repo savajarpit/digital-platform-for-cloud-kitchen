@@ -11,6 +11,13 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateManualOrderDto } from './dto/create-manual-order.dto';
+import {
+  AddOrderItemsDto,
+  AssignTableDto,
+  CreateDineInOrderDto,
+  MarkOrderPaidDto,
+  SeatWaitlistEntryDto,
+} from './dto/create-dine-in-order.dto';
 import { PreviewOrderDto } from './dto/preview-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
@@ -22,6 +29,7 @@ import { RequirePermission } from '../../common/decorators/require-permission.de
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CurrentTenantId } from '../../common/decorators/current-tenant-id.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 import { Role } from '../../common/enums/role.enum';
 
 @ApiTags('orders')
@@ -160,8 +168,88 @@ export class OrdersController {
   markPaidManually(
     @CurrentTenantId() tenantId: string,
     @Param('id') id: string,
+    @Body() dto: MarkOrderPaidDto,
   ) {
-    return this.ordersService.markPaidManually(tenantId, id);
+    return this.ordersService.markPaidManually(tenantId, id, dto);
+  }
+
+  // ── Dine-in / takeaway ────────────────────────────────────
+
+  @Post('admin/dine-in')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequireFeature('dine-in')
+  @RequirePermission('dine-in.order-create')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Order opened')
+  @ApiOperation({
+    summary:
+      'Admin: open a running dine-in/takeaway order at the counter — table and guest details are all optional',
+  })
+  createDineIn(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') staffUserId: string,
+    @Body() dto: CreateDineInOrderDto,
+  ) {
+    return this.ordersService.createDineIn(tenantId, staffUserId, dto);
+  }
+
+  @Post('admin/waitlist/:waitlistEntryId/seat')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequireFeature('dine-in')
+  @RequirePermission('dine-in.order-create')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Guest seated')
+  @ApiOperation({
+    summary:
+      'Admin: seat a waiting party at a table — creates the real order for the first time',
+  })
+  seatWaitlistEntry(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') staffUserId: string,
+    @Param('waitlistEntryId') waitlistEntryId: string,
+    @Body() dto: SeatWaitlistEntryDto,
+  ) {
+    return this.ordersService.seatWaitlistEntry(
+      tenantId,
+      staffUserId,
+      waitlistEntryId,
+      dto,
+    );
+  }
+
+  @Post('admin/:id/items')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequireFeature('dine-in')
+  @RequirePermission('dine-in.order-create')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Items added')
+  @ApiOperation({
+    summary:
+      'Admin: add another round of items to a still-open dine-in/takeaway order',
+  })
+  addItems(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: AddOrderItemsDto,
+  ) {
+    return this.ordersService.addItemsToDineInOrder(tenantId, id, dto);
+  }
+
+  @Post('admin/:id/assign-table')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequireFeature('dine-in')
+  @RequirePermission('dine-in.order-create')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Table assigned')
+  @ApiOperation({
+    summary: 'Admin: assign or move a dine-in order to a different table',
+  })
+  assignTable(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: AssignTableDto,
+  ) {
+    return this.ordersService.assignTable(tenantId, id, dto);
   }
 
   @Patch(':id/status')

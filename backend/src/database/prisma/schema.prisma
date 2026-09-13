@@ -68,6 +68,14 @@ enum OrderStatus {
 enum OrderFulfillmentType {
   DELIVERY
   PICKUP
+  DINE_IN
+  TAKEAWAY
+}
+
+enum WaitlistStatus {
+  WAITING
+  SEATED
+  CANCELLED
 }
 
 // Shared by Order and Subscription — both a manual order and a manual
@@ -274,6 +282,8 @@ model Tenant {
   planFeatures                PlanFeature[]
   planFaqs                    PlanFaq[]
   tenantNotificationTemplates TenantNotificationTemplate[]
+  diningTables                DiningTable[]
+  waitlistEntries             WaitlistEntry[]
 
   @@map("tenants")
 }
@@ -464,11 +474,67 @@ model KitchenZone {
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
-  tenant Tenant  @relation(fields: [tenantId], references: [id])
-  orders Order[]
+  tenant          Tenant          @relation(fields: [tenantId], references: [id])
+  orders          Order[]         @relation("OrderPickupZone")
+  dineInOrders    Order[]         @relation("OrderDineInZone")
+  diningTables    DiningTable[]
+  waitlistEntries WaitlistEntry[]
 
   @@index([tenantId])
   @@map("kitchen_zones")
+}
+
+/**
+ * A physical table at one outlet (KitchenZone). Occupied/free is never
+ * stored here — it's derived from whether the table has an active (not
+ * DELIVERED/CANCELLED) DINE_IN order, so there's no status column to keep
+ * in sync with the order lifecycle.
+ */
+model DiningTable {
+  id            String   @id @default(uuid())
+  tenantId      String
+  kitchenZoneId String
+  label         String
+  capacity      Int?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  kitchenZone KitchenZone @relation(fields: [kitchenZoneId], references: [id])
+  orders      Order[]
+
+  @@unique([kitchenZoneId, label])
+  @@index([tenantId])
+  @@map("dining_tables")
+}
+
+/**
+ * The "table's full, guest is standing" queue — deliberately has no items
+ * and no bill. It only ever holds who's waiting and how many; a real Order
+ * gets created at the moment of seating (see WaitlistEntry.seatedOrder),
+ * never before.
+ */
+model WaitlistEntry {
+  id            String         @id @default(uuid())
+  tenantId      String
+  kitchenZoneId String
+  guestName     String?
+  guestPhone    String?
+  partySize     Int            @default(1)
+  status        WaitlistStatus @default(WAITING)
+  seatedOrderId String?        @unique
+  createdAt     DateTime       @default(now())
+  seatedAt      DateTime?
+  cancelledAt   DateTime?
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  kitchenZone KitchenZone @relation(fields: [kitchenZoneId], references: [id])
+  seatedOrder Order?      @relation(fields: [seatedOrderId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, kitchenZoneId, status])
+  @@map("waitlist_entries")
 }
 
 model DeliverySlot {
@@ -934,7 +1000,13 @@ model Address {
 model Order {
   id                          String               @id @default(uuid())
   tenantId                    String
-  userId                      String
+  // Nullable only for DINE_IN/TAKEAWAY walk-ins with no linked account —
+  // every DELIVERY/PICKUP order (and any dine-in order staff chose to link
+  // to a real customer) still has this set. guestName/guestPhone below are
+  // the fallback identity for the unlinked case.
+  userId                      String?
+  guestName                   String?
+  guestPhone                  String?
   // Required for DELIVERY, null for PICKUP — enforced in the service layer,
   // not the DB, same convention as SubscriptionPlanDay's mode-conditional
   // fields.
@@ -942,6 +1014,15 @@ model Order {
   fulfillmentType             OrderFulfillmentType @default(DELIVERY)
   // Required for PICKUP, null for DELIVERY.
   pickupKitchenZoneId         String?
+  // Which outlet took this DINE_IN/TAKEAWAY order — separate from
+  // pickupKitchenZoneId, which carries "advance-booked customer pickup
+  // point" semantics that don't apply here.
+  dineInKitchenZoneId         String?
+  tableId                     String?
+  // Frozen at seating time, same rule as addressLine1Snapshot etc — a
+  // table getting renamed/deleted later must never rewrite a past order's
+  // record of which table it was served at.
+  tableLabelSnapshot          String?
   orderNumber                 String
   status                      OrderStatus          @default(PENDING_PAYMENT)
   paymentStatus               PaymentStatus        @default(PENDING)
@@ -1007,9 +1088,12 @@ model Order {
   updatedAt                   DateTime             @updatedAt
 
   tenant            Tenant            @relation(fields: [tenantId], references: [id])
-  user              User              @relation(fields: [userId], references: [id])
+  user              User?             @relation(fields: [userId], references: [id])
   address           Address?          @relation(fields: [addressId], references: [id])
-  pickupKitchenZone KitchenZone?      @relation(fields: [pickupKitchenZoneId], references: [id])
+  pickupKitchenZone KitchenZone?      @relation("OrderPickupZone", fields: [pickupKitchenZoneId], references: [id])
+  dineInKitchenZone KitchenZone?      @relation("OrderDineInZone", fields: [dineInKitchenZoneId], references: [id])
+  table             DiningTable?      @relation(fields: [tableId], references: [id])
+  waitlistEntry     WaitlistEntry?
   deliverySlot      DeliverySlot?     @relation(fields: [deliverySlotId], references: [id])
   subscription      Subscription?     @relation(fields: [subscriptionId], references: [id])
   items             OrderItem[]
@@ -1021,6 +1105,7 @@ model Order {
   @@index([tenantId])
   @@index([tenantId, userId])
   @@index([tenantId, status])
+  @@index([tenantId, tableId])
   @@map("orders")
 }
 

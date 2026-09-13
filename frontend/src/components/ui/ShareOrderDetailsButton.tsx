@@ -28,6 +28,10 @@ export interface ShareableOrderDetails {
   pickupAddress?: string | null;
   pickupLat?: number | null;
   pickupLng?: number | null;
+  /** A dine-in/takeaway order's table/outlet, e.g. "Table 4 — Main Kitchen"
+   * — takes priority over address/pickupAddress when set, since neither
+   * applies to in-store service. */
+  locationLabel?: string | null;
 }
 
 function formatOrderText(details: ShareableOrderDetails): string {
@@ -39,13 +43,15 @@ function formatOrderText(details: ShareableOrderDetails): string {
     .filter(Boolean)
     .join(" · ");
 
-  const locationLines = details.address
-    ? [
-        "Deliver to:",
-        `${details.address.line1}${details.address.line2 ? `, ${details.address.line2}` : ""}, ${details.address.city}, ${details.address.state} — ${details.address.pincode}`,
-        details.address.contactPhone ? `Phone: ${details.address.contactPhone}` : null,
-      ]
-    : ["Pickup at:", details.pickupAddress ?? "Pickup location"];
+  const locationLines = details.locationLabel
+    ? ["Location:", details.locationLabel]
+    : details.address
+      ? [
+          "Deliver to:",
+          `${details.address.line1}${details.address.line2 ? `, ${details.address.line2}` : ""}, ${details.address.city}, ${details.address.state} — ${details.address.pincode}`,
+          details.address.contactPhone ? `Phone: ${details.address.contactPhone}` : null,
+        ]
+      : ["Pickup at:", details.pickupAddress ?? "Pickup location"];
 
   return [
     details.heading,

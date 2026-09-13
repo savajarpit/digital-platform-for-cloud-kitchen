@@ -31,11 +31,20 @@ export interface AddressSnapshotInput {
 
 export interface CreateOrderInput {
   tenantId: string;
-  userId: string;
+  // Absent only for a DINE_IN/TAKEAWAY walk-in with no linked account —
+  // guestName/guestPhone carry identity instead in that case.
+  userId?: string;
+  guestName?: string;
+  guestPhone?: string;
   fulfillmentType: OrderFulfillmentType;
   addressId?: string;
   addressSnapshot?: AddressSnapshotInput;
   pickupKitchenZoneId?: string;
+  // Which outlet took a DINE_IN/TAKEAWAY order — distinct from
+  // pickupKitchenZoneId's "advance-booked pickup point" semantics.
+  dineInKitchenZoneId?: string;
+  tableId?: string;
+  tableLabelSnapshot?: string;
   orderNumber: string;
   subtotalInPaise: number;
   discountInPaise: number;
@@ -63,6 +72,7 @@ const ORDER_INCLUDE = {
   items: true,
   address: true,
   pickupKitchenZone: true,
+  table: true,
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithDetails = Prisma.OrderGetPayload<{
@@ -92,6 +102,8 @@ const ORDER_ADMIN_INCLUDE = {
   items: true,
   address: true,
   pickupKitchenZone: true,
+  dineInKitchenZone: true,
+  table: true,
   user: { select: { firstName: true, lastName: true, email: true } },
   refunds: { orderBy: { createdAt: 'desc' } },
 } satisfies Prisma.OrderInclude;
@@ -139,6 +151,8 @@ export class OrdersRepository {
         data: {
           tenantId: input.tenantId,
           userId: input.userId,
+          guestName: input.guestName,
+          guestPhone: input.guestPhone,
           fulfillmentType: input.fulfillmentType,
           addressId: input.addressId,
           addressLine1Snapshot: input.addressSnapshot?.line1,
@@ -150,6 +164,9 @@ export class OrdersRepository {
           addressLatSnapshot: input.addressSnapshot?.lat,
           addressLngSnapshot: input.addressSnapshot?.lng,
           pickupKitchenZoneId: input.pickupKitchenZoneId,
+          dineInKitchenZoneId: input.dineInKitchenZoneId,
+          tableId: input.tableId,
+          tableLabelSnapshot: input.tableLabelSnapshot,
           orderNumber: input.orderNumber,
           subtotalInPaise: input.subtotalInPaise,
           discountInPaise: input.discountInPaise,
@@ -179,7 +196,9 @@ export class OrdersRepository {
         include: ORDER_INCLUDE,
       });
 
-      if (input.couponId) {
+      // Coupons require a real linked customer (never a guest walk-in) — the
+      // dine-in path never sets couponId without also setting userId.
+      if (input.couponId && input.userId) {
         await tx.couponRedemption.create({
           data: {
             tenantId: input.tenantId,
@@ -273,15 +292,71 @@ export class OrdersRepository {
 
   /** Confirms a manually-created (CASH/UPI) order once payment is actually
    * collected — the admin equivalent of markPaid(), with no razorpayPaymentId
-   * since there's no gateway involved. */
-  markPaidManually(id: string): Promise<Order> {
+   * since there's no gateway involved. `paymentMethod` is only for DINE_IN/
+   * TAKEAWAY, where staff genuinely doesn't know cash-vs-UPI until the guest
+   * pays at the end of the meal — every other manual order already commits
+   * to CASH/UPI at creation and never changes it here. */
+  markPaidManually(id: string, paymentMethod?: PaymentMethod): Promise<Order> {
     return this.prisma.order.update({
       where: { id },
       data: {
         paymentStatus: PaymentStatus.PAID,
         status: OrderStatus.CONFIRMED,
+        ...(paymentMethod ? { paymentMethod } : {}),
       },
     });
+  }
+
+  /** Appends another round of items to a still-open DINE_IN/TAKEAWAY order —
+   * the "running order" a POS keeps adding to across multiple KOT rounds.
+   * Only ever adds; there's no remove/edit in v1 — cancel the whole order if
+   * something was punched in wrong. */
+  async addItems(
+    id: string,
+    items: OrderItemInput[],
+    additionalSubtotalInPaise: number,
+    additionalDiscountInPaise: number,
+  ): Promise<OrderWithAdminDetails> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.orderItem.createMany({
+        data: items.map((item) => ({
+          orderId: id,
+          mealId: item.mealId,
+          nameSnapshot: item.nameSnapshot,
+          priceInPaiseSnapshot: item.priceInPaiseSnapshot,
+          quantity: item.quantity,
+          isFreeItem: item.isFreeItem ?? false,
+        })),
+      });
+      const order = await tx.order.update({
+        where: { id },
+        data: {
+          subtotalInPaise: { increment: additionalSubtotalInPaise },
+          discountInPaise: { increment: additionalDiscountInPaise },
+          totalInPaise: {
+            increment: additionalSubtotalInPaise - additionalDiscountInPaise,
+          },
+        },
+        include: ORDER_ADMIN_INCLUDE,
+      });
+      return withAddressSnapshot(order);
+    });
+  }
+
+  /** Assigns or reassigns which table a DINE_IN order is sitting at — table
+   * can start unset (a seated-but-not-yet-placed edge case) or change if the
+   * party actually moved tables. */
+  async assignTable(
+    id: string,
+    tableId: string,
+    tableLabelSnapshot: string,
+  ): Promise<OrderWithAdminDetails> {
+    const order = await this.prisma.order.update({
+      where: { id },
+      data: { tableId, tableLabelSnapshot },
+      include: ORDER_ADMIN_INCLUDE,
+    });
+    return withAddressSnapshot(order);
   }
 
   /**

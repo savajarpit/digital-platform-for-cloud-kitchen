@@ -73,6 +73,7 @@ import { PlatformEmailTemplatesModule } from './modules/platform-email-templates
 import { PlatformWhatsAppTemplatesModule } from './modules/platform-whatsapp-templates/platform-whatsapp-templates.module';
 import { NotificationTemplatesModule } from './modules/notification-templates/notification-templates.module';
 import { PlatformSettingsModule } from './modules/platform-settings/platform-settings.module';
+import { DineInModule } from './modules/dine-in/dine-in.module';
 
 @Module({
   imports: [
@@ -149,6 +150,7 @@ import { PlatformSettingsModule } from './modules/platform-settings/platform-set
     SettingsModule,
     MenuModule,
     AddressesModule,
+    DineInModule,
     OrdersModule,
     PaymentsModule,
     PermissionsModule,

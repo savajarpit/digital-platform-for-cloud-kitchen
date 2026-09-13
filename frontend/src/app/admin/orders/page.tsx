@@ -4,8 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, ClipboardPlus, Package } from "lucide-react";
 import {
-  ADMIN_SETTABLE_STATUSES,
   ApiError,
+  getOrderCustomerLabel,
+  getOrderStatusLabel,
+  getSettableStatusesFor,
   listAdminOrders,
   updateOrderStatus,
   type AdminOrder,
@@ -40,6 +42,15 @@ const STATUS_STYLES: Record<string, string> = {
 const FULFILLMENT_STYLES: Record<AdminOrderFulfillmentType, string> = {
   DELIVERY: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
   PICKUP: "bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400",
+  DINE_IN: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
+  TAKEAWAY: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
+};
+
+const FULFILLMENT_LABELS: Record<AdminOrderFulfillmentType, string> = {
+  DELIVERY: "Delivery",
+  PICKUP: "Pickup",
+  DINE_IN: "Dine-in",
+  TAKEAWAY: "Takeaway",
 };
 
 export default function AdminOrdersPage() {
@@ -214,24 +225,28 @@ function OrdersTable({
                   </p>
                 </td>
                 <td className="px-5 py-3 text-zinc-700 dark:text-zinc-300">
-                  <p>
-                    {order.user.firstName} {order.user.lastName ?? ""}
-                  </p>
-                  <p className="text-xs text-zinc-400">{order.user.email}</p>
+                  <p>{getOrderCustomerLabel(order)}</p>
+                  <p className="text-xs text-zinc-400">{order.user?.email ?? "Walk-in"}</p>
                 </td>
                 <td className="px-5 py-3 text-xs text-zinc-500 dark:text-zinc-400">
                   <span className={`badge ${FULFILLMENT_STYLES[order.fulfillmentType]}`}>
-                    {order.fulfillmentType === "PICKUP" ? "Pickup" : "Delivery"}
+                    {FULFILLMENT_LABELS[order.fulfillmentType]}
                   </span>
-                  <p className="mt-1">
-                    {order.deliverySlotName} ·{" "}
-                    {new Date(order.deliveryDate).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </p>
-                  {order.fulfillmentType === "PICKUP" && order.pickupKitchenZone && (
-                    <p className="mt-0.5 text-zinc-400">{order.pickupKitchenZone.pickupAddress}</p>
+                  {order.fulfillmentType === "DINE_IN" || order.fulfillmentType === "TAKEAWAY" ? (
+                    order.tableLabelSnapshot && <p className="mt-1">{order.tableLabelSnapshot}</p>
+                  ) : (
+                    <>
+                      <p className="mt-1">
+                        {order.deliverySlotName} ·{" "}
+                        {new Date(order.deliveryDate).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </p>
+                      {order.fulfillmentType === "PICKUP" && order.pickupKitchenZone && (
+                        <p className="mt-0.5 text-zinc-400">{order.pickupKitchenZone.pickupAddress}</p>
+                      )}
+                    </>
                   )}
                 </td>
                 <td className="px-5 py-3 font-medium text-zinc-900 dark:text-zinc-100">
@@ -261,17 +276,21 @@ function OrdersTable({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={order.status}>{order.status.replace(/_/g, " ")}</SelectItem>
-                        {ADMIN_SETTABLE_STATUSES.filter((s) => s !== order.status).map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {s.replace(/_/g, " ")}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value={order.status}>
+                          {getOrderStatusLabel(order.status, order.fulfillmentType)}
+                        </SelectItem>
+                        {getSettableStatusesFor(order.fulfillmentType)
+                          .filter((s) => s !== order.status)
+                          .map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {getOrderStatusLabel(s, order.fulfillmentType)}
+                            </SelectItem>
+                          ))}
                       </SelectContent>
                     </Select>
                   ) : (
                     <span className={`badge ${STATUS_STYLES[order.status] ?? ""}`}>
-                      {order.status.replace(/_/g, " ")}
+                      {getOrderStatusLabel(order.status, order.fulfillmentType)}
                     </span>
                   )}
                 </td>

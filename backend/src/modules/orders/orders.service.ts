@@ -14,6 +14,13 @@ import {
 } from './orders.repository';
 import { CreateOrderDto, OrderItemInputDto } from './dto/create-order.dto';
 import { CreateManualOrderDto } from './dto/create-manual-order.dto';
+import {
+  AddOrderItemsDto,
+  AssignTableDto,
+  CreateDineInOrderDto,
+  MarkOrderPaidDto,
+  SeatWaitlistEntryDto,
+} from './dto/create-dine-in-order.dto';
 import { PreviewOrderDto } from './dto/preview-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
@@ -33,7 +40,10 @@ import { FeaturesService } from '../features/features.service';
 import { RefundsRepository } from '../../shared-modules/refunds/refunds.repository';
 import { RAZORPAY_REFUNDS_FEATURE_KEY } from '../../shared-modules/refunds/refunds.constants';
 import { CancelRefundDto } from '../../shared-modules/refunds/dto/cancel-refund.dto';
+import { DiningTablesService } from '../dine-in/dining-tables.service';
+import { WaitlistService } from '../dine-in/waitlist.service';
 import {
+  OrderFulfillmentType,
   PaymentMethod,
   PaymentStatus,
   Refund,
@@ -77,6 +87,8 @@ export class OrdersService {
     private readonly tenantLimits: TenantLimitsService,
     private readonly featuresService: FeaturesService,
     private readonly refundsRepo: RefundsRepository,
+    private readonly diningTablesService: DiningTablesService,
+    private readonly waitlistService: WaitlistService,
   ) {}
 
   /**
@@ -86,7 +98,11 @@ export class OrdersService {
    */
   private async computePricing(
     tenantId: string,
-    userId: string,
+    // Absent only for a DINE_IN/TAKEAWAY guest order with no linked
+    // customer — couponCode is never set in that case (coupons require a
+    // real account, see validateCoupon below), so userId is never actually
+    // read when it's missing.
+    userId: string | undefined,
     cartItems: OrderItemInputDto[],
     couponCode: string | undefined,
   ): Promise<PricingResult> {
@@ -135,6 +151,11 @@ export class OrdersService {
     let couponId: string | undefined;
     let resolvedCouponCode: string | undefined;
     if (couponCode) {
+      if (!userId) {
+        throw new BadRequestException(
+          'A coupon code requires a linked customer account.',
+        );
+      }
       const coupon = await this.promotionsService.validateCoupon(
         tenantId,
         couponCode,
@@ -297,10 +318,14 @@ export class OrdersService {
   }
 
   /** Confirms cash/UPI was actually received for a manually-created order —
-   * a distinct permission from creating the order itself (see createManual). */
+   * a distinct permission from creating the order itself (see createManual).
+   * `dto.paymentMethod` only takes effect for DINE_IN/TAKEAWAY (see
+   * MarkOrderPaidDto) — every other manual order already committed to a
+   * payment method at creation. */
   async markPaidManually(
     tenantId: string,
     id: string,
+    dto: MarkOrderPaidDto = {},
   ): Promise<OrderWithAdminDetails> {
     const order = await this.ordersRepo.findByIdForTenant(tenantId, id);
     if (!order) throw new NotFoundException('Order not found');
@@ -312,9 +337,220 @@ export class OrdersService {
     if (order.paymentStatus === PaymentStatus.PAID) {
       return order;
     }
-    await this.ordersRepo.markPaidManually(id);
+    const isDineIn =
+      order.fulfillmentType === OrderFulfillmentType.DINE_IN ||
+      order.fulfillmentType === OrderFulfillmentType.TAKEAWAY;
+    await this.ordersRepo.markPaidManually(
+      id,
+      isDineIn && dto.paymentMethod
+        ? (dto.paymentMethod as PaymentMethod)
+        : undefined,
+    );
     const updated = await this.ordersRepo.findByIdForTenant(tenantId, id);
     return updated!;
+  }
+
+  /**
+   * Opens a running order at the counter — a table's order, or a
+   * takeaway/parcel handed straight to a walk-in. No address/slot/date, no
+   * required customer, no coupon support in v1 (see computePricing's guard).
+   * Items can start empty; addItemsToDineInOrder appends more rounds later.
+   */
+  async createDineIn(
+    tenantId: string,
+    staffUserId: string,
+    dto: CreateDineInOrderDto,
+  ): Promise<OrderWithAdminDetails> {
+    await this.orderAcceptanceService.assertAcceptingOrders(tenantId);
+
+    const customerUserId = await this.resolveCustomerUserId(
+      tenantId,
+      dto.customerUserId,
+    );
+
+    const zone = await this.settingsRepo.findKitchenZoneById(
+      tenantId,
+      dto.kitchenZoneId,
+    );
+    if (!zone || !zone.isActive) {
+      throw new BadRequestException('Selected outlet is not available.');
+    }
+
+    if (dto.fulfillmentType === 'TAKEAWAY' && dto.tableId) {
+      throw new BadRequestException('Takeaway orders cannot have a table.');
+    }
+
+    let tableLabelSnapshot: string | undefined;
+    if (dto.fulfillmentType === 'DINE_IN' && dto.tableId) {
+      const table = await this.diningTablesService.findActiveForTenant(
+        tenantId,
+        dto.tableId,
+        dto.kitchenZoneId,
+      );
+      if (!table) {
+        throw new BadRequestException('Selected table is not available.');
+      }
+      tableLabelSnapshot = table.label;
+    }
+
+    const pricing = await this.computePricing(
+      tenantId,
+      customerUserId,
+      dto.items ?? [],
+      undefined,
+    );
+    const totalInPaise = Math.max(
+      0,
+      pricing.subtotalInPaise - pricing.discountInPaise,
+    );
+    const now = new Date();
+
+    const created = await this.ordersRepo.create({
+      tenantId,
+      userId: customerUserId,
+      guestName: dto.guestName,
+      guestPhone: dto.guestPhone,
+      fulfillmentType: dto.fulfillmentType as OrderFulfillmentType,
+      dineInKitchenZoneId: dto.kitchenZoneId,
+      tableId: dto.fulfillmentType === 'DINE_IN' ? dto.tableId : undefined,
+      tableLabelSnapshot,
+      orderNumber: generateOrderNumber(),
+      subtotalInPaise: pricing.subtotalInPaise,
+      discountInPaise: pricing.discountInPaise,
+      deliveryFeeInPaise: 0,
+      totalInPaise,
+      notes: dto.notes,
+      items: pricing.items,
+      // No real delivery date/slot applies to in-store service — these
+      // columns are NOT NULL on Order, so a sentinel placeholder goes here
+      // instead of a schema change; the frontend never renders a delivery
+      // window for DINE_IN/TAKEAWAY.
+      deliveryDate: now,
+      deliverySlotId: null,
+      deliverySlotName:
+        dto.fulfillmentType === 'DINE_IN' ? 'Dine-in' : 'Takeaway',
+      deliveryWindowStart: '-',
+      deliveryWindowEnd: '-',
+      paymentMethod: PaymentMethod.CASH,
+      createdByUserId: staffUserId,
+    });
+
+    const order = await this.ordersRepo.findByIdForTenant(tenantId, created.id);
+    return order!;
+  }
+
+  /** Appends another round of items to a still-open DINE_IN/TAKEAWAY order. */
+  async addItemsToDineInOrder(
+    tenantId: string,
+    id: string,
+    dto: AddOrderItemsDto,
+  ): Promise<OrderWithAdminDetails> {
+    const order = await this.getOpenDineInOrder(tenantId, id);
+    const pricing = await this.computePricing(
+      tenantId,
+      order.userId ?? undefined,
+      dto.items,
+      undefined,
+    );
+    return this.ordersRepo.addItems(
+      id,
+      pricing.items,
+      pricing.subtotalInPaise,
+      pricing.discountInPaise,
+    );
+  }
+
+  /** Assigns or reassigns which table a DINE_IN order is sitting at. */
+  async assignTable(
+    tenantId: string,
+    id: string,
+    dto: AssignTableDto,
+  ): Promise<OrderWithAdminDetails> {
+    const order = await this.getOpenDineInOrder(tenantId, id);
+    if (order.fulfillmentType !== OrderFulfillmentType.DINE_IN) {
+      throw new BadRequestException(
+        'Only dine-in orders can be assigned a table.',
+      );
+    }
+    if (!order.dineInKitchenZoneId) {
+      throw new BadRequestException('This order has no outlet on record.');
+    }
+    const table = await this.diningTablesService.findActiveForTenant(
+      tenantId,
+      dto.tableId,
+      order.dineInKitchenZoneId,
+    );
+    if (!table) {
+      throw new BadRequestException('Selected table is not available.');
+    }
+    return this.ordersRepo.assignTable(id, table.id, table.label);
+  }
+
+  /**
+   * "Table's full, guest is waiting" → the moment a table actually frees up.
+   * This is the only place a Waitlist entry ever turns into a real Order —
+   * nothing is charged/prepared for anyone still just standing in line.
+   */
+  async seatWaitlistEntry(
+    tenantId: string,
+    staffUserId: string,
+    waitlistEntryId: string,
+    dto: SeatWaitlistEntryDto,
+  ): Promise<OrderWithAdminDetails> {
+    const entry = await this.waitlistService.findWaitingForTenant(
+      tenantId,
+      waitlistEntryId,
+    );
+    if (!entry) {
+      throw new NotFoundException(
+        'Waitlist entry not found, or already seated',
+      );
+    }
+
+    const order = await this.createDineIn(tenantId, staffUserId, {
+      kitchenZoneId: entry.kitchenZoneId,
+      fulfillmentType: 'DINE_IN',
+      tableId: dto.tableId,
+      customerUserId: dto.customerUserId,
+      guestName: dto.guestName ?? entry.guestName ?? undefined,
+      guestPhone: dto.guestPhone ?? entry.guestPhone ?? undefined,
+      items: dto.items,
+    });
+
+    await this.waitlistService.markSeated(entry.id, order.id);
+    return order;
+  }
+
+  private async resolveCustomerUserId(
+    tenantId: string,
+    customerUserId?: string,
+  ): Promise<string | undefined> {
+    if (!customerUserId) return undefined;
+    const customer = await this.usersRepo.findById(customerUserId, tenantId);
+    if (!customer || customer.role !== Role.CUSTOMER) {
+      throw new NotFoundException('Customer not found');
+    }
+    return customerUserId;
+  }
+
+  private async getOpenDineInOrder(
+    tenantId: string,
+    id: string,
+  ): Promise<OrderWithAdminDetails> {
+    const order = await this.ordersRepo.findByIdForTenant(tenantId, id);
+    if (!order) throw new NotFoundException('Order not found');
+    if (
+      order.fulfillmentType !== OrderFulfillmentType.DINE_IN &&
+      order.fulfillmentType !== OrderFulfillmentType.TAKEAWAY
+    ) {
+      throw new BadRequestException(
+        'This action only applies to a dine-in or takeaway order.',
+      );
+    }
+    if (order.status === 'CANCELLED' || order.status === 'DELIVERED') {
+      throw new BadRequestException('This order is already closed.');
+    }
+    return order;
   }
 
   /**

@@ -41,6 +41,7 @@ export default function PlatformPagesAdminPage() {
         try {
           await deletePlatformPage(page.id);
           setPages((prev) => prev?.filter((p) => p.id !== page.id) ?? null);
+          showToast("Page deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete page.", "error");
         }
@@ -52,6 +53,7 @@ export default function PlatformPagesAdminPage() {
     try {
       const updated = await updatePlatformPage(page.id, { isPublished: !page.isPublished });
       setPages((prev) => prev?.map((p) => (p.id === page.id ? updated : p)) ?? null);
+      showToast(`Page ${updated.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update page.", "error");
     }

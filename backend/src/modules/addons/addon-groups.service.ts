@@ -11,7 +11,15 @@ import { CreateAddonGroupDto } from './dto/create-addon-group.dto';
 import { UpdateAddonGroupDto } from './dto/update-addon-group.dto';
 import { CreateAddonItemDto } from './dto/create-addon-item.dto';
 import { UpdateAddonItemDto } from './dto/update-addon-item.dto';
-import { AddonGroup, AddonItem } from '../../generated/prisma';
+import { AddonGroup, AddonItem, Prisma } from '../../generated/prisma';
+
+/** True for Prisma's "record to delete does not exist" error (P2025) —
+ * the race window between our existence check and the actual delete. */
+function isRecordNotFoundError(err: unknown): boolean {
+  return (
+    err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025'
+  );
+}
 
 @Injectable()
 export class AddonGroupsService {
@@ -71,10 +79,18 @@ export class AddonGroupsService {
     return this.addonsRepo.updateItem(id, dto);
   }
 
+  /** Idempotent by design: DELETE's desired end-state (item gone) already
+   * holds if a concurrent/retried request already removed it, so a missing
+   * item here is treated as success rather than a 404 — otherwise the loser
+   * of a double-click race reports a false error even though the delete the
+   * user asked for did happen. */
   async deleteItem(tenantId: string, id: string): Promise<void> {
     const item = await this.addonsRepo.findItemById(tenantId, id);
-    if (!item) throw new NotFoundException('Add-on item not found');
-    await this.addonsRepo.deleteItem(id);
+    if (!item) return;
+    await this.addonsRepo.deleteItem(id).catch((err) => {
+      if (isRecordNotFoundError(err)) return;
+      throw err;
+    });
   }
 
   /** Used by MealsService.findAll/findOne (storefront) — only ever called

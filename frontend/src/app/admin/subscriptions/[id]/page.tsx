@@ -47,7 +47,9 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
   }, [id]);
 
   function refresh() {
-    getAdminSubscription(id).then(setSub).catch(() => {});
+    getAdminSubscription(id)
+      .then(setSub)
+      .catch(() => showToast("Couldn't refresh this subscription. Try reloading the page.", "error"));
   }
 
   async function handleMarkPaid() {

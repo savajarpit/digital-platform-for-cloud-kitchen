@@ -12,12 +12,14 @@ import { DineInFloorView } from "@/components/admin/DineInFloorView";
 import { TableManagementPanel } from "@/components/admin/TableManagementPanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useToast } from "@/context/ToastContext";
 
 export default function AdminDineInPage() {
   const canOrderCreate = usePermission(PERMISSIONS.DINE_IN_ORDER_CREATE);
   const canManageTables = usePermission(PERMISSIONS.DINE_IN_MANAGE);
   const { has: hasFeature, loading: featuresLoading } = useFeatures();
   const hasDineInFeature = hasFeature("dine-in");
+  const { showToast } = useToast();
   const [zones, setZones] = useState<KitchenZone[] | null>(null);
   const [zoneId, setZoneId] = useState("");
   const [tab, setTab] = useState<"floor" | "tables">("floor");
@@ -29,8 +31,11 @@ export default function AdminDineInPage() {
         setZones(data);
         setZoneId(data.find((z) => z.isActive)?.id ?? data[0]?.id ?? "");
       })
-      .catch(() => setZones([]));
-  }, [featuresLoading, hasDineInFeature]);
+      .catch(() => {
+        setZones([]);
+        showToast("Couldn't load kitchen zones. Try reloading the page.", "error");
+      });
+  }, [featuresLoading, hasDineInFeature, showToast]);
 
   // Belt-and-braces alongside the sidebar already hiding this link when the
   // feature is off — a tenant who still has the URL (or a stale bookmark)
@@ -121,10 +126,16 @@ export default function AdminDineInPage() {
  * list) can self-fetch/refresh without the parent page carrying that
  * state just for one tab. */
 function TableManagementPanelSection({ zoneId }: { zoneId: string }) {
+  const { showToast } = useToast();
   const [tables, setTables] = useState<DiningTable[] | null>(null);
 
   function refresh() {
-    listDiningTables(zoneId).then(setTables).catch(() => setTables([]));
+    listDiningTables(zoneId)
+      .then(setTables)
+      .catch(() => {
+        setTables([]);
+        showToast("Couldn't load tables. Try reloading the page.", "error");
+      });
   }
 
   // Caller keys this component by zoneId, so a zone switch remounts it

@@ -9,19 +9,24 @@ import { PERMISSIONS } from "@/lib/constants/permissions";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { AddonGroupsCard } from "@/components/admin/AddonGroupsCard";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useToast } from "@/context/ToastContext";
 
 export default function AdminAddonsPage() {
   const canEdit = usePermission(PERMISSIONS.MENU_MANAGE);
   const { has: hasFeature, loading: featuresLoading } = useFeatures();
   const hasAddonsFeature = hasFeature("menu-addons");
+  const { showToast } = useToast();
   const [groups, setGroups] = useState<AddonGroup[] | null>(null);
 
   useEffect(() => {
     if (featuresLoading || !hasAddonsFeature) return;
     listAddonGroups()
       .then(setGroups)
-      .catch(() => setGroups([]));
-  }, [featuresLoading, hasAddonsFeature]);
+      .catch(() => {
+        setGroups([]);
+        showToast("Couldn't load add-on groups. Try reloading the page.", "error");
+      });
+  }, [featuresLoading, hasAddonsFeature, showToast]);
 
   // Belt-and-braces alongside the sidebar hiding this link when the
   // feature is off — a direct URL gets a plain "not enabled" message

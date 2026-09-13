@@ -10,6 +10,7 @@ import {
 } from "@/lib/api/admin-subscriptions";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { useToast } from "@/context/ToastContext";
 
 const SLOT_LABELS: Record<MealSlotType, string> = {
   BREAKFAST: "Breakfast",
@@ -18,6 +19,7 @@ const SLOT_LABELS: Record<MealSlotType, string> = {
 };
 
 export function PrepPlannerView() {
+  const { showToast } = useToast();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [planId, setPlanId] = useState("");
   const [dayNumber, setDayNumber] = useState(1);
@@ -29,7 +31,11 @@ export function PrepPlannerView() {
         setPlans(data);
         if (data[0]) setPlanId(data[0].id);
       })
-      .catch(() => setPlans([]));
+      .catch(() => {
+        setPlans([]);
+        showToast("Couldn't load plans.", "error");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectedPlan = plans.find((p) => p.id === planId);
@@ -39,7 +45,11 @@ export function PrepPlannerView() {
     if (!planId) return;
     getPrepPlan(planId, isWeeklyFixed ? undefined : dayNumber)
       .then(setResult)
-      .catch(() => setResult(null));
+      .catch(() => {
+        setResult(null);
+        showToast("Couldn't load the prep plan.", "error");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planId, dayNumber, isWeeklyFixed]);
 
   return (

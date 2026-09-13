@@ -41,13 +41,16 @@ export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
   }, []);
 
   function refetch() {
-    listReviewsAdmin().then(setReviews).catch(() => {});
+    listReviewsAdmin()
+      .then(setReviews)
+      .catch(() => showToast("Couldn't refresh reviews. Try reloading the page.", "error"));
   }
 
   async function handleTogglePublished(review: Review) {
     try {
       await updateReview(review.id, { isPublished: !review.isPublished });
       refetch();
+      showToast(`Review ${!review.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update review.", "error");
     }
@@ -63,6 +66,7 @@ export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
         try {
           await deleteReview(review.id);
           refetch();
+          showToast("Review deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete review.", "error");
         }

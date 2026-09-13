@@ -32,13 +32,16 @@ export function PlanFaqManager({ canEdit }: { canEdit: boolean }) {
   }, []);
 
   function refetch() {
-    listPlanFaqsAdmin().then(setFaqs).catch(() => {});
+    listPlanFaqsAdmin()
+      .then(setFaqs)
+      .catch(() => showToast("Couldn't refresh FAQs. Try reloading the page.", "error"));
   }
 
   async function handleTogglePublished(faq: PlanFaq) {
     try {
       await updatePlanFaq(faq.id, { isPublished: !faq.isPublished });
       refetch();
+      showToast(`FAQ ${!faq.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update FAQ.", "error");
     }
@@ -54,6 +57,7 @@ export function PlanFaqManager({ canEdit }: { canEdit: boolean }) {
         try {
           await deletePlanFaq(faq.id);
           refetch();
+          showToast("FAQ deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete FAQ.", "error");
         }

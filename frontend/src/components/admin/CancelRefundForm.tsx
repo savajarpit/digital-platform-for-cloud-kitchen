@@ -47,7 +47,7 @@ export function CancelRefundForm({
         setPreview(p);
         setAmountRupees(String(p.suggestedAmountInPaise / 100));
       })
-      .catch(() => {});
+      .catch(() => showToast("Couldn't load the suggested refund amount.", "error"));
   }, [open, kind, id]);
 
   const amountInPaise = Math.round((Number(amountRupees) || 0) * 100);

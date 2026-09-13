@@ -32,13 +32,16 @@ export function PlanFeaturesManager({ canEdit }: { canEdit: boolean }) {
   }, []);
 
   function refetch() {
-    listPlanFeaturesAdmin().then(setFeatures).catch(() => {});
+    listPlanFeaturesAdmin()
+      .then(setFeatures)
+      .catch(() => showToast("Couldn't refresh plan features. Try reloading the page.", "error"));
   }
 
   async function handleToggleEnabled(feature: PlanFeature) {
     try {
       await updatePlanFeature(feature.id, { isEnabled: !feature.isEnabled });
       refetch();
+      showToast(`Card ${!feature.isEnabled ? "enabled" : "disabled"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update feature.", "error");
     }
@@ -54,6 +57,7 @@ export function PlanFeaturesManager({ canEdit }: { canEdit: boolean }) {
         try {
           await deletePlanFeature(feature.id);
           refetch();
+          showToast("Card deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete feature.", "error");
         }

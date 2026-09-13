@@ -793,6 +793,7 @@ function RoleGrantsList({
     );
     try {
       await setPermissionGrant(tenantId, role, grant.key, next);
+      showToast(`Permission ${next ? "granted" : "revoked"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update permission.", "error");
       setGrants((prev) =>
@@ -841,6 +842,7 @@ function FeatureGridCard({ tenantId }: { tenantId: string }) {
     );
     try {
       await setFeatureGrant(tenantId, feature.key, next);
+      showToast(`Feature ${next ? "enabled" : "disabled"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update feature.", "error");
       setFeatures((prev) =>

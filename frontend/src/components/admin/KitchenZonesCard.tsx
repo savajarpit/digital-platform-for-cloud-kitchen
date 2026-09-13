@@ -40,6 +40,7 @@ export function KitchenZonesCard({
     try {
       const updated = await updateKitchenZone(zone.id, { isActive: !zone.isActive });
       onChange(zones.map((z) => (z.id === zone.id ? updated : z)));
+      showToast(`Kitchen zone ${updated.isActive ? "activated" : "deactivated"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update zone.", "error");
     }
@@ -55,6 +56,7 @@ export function KitchenZonesCard({
         try {
           await deleteKitchenZone(zone.id);
           onChange(zones.filter((z) => z.id !== zone.id));
+          showToast("Kitchen zone removed", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't remove zone.", "error");
         }

@@ -53,6 +53,7 @@ export default function PlatformPlansAdminPage() {
         try {
           await deletePlatformPlan(plan.id);
           setPlans((prev) => prev?.filter((p) => p.id !== plan.id) ?? null);
+          showToast("Plan deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete plan.", "error");
         }
@@ -64,6 +65,7 @@ export default function PlatformPlansAdminPage() {
     try {
       const updated = await updatePlatformPlan(plan.id, { ...plan, isPublished: !plan.isPublished });
       setPlans((prev) => prev?.map((p) => (p.id === plan.id ? updated : p)) ?? null);
+      showToast(`Plan ${updated.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update plan.", "error");
     }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { getMyUsage, type UsageStat, type UsageSummary } from "@/lib/api/tenant-limits";
+import { useToast } from "@/context/ToastContext";
 
 function describe(label: string, stat: UsageStat): string | null {
   if (stat.hitLimit) {
@@ -18,12 +19,17 @@ function describe(label: string, stat: UsageStat): string | null {
 }
 
 export function UsageLimitBanner() {
+  const { showToast } = useToast();
   const [usage, setUsage] = useState<UsageSummary | null>(null);
 
   useEffect(() => {
     getMyUsage()
       .then(setUsage)
-      .catch(() => setUsage(null));
+      .catch(() => {
+        setUsage(null);
+        showToast("Couldn't load your plan usage.", "error");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!usage) return null;

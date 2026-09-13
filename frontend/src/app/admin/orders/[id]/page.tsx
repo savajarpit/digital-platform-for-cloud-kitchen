@@ -50,7 +50,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   }, [id]);
 
   function refresh() {
-    getAdminOrder(id).then(setOrder).catch(() => {});
+    getAdminOrder(id)
+      .then(setOrder)
+      .catch(() => showToast("Couldn't refresh this order. Try reloading the page.", "error"));
   }
 
   async function handleMarkPaid() {

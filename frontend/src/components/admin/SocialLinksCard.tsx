@@ -54,7 +54,9 @@ export function SocialLinksCard({ canEdit }: { canEdit: boolean }) {
   }, []);
 
   function refetch() {
-    listSocialLinksAdmin().then(setLinks).catch(() => {});
+    listSocialLinksAdmin()
+      .then(setLinks)
+      .catch(() => showToast("Couldn't refresh social links. Try reloading the page.", "error"));
   }
 
   const availablePlatforms = ALL_PLATFORMS.filter(
@@ -90,6 +92,7 @@ export function SocialLinksCard({ canEdit }: { canEdit: boolean }) {
     try {
       await updateSocialLink(link.id, { isEnabled: !link.isEnabled });
       refetch();
+      showToast(`${PLATFORM_LABELS[link.platform]} link ${!link.isEnabled ? "enabled" : "disabled"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update social link.", "error");
     }
@@ -105,6 +108,7 @@ export function SocialLinksCard({ canEdit }: { canEdit: boolean }) {
         try {
           await deleteSocialLink(link.id);
           refetch();
+          showToast("Social link removed", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't remove social link.", "error");
         }

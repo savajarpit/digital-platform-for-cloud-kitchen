@@ -116,7 +116,9 @@ function AdvanceOrderWindowForm({
       onSaved(updated);
       showToast("Delivery window saved", "success");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't save changes.");
+      const message = err instanceof ApiError ? err.message : "Couldn't save changes.";
+      setError(message);
+      showToast(message, "error");
     } finally {
       setSaving(false);
     }
@@ -191,6 +193,7 @@ function PincodesCard({
     try {
       const updated = await updateServiceablePincode(pc.id, { isActive: !pc.isActive });
       onChange(pincodes.map((p) => (p.id === pc.id ? updated : p)));
+      showToast(`Pincode ${updated.isActive ? "activated" : "deactivated"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update pincode.", "error");
     }
@@ -206,6 +209,7 @@ function PincodesCard({
         try {
           await deleteServiceablePincode(id);
           onChange(pincodes.filter((p) => p.id !== id));
+          showToast("Pincode removed", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't remove pincode.", "error");
         }
@@ -322,6 +326,7 @@ function SlotsCard({
     try {
       const updated = await updateDeliverySlot(slot.id, { isActive: !slot.isActive });
       onChange(slots.map((s) => (s.id === slot.id ? updated : s)));
+      showToast(`Delivery slot ${updated.isActive ? "activated" : "deactivated"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update slot.", "error");
     }
@@ -337,6 +342,7 @@ function SlotsCard({
         try {
           await deleteDeliverySlot(id);
           onChange(slots.filter((s) => s.id !== id));
+          showToast("Delivery slot removed", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't remove slot.", "error");
         }

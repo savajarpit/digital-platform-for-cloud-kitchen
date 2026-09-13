@@ -156,6 +156,7 @@ export default function AdminSubscriptionsPage() {
     try {
       await publishPlan(plan.id, !plan.isPublished);
       refetch();
+      showToast(`Plan ${!plan.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update plan.", "error");
     }

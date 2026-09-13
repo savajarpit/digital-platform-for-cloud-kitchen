@@ -92,6 +92,7 @@ export function AddonGroupsCard({
     try {
       const updated = await updateAddonGroup(group.id, { isActive: !group.isActive });
       onChange(groups.map((g) => (g.id === group.id ? { ...g, ...updated } : g)));
+      showToast(`Add-on group ${updated.isActive ? "activated" : "deactivated"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update this group.", "error");
     }
@@ -143,7 +144,7 @@ export function AddonGroupsCard({
                     type="button"
                     onClick={() => handleDeleteGroup(group)}
                     disabled={!canEdit}
-                    className="text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="cursor-pointer text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -236,10 +237,12 @@ function AddonItemsList({
   onChange: (items: AddonGroup["items"]) => void;
 }) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [name, setName] = useState("");
   const [priceRupees, setPriceRupees] = useState("");
   const [maxQuantity, setMaxQuantity] = useState("1");
   const [adding, setAdding] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function handleAddItem() {
     if (!name.trim() || !priceRupees) return;
@@ -267,18 +270,32 @@ function AddonItemsList({
     try {
       const updated = await updateAddonItem(itemId, { isAvailable: !isAvailable });
       onChange(group.items.map((i) => (i.id === itemId ? { ...i, ...updated } : i)));
+      showToast(`Add-on item marked ${updated.isAvailable ? "in stock" : "out of stock"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update this item.", "error");
     }
   }
 
-  async function handleDeleteItem(itemId: string) {
-    try {
-      await deleteAddonItem(itemId);
-      onChange(group.items.filter((i) => i.id !== itemId));
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't delete this item.", "error");
-    }
+  function handleDeleteItem(item: AddonGroup["items"][number]) {
+    if (deletingId) return;
+    confirm({
+      message: `Delete "${item.name}"? This removes it from every meal it's attached to.`,
+      confirmLabel: "Delete",
+      processingLabel: "Deleting…",
+      variant: "danger",
+      onConfirm: async () => {
+        setDeletingId(item.id);
+        try {
+          await deleteAddonItem(item.id);
+          onChange(group.items.filter((i) => i.id !== item.id));
+          showToast("Add-on item deleted", "success");
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't delete this item.", "error");
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   }
 
   return (
@@ -305,9 +322,9 @@ function AddonItemsList({
             </span>
             <button
               type="button"
-              onClick={() => handleDeleteItem(item.id)}
-              disabled={!canEdit}
-              className="text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => handleDeleteItem(item)}
+              disabled={!canEdit || deletingId === item.id}
+              className="cursor-pointer text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>

@@ -140,7 +140,8 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
           </div>
         </div>
 
-        <table className="mt-8 w-full text-sm">
+        <div className="mt-8 overflow-x-auto">
+        <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-zinc-200 text-left text-xs font-semibold tracking-wide text-zinc-500 uppercase dark:border-zinc-800 dark:text-zinc-400 print:border-zinc-300 print:text-zinc-600">
               <th className="pb-2">Item</th>
@@ -165,6 +166,7 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
             ))}
           </tbody>
         </table>
+        </div>
 
         <div className="mt-4 ml-auto flex max-w-60 flex-col gap-1.5 text-sm">
           <div className="flex justify-between text-zinc-600 dark:text-zinc-400 print:text-zinc-700">

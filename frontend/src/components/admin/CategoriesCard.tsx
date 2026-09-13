@@ -48,6 +48,7 @@ export function CategoriesCard({
     try {
       const updated = await updateCategory(cat.id, { isActive: !cat.isActive });
       onChange(categories.map((c) => (c.id === cat.id ? updated : c)));
+      showToast(`Category ${updated.isActive ? "activated" : "deactivated"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update category.", "error");
     }
@@ -63,6 +64,7 @@ export function CategoriesCard({
         try {
           await deleteCategory(id);
           onChange(categories.filter((c) => c.id !== id));
+          showToast("Category deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete category.", "error");
         }

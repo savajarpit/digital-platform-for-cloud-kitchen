@@ -85,7 +85,9 @@ export default function OrderHoursPage() {
       setSettings(updated);
       showToast("Order hours saved", "success");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't save changes.");
+      const message = err instanceof ApiError ? err.message : "Couldn't save changes.";
+      setError(message);
+      showToast(message, "error");
     } finally {
       setSaving(false);
     }

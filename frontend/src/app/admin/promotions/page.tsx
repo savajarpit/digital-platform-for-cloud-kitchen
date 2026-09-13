@@ -166,6 +166,7 @@ function CouponsCard({
         try {
           await deleteCoupon(id);
           onChange(coupons.filter((c) => c.id !== id));
+          showToast("Coupon deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete coupon.", "error");
         }
@@ -177,6 +178,7 @@ function CouponsCard({
     try {
       const updated = await updateCoupon(coupon.id, { isActive: !coupon.isActive });
       onChange(coupons.map((c) => (c.id === coupon.id ? updated : c)));
+      showToast(`Coupon ${updated.isActive ? "activated" : "deactivated"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update coupon.", "error");
     }
@@ -476,6 +478,7 @@ function PromotionsCard({
         try {
           await deletePromotion(id);
           onChange(promotions.filter((p) => p.id !== id));
+          showToast("Promotion deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete promotion.", "error");
         }
@@ -487,6 +490,7 @@ function PromotionsCard({
     try {
       const updated = await updatePromotion(promo.id, { isActive: !promo.isActive });
       onChange(promotions.map((p) => (p.id === promo.id ? updated : p)));
+      showToast(`Promotion ${updated.isActive ? "activated" : "deactivated"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update promotion.", "error");
     }

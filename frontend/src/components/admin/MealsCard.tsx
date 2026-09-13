@@ -72,6 +72,7 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
     try {
       await updateMeal(meal.id, { isAvailable: !meal.isAvailable });
       refetch();
+      showToast(`Meal marked ${!meal.isAvailable ? "available" : "unavailable"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update meal.", "error");
     }
@@ -87,6 +88,7 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
         try {
           await deleteMeal(id);
           refetch();
+          showToast("Meal deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete meal.", "error");
         }

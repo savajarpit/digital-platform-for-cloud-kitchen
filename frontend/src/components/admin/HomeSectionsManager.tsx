@@ -32,7 +32,9 @@ export function HomeSectionsManager({ canEdit }: { canEdit: boolean }) {
   }, []);
 
   function refetch() {
-    listHomeSectionsAdmin().then(setSections).catch(() => {});
+    listHomeSectionsAdmin()
+      .then(setSections)
+      .catch(() => showToast("Couldn't refresh home sections. Try reloading the page.", "error"));
   }
 
   async function handleCreate() {
@@ -52,6 +54,7 @@ export function HomeSectionsManager({ canEdit }: { canEdit: boolean }) {
     try {
       await updateHomeSection(section.id, { isEnabled: !section.isEnabled });
       refetch();
+      showToast(`Section ${!section.isEnabled ? "enabled" : "disabled"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update section.", "error");
     }
@@ -67,6 +70,7 @@ export function HomeSectionsManager({ canEdit }: { canEdit: boolean }) {
         try {
           await deleteHomeSection(section.id);
           refetch();
+          showToast("Section deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete section.", "error");
         }

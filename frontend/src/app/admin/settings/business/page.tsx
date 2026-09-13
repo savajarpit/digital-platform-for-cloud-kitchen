@@ -82,7 +82,9 @@ export default function BusinessProfilePage() {
       setProfile(updated);
       showToast("Business profile saved", "success");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't save changes.");
+      const message = err instanceof ApiError ? err.message : "Couldn't save changes.";
+      setError(message);
+      showToast(message, "error");
     } finally {
       setSaving(false);
     }
@@ -222,7 +224,7 @@ export default function BusinessProfilePage() {
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 City

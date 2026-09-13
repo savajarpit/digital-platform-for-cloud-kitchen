@@ -75,4 +75,10 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
     description:
       'In-store ordering at physical tables and counter takeaway — table management, a waitlist queue for walk-ins, and staff-taken orders settled by cash/UPI. Off by default.',
   },
+  {
+    key: 'menu-addons',
+    name: 'Menu Add-ons',
+    description:
+      'Lets OWNER/STAFF (with menu.manage) build reusable add-on groups — e.g. "Extra Roti", "Choose Spice Level" — and attach them to specific meals. Customers customize a meal before adding it to cart. Off by default.',
+  },
 ];

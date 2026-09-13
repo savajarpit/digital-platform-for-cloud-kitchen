@@ -13,6 +13,7 @@ import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
 import { FeaturesModule } from '../features/features.module';
 import { RefundsModule } from '../../shared-modules/refunds/refunds.module';
 import { DineInModule } from '../dine-in/dine-in.module';
+import { AddonsModule } from '../addons/addons.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { DineInModule } from '../dine-in/dine-in.module';
     FeaturesModule,
     RefundsModule,
     DineInModule,
+    AddonsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService, OrdersRepository, PaginationService],

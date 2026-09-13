@@ -284,6 +284,8 @@ model Tenant {
   tenantNotificationTemplates TenantNotificationTemplate[]
   diningTables                DiningTable[]
   waitlistEntries             WaitlistEntry[]
+  addonGroups                 AddonGroup[]
+  addonItems                  AddonItem[]
 
   @@map("tenants")
 }
@@ -801,7 +803,13 @@ model Meal {
   categoryId         String?
   name               String
   description        String?
+  // Primary/thumbnail image — used everywhere a single image is enough
+  // (menu grid, cart, order history). Never removed even though the detail
+  // page's gallery below can carry more.
   imageUrl           String?
+  // Full gallery for the meal detail page — additive to imageUrl, not a
+  // replacement for it. Empty array (not null) when nothing's uploaded.
+  imageUrls          String[]        @default([])
   priceInPaise       Int
   nutrition          Json            @default("{}")
   isVegetarian       Boolean         @default(true)
@@ -828,12 +836,90 @@ model Meal {
   promotionsAsFreeMeal  Promotion[]            @relation("PromotionFreeMeal")
   subscriptionPlanSlots SubscriptionPlanSlot[]
   homeSectionItems      HomeSectionItem[]
+  addonGroups           MealAddonGroup[]
 
   @@index([tenantId])
   @@index([tenantId, categoryId])
   @@index([tenantId, isAvailable])
   @@index([deletedAt])
   @@map("meals")
+}
+
+/**
+ * A reusable library entry (e.g. "Roti Extras", "Choose Spice Level") — never
+ * shown to a customer on its own, and never attached to any meal by default.
+ * `maxSelections` caps how many *distinct* items from this group a customer
+ * can pick (1 behaves like a radio button, >1 like checkboxes up to that
+ * count) — separate from each AddonItem's own maxQuantityPerOrder, which
+ * caps the +/- stepper once that particular item is picked.
+ */
+model AddonGroup {
+  id            String   @id @default(uuid())
+  tenantId      String
+  name          String
+  minSelections Int      @default(0)
+  maxSelections Int      @default(1)
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id])
+  items  AddonItem[]
+  meals  MealAddonGroup[]
+
+  @@index([tenantId])
+  @@map("addon_groups")
+}
+
+/**
+ * Deliberately NOT a Meal — never inserted into the meals table, never
+ * returned from the meal listing, never its own product card. The only
+ * place a customer ever sees one is inside the "Customize" sheet of a meal
+ * it has been explicitly attached to via MealAddonGroup.
+ */
+model AddonItem {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  addonGroupId        String
+  name                String
+  priceInPaise        Int
+  // >1 renders a +/- stepper (e.g. "Extra Roti" up to 4); 1 renders a
+  // single tap-to-select toggle.
+  maxQuantityPerOrder Int      @default(1)
+  isAvailable         Boolean  @default(true)
+  sortOrder           Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  group           AddonGroup       @relation(fields: [addonGroupId], references: [id])
+  orderItemAddons OrderItemAddon[]
+
+  @@index([tenantId])
+  @@index([addonGroupId])
+  @@map("addon_items")
+}
+
+/**
+ * Explicit tenant-chosen attach point — a group offers nothing on any meal
+ * until the tenant attaches it here. Same group can be reused across many
+ * meals without duplication.
+ */
+model MealAddonGroup {
+  id           String   @id @default(uuid())
+  mealId       String
+  addonGroupId String
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  meal  Meal       @relation(fields: [mealId], references: [id])
+  group AddonGroup @relation(fields: [addonGroupId], references: [id])
+
+  @@unique([mealId, addonGroupId])
+  @@index([mealId])
+  @@index([addonGroupId])
+  @@map("meal_addon_groups")
 }
 
 // Admin-curated storefront home page sections (e.g. "Today's Special",
@@ -1068,7 +1154,15 @@ model Order {
   deliveryWindowEnd           String
   razorpayOrderId             String?              @unique
   razorpayPaymentId           String?
+  // Delivery-facing — "ring the bell twice," gate code, landmark, etc.
+  // Column name kept as-is (predates the prepNotes split below) to avoid
+  // rewriting every existing consumer (notification templates, dispatch
+  // sheets, admin/invoice views) for a rename — only the UI label changed.
   notes                       String?
+  // Kitchen-facing — "no onions," spice level, allergy call-outs. Always
+  // separate from `notes` above so a delivery instruction never gets
+  // treated as a prep instruction or vice versa.
+  prepNotes                   String?
   // Set only for a nightly-materialized subscription delivery — lets the
   // admin "Today's Deliveries" view query real Order rows directly instead
   // of pattern-matching the notes text.
@@ -1122,11 +1216,35 @@ model OrderItem {
   isFreeItem           Boolean  @default(false)
   createdAt            DateTime @default(now())
 
-  order Order @relation(fields: [orderId], references: [id])
-  meal  Meal? @relation(fields: [mealId], references: [id])
+  order  Order            @relation(fields: [orderId], references: [id])
+  meal   Meal?            @relation(fields: [mealId], references: [id])
+  addons OrderItemAddon[]
 
   @@index([orderId])
   @@map("order_items")
+}
+
+/**
+ * A frozen record of one selected add-on on a placed order — same
+ * nameSnapshot/priceInPaiseSnapshot rule as OrderItem itself, so a later
+ * edit (or deletion) of the AddonItem never rewrites past order history.
+ * `quantity` is per unit of the parent OrderItem (e.g. "extra roti x2" on
+ * a order line of 3 meals means 2 rotis per meal, 6 total).
+ */
+model OrderItemAddon {
+  id                   String   @id @default(uuid())
+  orderItemId          String
+  addonItemId          String?
+  nameSnapshot         String
+  priceInPaiseSnapshot Int
+  quantity             Int
+  createdAt            DateTime @default(now())
+
+  orderItem OrderItem  @relation(fields: [orderItemId], references: [id])
+  addonItem AddonItem? @relation(fields: [addonItemId], references: [id])
+
+  @@index([orderItemId])
+  @@map("order_item_addons")
 }
 
 /**

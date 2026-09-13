@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -33,6 +35,17 @@ export class CreateMealDto {
   @IsOptional()
   @IsString()
   imageUrl?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Gallery images for the meal detail page — additive to imageUrl, not a replacement.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsString({ each: true })
+  imageUrls?: string[];
 
   @ApiProperty({ example: 24900, description: 'Price in paise (₹249.00)' })
   @IsInt()

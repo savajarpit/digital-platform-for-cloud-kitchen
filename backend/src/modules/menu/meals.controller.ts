@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -17,9 +18,11 @@ import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
 import { QueryMealsDto } from './dto/query-meals.dto';
 import { QueryAdminMealsDto } from './dto/query-admin-meals.dto';
+import { SetMealAddonGroupsDto } from '../addons/dto/set-meal-addon-groups.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { RequireFeature } from '../../common/decorators/require-feature.decorator';
 import { CurrentTenant } from '../../common/decorators/current-tenant.decorator';
 import { CurrentTenantId } from '../../common/decorators/current-tenant-id.decorator';
 import { ResponseMessage } from '../../common/decorators/response-message.decorator';
@@ -102,5 +105,20 @@ export class MealsController {
   @ApiOperation({ summary: 'Delete a meal' })
   async remove(@CurrentTenantId() tenantId: string, @Param('id') id: string) {
     await this.mealsService.remove(tenantId, id);
+  }
+
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('menu.manage')
+  @RequireFeature('menu-addons')
+  @Put(':id/addon-groups')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Add-on groups updated successfully')
+  @ApiOperation({ summary: 'Admin: set which add-on groups this meal offers' })
+  setAddonGroups(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: SetMealAddonGroupsDto,
+  ) {
+    return this.mealsService.setAddonGroups(tenantId, id, dto.addonGroupIds);
   }
 }

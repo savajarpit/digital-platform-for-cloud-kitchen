@@ -1,25 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ApiError, type Category, type MealInput } from "@/lib/api/admin-menu";
+import { listAddonGroups, type AddonGroup } from "@/lib/api/addons";
+import { useFeatures } from "@/context/FeaturesContext";
 import { useToast } from "@/context/ToastContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ImageUploadInput } from "@/components/admin/ImageUploadInput";
+import { MultiImageUploadInput } from "@/components/admin/MultiImageUploadInput";
 
 export function MealForm({
   categories,
   initial,
+  initialAddonGroupIds,
   onCancel,
   onSave,
 }: {
   categories: Category[];
   initial: MealInput;
+  /** Which add-on groups this meal already offers — omit for a new meal. */
+  initialAddonGroupIds?: string[];
   onCancel: () => void;
-  onSave: (input: MealInput) => Promise<void>;
+  onSave: (input: MealInput, addonGroupIds?: string[]) => Promise<void>;
 }) {
   const { showToast } = useToast();
+  const { has: hasFeature } = useFeatures();
+  const hasAddonsFeature = hasFeature("menu-addons");
   const [form, setForm] = useState(initial);
+  const [addonGroups, setAddonGroups] = useState<AddonGroup[] | null>(null);
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(
+    initialAddonGroupIds ?? [],
+  );
   const [priceRupees, setPriceRupees] = useState(String(initial.priceInPaise / 100));
   const [calories, setCalories] = useState(
     initial.nutrition?.calories !== undefined ? String(initial.nutrition.calories) : "",
@@ -29,24 +41,40 @@ export function MealForm({
   const [fat, setFat] = useState(initial.nutrition?.fat ?? "");
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (!hasAddonsFeature) return;
+    listAddonGroups()
+      .then(setAddonGroups)
+      .catch(() => setAddonGroups([]));
+  }, [hasAddonsFeature]);
+
+  function toggleGroup(groupId: string) {
+    setSelectedGroupIds((prev) =>
+      prev.includes(groupId) ? prev.filter((id) => id !== groupId) : [...prev, groupId],
+    );
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      await onSave({
-        ...form,
-        priceInPaise: Math.round(Number(priceRupees) * 100),
-        // Always an explicit object (never `undefined`) — `JSON.stringify`
-        // drops `undefined` keys entirely, so an update payload that omits
-        // `nutrition` reads as "don't touch it," not "clear it." Sending an
-        // empty object here is what actually clears previously-saved values.
-        nutrition: {
-          ...(calories && { calories: Number(calories) }),
-          ...(protein && { protein }),
-          ...(carbs && { carbs }),
-          ...(fat && { fat }),
+      await onSave(
+        {
+          ...form,
+          priceInPaise: Math.round(Number(priceRupees) * 100),
+          // Always an explicit object (never `undefined`) — `JSON.stringify`
+          // drops `undefined` keys entirely, so an update payload that omits
+          // `nutrition` reads as "don't touch it," not "clear it." Sending an
+          // empty object here is what actually clears previously-saved values.
+          nutrition: {
+            ...(calories && { calories: Number(calories) }),
+            ...(protein && { protein }),
+            ...(carbs && { carbs }),
+            ...(fat && { fat }),
+          },
         },
-      });
+        hasAddonsFeature ? selectedGroupIds : undefined,
+      );
       showToast("Meal saved", "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't save meal.", "error");
@@ -94,9 +122,14 @@ export function MealForm({
         className="input w-full"
       />
       <ImageUploadInput
-        label="Photo"
+        label="Thumbnail (used on the menu card and cart)"
         value={form.imageUrl || undefined}
         onChange={(url) => setForm((f) => ({ ...f, imageUrl: url ?? "" }))}
+      />
+      <MultiImageUploadInput
+        label="Gallery (shown on the meal's own detail page)"
+        value={form.imageUrls ?? []}
+        onChange={(urls) => setForm((f) => ({ ...f, imageUrls: urls }))}
       />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input
@@ -192,6 +225,32 @@ export function MealForm({
           />
         </div>
       </div>
+      {hasAddonsFeature && addonGroups && addonGroups.length > 0 && (
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Add-ons this meal offers (optional)
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {addonGroups.map((group) => {
+              const checked = selectedGroupIds.includes(group.id);
+              return (
+                <button
+                  key={group.id}
+                  type="button"
+                  onClick={() => toggleGroup(group.id)}
+                  className={`cursor-pointer rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                    checked
+                      ? "border-primary-600 bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
+                      : "border-zinc-200 text-zinc-600 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-400"
+                  }`}
+                >
+                  {group.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
           <Toggle

@@ -12,6 +12,7 @@ import {
   type Meal,
   type MealInput,
 } from "@/lib/api/admin-menu";
+import { setMealAddonGroups } from "@/lib/api/addons";
 import type { PaginationMeta } from "@/lib/api/response";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
@@ -23,6 +24,7 @@ import { MealListItem } from "@/components/admin/MealListItem";
 const emptyMealForm: MealInput = {
   name: "",
   description: "",
+  imageUrls: [],
   priceInPaise: 0,
   categoryId: undefined,
   isVegetarian: true,
@@ -162,8 +164,9 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
           categories={categories}
           initial={emptyMealForm}
           onCancel={() => setEditingId(null)}
-          onSave={async (input) => {
-            await createMeal(input);
+          onSave={async (input, addonGroupIds) => {
+            const meal = await createMeal(input);
+            if (addonGroupIds) await setMealAddonGroups(meal.id, addonGroupIds);
             setEditingId(null);
             setPage(1);
             refetch();
@@ -188,6 +191,7 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
                     name: meal.name,
                     description: meal.description ?? "",
                     imageUrl: meal.imageUrl ?? "",
+                    imageUrls: meal.imageUrls,
                     priceInPaise: meal.priceInPaise,
                     categoryId: meal.categoryId,
                     nutrition: meal.nutrition ?? undefined,
@@ -198,9 +202,11 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
                     weightUnit: meal.weightUnit ?? undefined,
                     dailyQuantityLimit: meal.dailyQuantityLimit ?? undefined,
                   }}
+                  initialAddonGroupIds={meal.addonGroupIds}
                   onCancel={() => setEditingId(null)}
-                  onSave={async (input) => {
+                  onSave={async (input, addonGroupIds) => {
                     await updateMeal(meal.id, input);
+                    if (addonGroupIds) await setMealAddonGroups(meal.id, addonGroupIds);
                     setEditingId(null);
                     refetch();
                   }}

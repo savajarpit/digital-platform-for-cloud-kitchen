@@ -52,6 +52,7 @@ export interface Meal {
   name: string;
   description: string | null;
   imageUrl: string | null;
+  imageUrls: string[];
   priceInPaise: number;
   nutrition: MealNutrition | null;
   isVegetarian: boolean;
@@ -61,12 +62,16 @@ export interface Meal {
   weightUnit: MealWeightUnit | null;
   dailyQuantityLimit: number | null;
   sortOrder: number;
+  /** Present only when the tenant has the menu-addons feature — which
+   * add-on groups this meal currently offers. */
+  addonGroupIds?: string[];
 }
 
 export interface MealInput {
   name: string;
   description?: string;
   imageUrl?: string;
+  imageUrls?: string[];
   priceInPaise: number;
   // `null` (not `undefined`) is what actually clears it — an `undefined`
   // key vanishes entirely under JSON.stringify, which a PATCH reads as

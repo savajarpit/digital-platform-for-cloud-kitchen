@@ -1,10 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { Minus, Plus, ShoppingCart, Trash2, TriangleAlert } from "lucide-react";
-import { useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
+import { Minus, Pencil, Plus, ShoppingCart, Trash2, TriangleAlert } from "lucide-react";
+import {
+  cartLineUnitPrice,
+  useCartStore,
+  useCartSubtotal,
+  type CartAddonSelection,
+} from "@/lib/store/cart-store";
 import { useCartAvailability } from "@/lib/hooks/useCartAvailability";
+import { useCartAddonSync } from "@/lib/hooks/useCartAddonSync";
+import { CustomizeMealSheet } from "@/components/menu/CustomizeMealSheet";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { useToast } from "@/context/ToastContext";
 
@@ -13,10 +21,15 @@ export default function CartPage() {
   const { showToast } = useToast();
   const items = useCartStore((s) => s.items);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const updateItemAddons = useCartStore((s) => s.updateItemAddons);
   const removeItem = useCartStore((s) => s.removeItem);
   const subtotal = useCartSubtotal();
   const { unavailableMealIds, loading: checkingAvailability } = useCartAvailability(items);
+  const { mealsById } = useCartAddonSync();
+  const [editingLineKey, setEditingLineKey] = useState<string | null>(null);
   const hasUnavailableItems = unavailableMealIds.size > 0;
+  const editingItem = items.find((i) => i.lineKey === editingLineKey);
+  const editingMeal = editingItem ? mealsById.get(editingItem.mealId) : undefined;
 
   if (items.length === 0) {
     return (
@@ -40,20 +53,47 @@ export default function CartPage() {
             const isUnavailable = unavailableMealIds.has(item.mealId);
             return (
               <div
-                key={item.mealId}
+                key={item.lineKey}
                 className={`card flex items-center gap-4 p-4 ${isUnavailable ? "opacity-60" : ""}`}
               >
-                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-800">
-                  {item.imageUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
-                  )}
-                </div>
+                <Link href={`/menu/${item.mealId}`} className="shrink-0">
+                  <div className="h-16 w-16 overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-800">
+                    {item.imageUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                    )}
+                  </div>
+                </Link>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-zinc-900 dark:text-zinc-100">{item.name}</p>
-                  <p className="text-sm text-primary-700 dark:text-primary-400">
-                    {formatPriceFromPaise(item.priceInPaise)}
-                  </p>
+                  <Link href={`/menu/${item.mealId}`}>
+                    <p className="truncate font-semibold text-zinc-900 hover:underline dark:text-zinc-100">
+                      {item.name}
+                    </p>
+                    <p className="text-sm text-primary-700 dark:text-primary-400">
+                      {formatPriceFromPaise(cartLineUnitPrice(item))}
+                    </p>
+                    {item.addons && item.addons.length > 0 && (
+                      <ul className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                        {item.addons.map((a) => (
+                          <li key={a.addonItemId}>
+                            + {a.name} × {a.quantity}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </Link>
+                  {(mealsById.get(item.mealId)?.addonGroups ?? []).some(
+                    (g) => g.isActive && g.items.length > 0,
+                  ) && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingLineKey(item.lineKey)}
+                      className="mt-1 inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary-600 hover:underline dark:text-primary-400"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      {item.addons && item.addons.length > 0 ? "Edit customization" : "Customize"}
+                    </button>
+                  )}
                   {isUnavailable && (
                     <span className="badge mt-1 bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400">
                       <TriangleAlert className="h-3 w-3" />
@@ -64,7 +104,7 @@ export default function CartPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => updateQuantity(item.mealId, item.quantity - 1)}
+                    onClick={() => updateQuantity(item.lineKey, item.quantity - 1)}
                     disabled={isUnavailable}
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
                     aria-label="Decrease quantity"
@@ -76,7 +116,7 @@ export default function CartPage() {
                   </span>
                   <button
                     type="button"
-                    onClick={() => updateQuantity(item.mealId, item.quantity + 1)}
+                    onClick={() => updateQuantity(item.lineKey, item.quantity + 1)}
                     disabled={isUnavailable}
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
                     aria-label="Increase quantity"
@@ -86,7 +126,7 @@ export default function CartPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => removeItem(item.mealId)}
+                  onClick={() => removeItem(item.lineKey)}
                   className="text-zinc-400 hover:text-red-600"
                   aria-label={t("remove")}
                 >
@@ -130,6 +170,22 @@ export default function CartPage() {
           )}
         </div>
       </div>
+
+      {editingItem && editingMeal && (
+        <CustomizeMealSheet
+          meal={editingMeal}
+          initialSelections={editingItem.addons}
+          initialQuantity={editingItem.quantity}
+          hideQuantityStepper
+          confirmLabel="Save"
+          onClose={() => setEditingLineKey(null)}
+          onAdd={(addons: CartAddonSelection[]) => {
+            updateItemAddons(editingItem.lineKey, addons);
+            setEditingLineKey(null);
+            showToast("Customization updated", "success");
+          }}
+        />
+      )}
     </main>
   );
 }

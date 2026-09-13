@@ -70,6 +70,7 @@ export interface AdminOrderDetail extends AdminOrder {
   razorpayOrderId: string | null;
   razorpayPaymentId: string | null;
   notes: string | null;
+  prepNotes: string | null;
   isInstant: boolean;
   subscriptionId: string | null;
   userId: string | null;

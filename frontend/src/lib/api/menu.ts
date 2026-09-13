@@ -1,5 +1,6 @@
 import { serverFetch } from "@/lib/api/server-fetch";
 import type { ApiResponse } from "@/lib/api/response";
+import type { AddonGroup } from "@/lib/api/addons";
 
 export interface MenuCategory {
   id: string;
@@ -20,6 +21,7 @@ export interface Meal {
   name: string;
   description: string | null;
   imageUrl: string | null;
+  imageUrls: string[];
   priceInPaise: number;
   nutrition: Record<string, unknown>;
   isVegetarian: boolean;
@@ -32,6 +34,22 @@ export interface Meal {
   sortOrder: number;
   category: MenuCategory | null;
   activePromotion?: ActivePromotion | null;
+  // Present only when the tenant has the menu-addons feature — which
+  // groups this meal actually offers. Absent entirely when the feature is
+  // off, never an empty array standing in for "disabled."
+  addonGroups?: AddonGroup[];
+}
+
+/** Server-side only — fetched fresh per request, never cached (per-tenant data). */
+export async function getMeal(id: string): Promise<Meal | null> {
+  try {
+    const res = await serverFetch(`/menu/meals/${id}`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as ApiResponse<Meal>;
+    return body.data ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Server-side only — fetched fresh per request, never cached (per-tenant data). */

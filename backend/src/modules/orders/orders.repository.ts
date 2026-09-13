@@ -10,12 +10,20 @@ import {
   Prisma,
 } from '../../generated/prisma';
 
+export interface OrderItemAddonInput {
+  addonItemId: string;
+  nameSnapshot: string;
+  priceInPaiseSnapshot: number;
+  quantity: number;
+}
+
 export interface OrderItemInput {
   mealId: string;
   nameSnapshot: string;
   priceInPaiseSnapshot: number;
   quantity: number;
   isFreeItem?: boolean;
+  addons?: OrderItemAddonInput[];
 }
 
 export interface AddressSnapshotInput {
@@ -53,6 +61,7 @@ export interface CreateOrderInput {
   deliveryFeeInPaise: number;
   totalInPaise: number;
   notes?: string;
+  prepNotes?: string;
   items: OrderItemInput[];
   // Absent for a manual (CASH/UPI) order — there is no Razorpay order to
   // reference at all in that path.
@@ -69,7 +78,7 @@ export interface CreateOrderInput {
 }
 
 const ORDER_INCLUDE = {
-  items: true,
+  items: { include: { addons: true } },
   address: true,
   pickupKitchenZone: true,
   table: true,
@@ -83,7 +92,7 @@ export type OrderWithDetails = Prisma.OrderGetPayload<{
 // passwordHash into any accidental JSON response. Internal-only (the
 // notifications processor), never routed through a controller.
 const ORDER_NOTIFICATION_INCLUDE = {
-  items: true,
+  items: { include: { addons: true } },
   address: true,
   pickupKitchenZone: true,
   user: {
@@ -99,7 +108,7 @@ export type OrderWithNotificationDetails = Prisma.OrderGetPayload<{
 // passwordHash — select only the display fields, same principle as
 // ORDER_NOTIFICATION_INCLUDE above.
 const ORDER_ADMIN_INCLUDE = {
-  items: true,
+  items: { include: { addons: true } },
   address: true,
   pickupKitchenZone: true,
   dineInKitchenZone: true,
@@ -174,6 +183,7 @@ export class OrdersRepository {
           deliveryFeeInPaise: input.deliveryFeeInPaise,
           totalInPaise: input.totalInPaise,
           notes: input.notes,
+          prepNotes: input.prepNotes,
           razorpayOrderId: input.razorpayOrderId,
           deliveryDate: input.deliveryDate,
           deliverySlotId: input.deliverySlotId,
@@ -190,6 +200,16 @@ export class OrdersRepository {
               priceInPaiseSnapshot: item.priceInPaiseSnapshot,
               quantity: item.quantity,
               isFreeItem: item.isFreeItem ?? false,
+              addons: item.addons?.length
+                ? {
+                    create: item.addons.map((addon) => ({
+                      addonItemId: addon.addonItemId,
+                      nameSnapshot: addon.nameSnapshot,
+                      priceInPaiseSnapshot: addon.priceInPaiseSnapshot,
+                      quantity: addon.quantity,
+                    })),
+                  }
+                : undefined,
             })),
           },
         },

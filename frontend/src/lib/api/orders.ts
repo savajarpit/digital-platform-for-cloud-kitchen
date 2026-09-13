@@ -3,6 +3,14 @@ import type { PaginationMeta } from "@/lib/api/response";
 
 export { ApiError };
 
+export interface OrderItemAddon {
+  id: string;
+  addonItemId: string | null;
+  nameSnapshot: string;
+  priceInPaiseSnapshot: number;
+  quantity: number;
+}
+
 export interface OrderItem {
   id: string;
   mealId: string | null;
@@ -10,6 +18,7 @@ export interface OrderItem {
   priceInPaiseSnapshot: number;
   quantity: number;
   isFreeItem: boolean;
+  addons?: OrderItemAddon[];
 }
 
 export interface OrderAddress {
@@ -46,6 +55,7 @@ export interface Order {
   isInstant: boolean;
   razorpayOrderId: string | null;
   notes: string | null;
+  prepNotes: string | null;
   createdAt: string;
   items: OrderItem[];
   fulfillmentType: OrderFulfillmentType;
@@ -53,12 +63,19 @@ export interface Order {
   pickupKitchenZone: OrderPickupZone | null;
 }
 
+export interface CreateOrderItemInput {
+  mealId: string;
+  quantity: number;
+  addons?: { addonItemId: string; quantity: number }[];
+}
+
 export interface CreateOrderInput {
   fulfillmentType?: OrderFulfillmentType;
   addressId?: string;
   pickupKitchenZoneId?: string;
-  items: { mealId: string; quantity: number }[];
+  items: CreateOrderItemInput[];
   notes?: string;
+  prepNotes?: string;
   isInstant?: boolean;
   deliveryDate?: string;
   deliverySlotId?: string;
@@ -84,7 +101,7 @@ export function createOrder(input: CreateOrderInput): Promise<CreatedOrder> {
 }
 
 export function previewOrder(input: {
-  items: { mealId: string; quantity: number }[];
+  items: CreateOrderItemInput[];
   couponCode?: string;
 }): Promise<OrderPreview> {
   return proxyFetch<OrderPreview>("/orders/preview", {

@@ -55,6 +55,7 @@
     "addressNotDeliverable": "Not deliverable to this area",
     "agreeToTerms": "I agree to the Terms of Service and Privacy Policy",
     "orderNotes": "Delivery notes (optional)",
+    "prepNotes": "Cooking instructions (optional)",
     "orderSummary": "Order summary",
     "paymentFailed": "Payment failed or was cancelled — your order hasn't been charged.",
     "verifyingPayment": "Confirming your payment…",

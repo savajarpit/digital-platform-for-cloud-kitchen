@@ -74,6 +74,7 @@ import { PlatformWhatsAppTemplatesModule } from './modules/platform-whatsapp-tem
 import { NotificationTemplatesModule } from './modules/notification-templates/notification-templates.module';
 import { PlatformSettingsModule } from './modules/platform-settings/platform-settings.module';
 import { DineInModule } from './modules/dine-in/dine-in.module';
+import { AddonsModule } from './modules/addons/addons.module';
 
 @Module({
   imports: [
@@ -151,6 +152,7 @@ import { DineInModule } from './modules/dine-in/dine-in.module';
     MenuModule,
     AddressesModule,
     DineInModule,
+    AddonsModule,
     OrdersModule,
     PaymentsModule,
     PermissionsModule,

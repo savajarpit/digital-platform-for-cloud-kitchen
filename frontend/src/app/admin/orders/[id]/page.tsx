@@ -131,7 +131,12 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                     day: "numeric",
                   }),
               totalLabel: formatPriceFromPaise(order.totalInPaise),
-              note: order.notes,
+              note: [
+                order.prepNotes ? `Cooking: ${order.prepNotes}` : null,
+                order.notes ? `Delivery: ${order.notes}` : null,
+              ]
+                .filter(Boolean)
+                .join(" — ") || null,
               ...(isDineInLike
                 ? {
                     locationLabel: [order.tableLabelSnapshot, order.dineInKitchenZone?.name]
@@ -275,9 +280,15 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               <span>{formatPriceFromPaise(order.totalInPaise)}</span>
             </div>
           </div>
+          {order.prepNotes && (
+            <div className="mt-2 wrap-break-word rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-400">
+              <span className="font-medium">Cooking instructions: </span>
+              {order.prepNotes}
+            </div>
+          )}
           {order.notes && (
             <div className="mt-2 wrap-break-word rounded-lg bg-zinc-50 p-3 text-sm text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-              <span className="font-medium text-zinc-900 dark:text-zinc-100">Notes: </span>
+              <span className="font-medium text-zinc-900 dark:text-zinc-100">Delivery notes: </span>
               {order.notes}
             </div>
           )}

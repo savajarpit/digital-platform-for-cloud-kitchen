@@ -17,6 +17,17 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrderFulfillmentType } from '../../../generated/prisma';
 
+export class OrderItemAddonInputDto {
+  @ApiProperty({ example: 'b3f1c2a0-...' })
+  @IsUUID()
+  addonItemId: string;
+
+  @ApiProperty({ example: 2 })
+  @IsInt()
+  @Min(1)
+  quantity: number;
+}
+
 export class OrderItemInputDto {
   @ApiProperty({ example: 'b3f1c2a0-...' })
   @IsUUID()
@@ -26,6 +37,17 @@ export class OrderItemInputDto {
   @IsInt()
   @Min(1)
   quantity: number;
+
+  @ApiPropertyOptional({
+    type: [OrderItemAddonInputDto],
+    description:
+      'Only meaningful when the tenant has the menu-addons feature and this meal has groups attached',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => OrderItemAddonInputDto)
+  addons?: OrderItemAddonInputDto[];
 }
 
 export class CreateOrderDto {
@@ -60,11 +82,24 @@ export class CreateOrderDto {
   @Type(() => OrderItemInputDto)
   items: OrderItemInputDto[];
 
-  @ApiPropertyOptional({ example: 'Ring the bell twice' })
+  @ApiPropertyOptional({
+    example: 'Ring the bell twice',
+    description: 'Delivery-facing instructions — landmark, gate code, etc.',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)
   notes?: string;
+
+  @ApiPropertyOptional({
+    example: 'No onions, extra spicy',
+    description:
+      'Kitchen-facing prep instructions — always kept separate from delivery notes above.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  prepNotes?: string;
 
   @ApiPropertyOptional({
     description:

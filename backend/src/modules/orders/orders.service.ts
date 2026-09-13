@@ -42,6 +42,9 @@ import { RAZORPAY_REFUNDS_FEATURE_KEY } from '../../shared-modules/refunds/refun
 import { CancelRefundDto } from '../../shared-modules/refunds/dto/cancel-refund.dto';
 import { DiningTablesService } from '../dine-in/dining-tables.service';
 import { WaitlistService } from '../dine-in/waitlist.service';
+import { AddonGroupsService } from '../addons/addon-groups.service';
+import { AddonGroupWithItems } from '../addons/addon-groups.repository';
+import { MENU_ADDONS_FEATURE_KEY } from '../addons/addons.constants';
 import {
   OrderFulfillmentType,
   PaymentMethod,
@@ -89,6 +92,7 @@ export class OrdersService {
     private readonly refundsRepo: RefundsRepository,
     private readonly diningTablesService: DiningTablesService,
     private readonly waitlistService: WaitlistService,
+    private readonly addonGroupsService: AddonGroupsService,
   ) {}
 
   /**
@@ -121,6 +125,33 @@ export class OrdersService {
       ]),
     );
 
+    // Add-ons: one batch fetch of every group+item this cart's meals
+    // actually offer (never a client-submitted price/availability), gated
+    // behind the tenant's own menu-addons feature. Fetched whenever the
+    // feature is on — not just when the cart happens to submit an `addons`
+    // array — since a meal can have a *required* group (minSelections > 0)
+    // that must still be enforced even for a cart line that omitted addons
+    // entirely. When the feature is off, attached groups are never fetched
+    // at all (so a stale MealAddonGroup row from before the tenant lost the
+    // feature can never block checkout) — only a client that explicitly
+    // submits an addon selection is rejected outright.
+    const hasAddonsFeature = await this.featuresService.hasFeature(
+      tenantId,
+      MENU_ADDONS_FEATURE_KEY,
+    );
+    let attachedGroupsByMeal = new Map<string, AddonGroupWithItems[]>();
+    if (hasAddonsFeature) {
+      attachedGroupsByMeal =
+        await this.addonGroupsService.findAttachedGroupsForMeals(
+          tenantId,
+          mealIds,
+        );
+    } else if (cartItems.some((i) => (i.addons?.length ?? 0) > 0)) {
+      throw new BadRequestException(
+        'Add-ons are not available for this order.',
+      );
+    }
+
     const items: OrderItemInput[] = [];
     let rawSubtotalInPaise = 0;
     for (const cartItem of cartItems) {
@@ -130,13 +161,22 @@ export class OrdersService {
           `One of the items in your cart is no longer available — please review your cart.`,
         );
       }
+
+      const { addons, addonTotalInPaise } = this.priceCartItemAddons(
+        cartItem,
+        attachedGroupsByMeal.get(cartItem.mealId) ?? [],
+      );
+
       items.push({
         mealId: meal.id,
         nameSnapshot: meal.name,
         priceInPaiseSnapshot: meal.priceInPaise,
         quantity: cartItem.quantity,
+        addons: addons.length > 0 ? addons : undefined,
       });
-      rawSubtotalInPaise += meal.priceInPaise * cartItem.quantity;
+      rawSubtotalInPaise +=
+        meal.priceInPaise * cartItem.quantity +
+        addonTotalInPaise * cartItem.quantity;
     }
 
     const { extraItems, discountInPaise: automaticDiscountInPaise } =
@@ -180,6 +220,90 @@ export class OrdersService {
       couponId,
       resolvedCouponCode,
     };
+  }
+
+  /**
+   * Validates and prices one cart line's selected add-ons — never trusts a
+   * client-submitted price/name/availability, and only ever accepts an
+   * item from a group actually attached to this specific meal (an item id
+   * from a different meal's group is rejected, since it's simply absent
+   * from `attachedGroups`). Enforces both caps: the group's
+   * minSelections/maxSelections (how many *distinct* items can be picked —
+   * checked for every attached group, including ones with zero selections,
+   * so a required-but-skipped group is still caught) and each item's own
+   * maxQuantityPerOrder (the +/- stepper cap once picked). Returns a
+   * per-unit total — the caller multiplies by the cart line's own quantity
+   * (an addon is per unit of its parent meal, e.g. "extra roti x2" on 3
+   * meals = 6 rotis charged).
+   */
+  private priceCartItemAddons(
+    cartItem: OrderItemInputDto,
+    attachedGroups: AddonGroupWithItems[],
+  ): {
+    addons: NonNullable<OrderItemInput['addons']>;
+    addonTotalInPaise: number;
+  } {
+    const selections = cartItem.addons ?? [];
+    if (
+      selections.length === 0 &&
+      attachedGroups.every((g) => g.minSelections === 0)
+    ) {
+      return { addons: [], addonTotalInPaise: 0 };
+    }
+
+    const itemLookup = new Map<
+      string,
+      { item: AddonGroupWithItems['items'][number]; group: AddonGroupWithItems }
+    >();
+    for (const group of attachedGroups) {
+      for (const item of group.items) {
+        itemLookup.set(item.id, { item, group });
+      }
+    }
+
+    const addons: NonNullable<OrderItemInput['addons']> = [];
+    const distinctCountByGroup = new Map<string, number>();
+    let addonTotalInPaise = 0;
+
+    for (const selection of selections) {
+      const found = itemLookup.get(selection.addonItemId);
+      if (!found || !found.item.isAvailable) {
+        throw new BadRequestException(
+          'One of the selected add-ons is no longer available for this meal.',
+        );
+      }
+      const { item, group } = found;
+      if (
+        selection.quantity < 1 ||
+        selection.quantity > item.maxQuantityPerOrder
+      ) {
+        throw new BadRequestException(
+          `"${item.name}" can only be added up to ${item.maxQuantityPerOrder} at a time.`,
+        );
+      }
+      distinctCountByGroup.set(
+        group.id,
+        (distinctCountByGroup.get(group.id) ?? 0) + 1,
+      );
+      addons.push({
+        addonItemId: item.id,
+        nameSnapshot: item.name,
+        priceInPaiseSnapshot: item.priceInPaise,
+        quantity: selection.quantity,
+      });
+      addonTotalInPaise += item.priceInPaise * selection.quantity;
+    }
+
+    for (const group of attachedGroups) {
+      const count = distinctCountByGroup.get(group.id) ?? 0;
+      if (count < group.minSelections || count > group.maxSelections) {
+        throw new BadRequestException(
+          `"${group.name}" requires between ${group.minSelections} and ${group.maxSelections} selection(s).`,
+        );
+      }
+    }
+
+    return { addons, addonTotalInPaise };
   }
 
   async preview(
@@ -237,6 +361,7 @@ export class OrdersService {
       deliveryFeeInPaise: core.deliveryFeeInPaise,
       totalInPaise: core.totalInPaise,
       notes: dto.notes,
+      prepNotes: dto.prepNotes,
       items: core.pricing.items,
       razorpayOrderId,
       deliveryDate: core.deliveryDate,
@@ -296,6 +421,7 @@ export class OrdersService {
       deliveryFeeInPaise: core.deliveryFeeInPaise,
       totalInPaise: core.totalInPaise,
       notes: dto.notes,
+      prepNotes: dto.prepNotes,
       items: core.pricing.items,
       deliveryDate: core.deliveryDate,
       deliverySlotId: core.deliverySlotId,

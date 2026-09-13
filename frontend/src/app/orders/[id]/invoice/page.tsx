@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { Fragment, use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -160,26 +160,46 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
             </tr>
           </thead>
           <tbody>
-            {order.items.map((item) => (
-              <tr
-                key={item.id}
-                className="border-b border-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 print:border-zinc-200 print:text-black"
-              >
-                <td className="wrap-break-word py-2.5">
-                  {item.nameSnapshot}
-                  {item.isFreeItem && (
-                    <span className="ml-2 text-xs font-semibold text-primary-600 dark:text-primary-400">
-                      FREE
-                    </span>
-                  )}
-                </td>
-                <td className="py-2.5 text-center">{item.quantity}</td>
-                <td className="py-2.5 text-right">{formatPriceFromPaise(item.priceInPaiseSnapshot)}</td>
-                <td className="py-2.5 text-right">
-                  {formatPriceFromPaise(item.priceInPaiseSnapshot * item.quantity)}
-                </td>
-              </tr>
-            ))}
+            {order.items.map((item) => {
+              const addonUnitTotal = (item.addons ?? []).reduce(
+                (sum, a) => sum + a.priceInPaiseSnapshot * a.quantity,
+                0,
+              );
+              return (
+                <Fragment key={item.id}>
+                  <tr className="border-b border-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 print:border-zinc-200 print:text-black">
+                    <td className="wrap-break-word py-2.5">
+                      {item.nameSnapshot}
+                      {item.isFreeItem && (
+                        <span className="ml-2 text-xs font-semibold text-primary-600 dark:text-primary-400">
+                          FREE
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 text-center">{item.quantity}</td>
+                    <td className="py-2.5 text-right">
+                      {formatPriceFromPaise(item.priceInPaiseSnapshot + addonUnitTotal)}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      {formatPriceFromPaise((item.priceInPaiseSnapshot + addonUnitTotal) * item.quantity)}
+                    </td>
+                  </tr>
+                  {item.addons?.map((a) => (
+                    <tr
+                      key={a.id}
+                      className="border-b border-zinc-100 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400 print:border-zinc-200 print:text-zinc-600"
+                    >
+                      <td className="py-1 pl-4 wrap-break-word">+ {a.nameSnapshot}</td>
+                      <td className="py-1 text-center">{a.quantity}</td>
+                      <td className="py-1 text-right">{formatPriceFromPaise(a.priceInPaiseSnapshot)}</td>
+                      <td className="py-1 text-right">
+                        {formatPriceFromPaise(a.priceInPaiseSnapshot * a.quantity * item.quantity)}
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
 

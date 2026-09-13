@@ -136,19 +136,38 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
         <div className="mt-4 flex flex-col gap-2 rounded-xl bg-zinc-50 p-4 text-left text-sm dark:bg-zinc-800">
           <h2 className="mb-1 font-semibold text-zinc-900 dark:text-zinc-100">{t("items")}</h2>
-          {order.items.map((item) => (
-            <div key={item.id} className="flex justify-between gap-3 text-zinc-600 dark:text-zinc-400">
-              <span className="min-w-0 wrap-break-word">
-                {item.nameSnapshot} × {item.quantity}
-                {item.isFreeItem && (
-                  <span className="ml-2 text-xs font-semibold text-primary-600 dark:text-primary-400">
-                    FREE
+          {order.items.map((item) => {
+            const addonUnitTotal = (item.addons ?? []).reduce(
+              (sum, a) => sum + a.priceInPaiseSnapshot * a.quantity,
+              0,
+            );
+            return (
+              <div key={item.id} className="flex flex-col gap-0.5">
+                <div className="flex justify-between gap-3 text-zinc-600 dark:text-zinc-400">
+                  <span className="min-w-0 wrap-break-word">
+                    {item.nameSnapshot} × {item.quantity}
+                    {item.isFreeItem && (
+                      <span className="ml-2 text-xs font-semibold text-primary-600 dark:text-primary-400">
+                        FREE
+                      </span>
+                    )}
                   </span>
+                  <span className="shrink-0">
+                    {formatPriceFromPaise((item.priceInPaiseSnapshot + addonUnitTotal) * item.quantity)}
+                  </span>
+                </div>
+                {item.addons && item.addons.length > 0 && (
+                  <ul className="pl-3 text-xs text-zinc-400">
+                    {item.addons.map((a) => (
+                      <li key={a.id}>
+                        + {a.nameSnapshot} × {a.quantity}
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </span>
-              <span className="shrink-0">{formatPriceFromPaise(item.priceInPaiseSnapshot * item.quantity)}</span>
-            </div>
-          ))}
+              </div>
+            );
+          })}
           {order.discountInPaise > 0 && (
             <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
               <span>Discount{order.couponCode ? ` (${order.couponCode})` : ""}</span>
@@ -160,6 +179,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <span>{formatPriceFromPaise(order.totalInPaise)}</span>
           </div>
         </div>
+
+        {(order.prepNotes || order.notes) && (
+          <div className="mt-4 flex flex-col gap-2 text-left text-sm">
+            {order.prepNotes && (
+              <div className="rounded-xl bg-amber-50 p-3 text-amber-800 dark:bg-amber-950 dark:text-amber-400">
+                <span className="font-medium">Cooking instructions: </span>
+                {order.prepNotes}
+              </div>
+            )}
+            {order.notes && (
+              <div className="rounded-xl bg-zinc-50 p-3 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                <span className="font-medium text-zinc-900 dark:text-zinc-100">Delivery notes: </span>
+                {order.notes}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Link href="/orders" className="btn-outline">

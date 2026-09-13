@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { CheckCircle2, Clock, MapPin, Plus, Zap } from "lucide-react";
-import { useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
+import { cartLineUnitPrice, useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
 import { useCartAvailability } from "@/lib/hooks/useCartAvailability";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { ApiError, listAddresses, checkServiceability, type Address, type ServiceabilityResult } from "@/lib/api/addresses";
@@ -62,7 +62,8 @@ export default function CheckoutPage() {
   const [isInstant, setIsInstant] = useState(false);
   const [todayStr, setTodayStr] = useState("");
   const [nowMinutes, setNowMinutes] = useState(0);
-  const [notes, setNotes] = useState("");
+  const [deliveryNotes, setDeliveryNotes] = useState("");
+  const [prepNotes, setPrepNotes] = useState("");
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountInPaise: number } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
@@ -210,7 +211,11 @@ export default function CheckoutPage() {
     setCouponError(null);
     try {
       const preview = await previewOrder({
-        items: items.map((i) => ({ mealId: i.mealId, quantity: i.quantity })),
+        items: items.map((i) => ({
+          mealId: i.mealId,
+          quantity: i.quantity,
+          addons: i.addons?.map((a) => ({ addonItemId: a.addonItemId, quantity: a.quantity })),
+        })),
         couponCode: code,
       });
       if (!preview.couponApplied) {
@@ -242,12 +247,17 @@ export default function CheckoutPage() {
       const { order, razorpayOrderId, razorpayKeyId } = await createOrder({
         fulfillmentType,
         ...(isPickup ? { pickupKitchenZoneId: selectedZoneId } : { addressId: selectedAddressId! }),
-        items: items.map((i) => ({ mealId: i.mealId, quantity: i.quantity })),
+        items: items.map((i) => ({
+          mealId: i.mealId,
+          quantity: i.quantity,
+          addons: i.addons?.map((a) => ({ addonItemId: a.addonItemId, quantity: a.quantity })),
+        })),
         ...(isInstant
           ? { isInstant: true }
           : { deliveryDate: selectedDay, deliverySlotId: effectiveSlotId }),
         couponCode: appliedCoupon?.code,
-        notes: notes.trim() || undefined,
+        notes: deliveryNotes.trim() || undefined,
+        prepNotes: prepNotes.trim() || undefined,
       });
 
       await loadRazorpayScript();
@@ -594,19 +604,35 @@ export default function CheckoutPage() {
             )}
           </section>
 
-          <section className="card p-6">
-            <label htmlFor="orderNotes" className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              {t("orderNotes")}
-            </label>
-            <textarea
-              id="orderNotes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              maxLength={500}
-              rows={2}
-              placeholder="Ring the bell twice, leave at the door…"
-              className="input w-full resize-none"
-            />
+          <section className="card flex flex-col gap-4 p-6">
+            <div>
+              <label htmlFor="prepNotes" className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                {t("prepNotes")}
+              </label>
+              <textarea
+                id="prepNotes"
+                value={prepNotes}
+                onChange={(e) => setPrepNotes(e.target.value)}
+                maxLength={500}
+                rows={2}
+                placeholder="No onions, extra spicy…"
+                className="input w-full resize-none"
+              />
+            </div>
+            <div>
+              <label htmlFor="orderNotes" className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                {t("orderNotes")}
+              </label>
+              <textarea
+                id="orderNotes"
+                value={deliveryNotes}
+                onChange={(e) => setDeliveryNotes(e.target.value)}
+                maxLength={500}
+                rows={2}
+                placeholder="Ring the bell twice, leave at the door…"
+                className="input w-full resize-none"
+              />
+            </div>
           </section>
 
           <section className="card p-6">
@@ -626,11 +652,18 @@ export default function CheckoutPage() {
           <h2 className="mb-4 font-semibold text-zinc-900 dark:text-zinc-100">{t("orderSummary")}</h2>
           <ul className="flex flex-col gap-2 text-sm">
             {items.map((item) => (
-              <li key={item.mealId} className="flex justify-between gap-3 text-zinc-600 dark:text-zinc-400">
+              <li key={item.lineKey} className="flex justify-between gap-3 text-zinc-600 dark:text-zinc-400">
                 <span className="min-w-0 wrap-break-word">
                   {item.name} × {item.quantity}
+                  {item.addons && item.addons.length > 0 && (
+                    <span className="block text-xs text-zinc-400">
+                      {item.addons.map((a) => `+ ${a.name} ×${a.quantity}`).join(", ")}
+                    </span>
+                  )}
                 </span>
-                <span className="shrink-0">{formatPriceFromPaise(item.priceInPaise * item.quantity)}</span>
+                <span className="shrink-0">
+                  {formatPriceFromPaise(cartLineUnitPrice(item) * item.quantity)}
+                </span>
               </li>
             ))}
           </ul>

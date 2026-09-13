@@ -1,5 +1,3 @@
-Loaded Prisma config from prisma.config.ts.
-
 -- CreateTable
 CREATE TABLE "platform_pages" (
     "id" TEXT NOT NULL,

@@ -1,5 +1,3 @@
-Loaded Prisma config from prisma.config.ts.
-
 -- AlterTable
 ALTER TABLE "users" ADD COLUMN     "termsAcceptedAt" TIMESTAMP(3);
 

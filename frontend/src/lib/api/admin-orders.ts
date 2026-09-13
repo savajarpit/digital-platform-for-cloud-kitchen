@@ -1,7 +1,9 @@
 import { ApiError, proxyFetch, proxyFetchPaginated } from "@/lib/api/client";
 import type { PaginationMeta } from "@/lib/api/response";
+import type { CancelRefundInput, Refund } from "@/lib/api/refunds";
 
 export { ApiError };
+export type { CancelRefundInput, Refund } from "@/lib/api/refunds";
 
 export interface AdminOrderItem {
   id: string;
@@ -22,6 +24,7 @@ export interface AdminOrderAddress {
 }
 
 export type AdminOrderFulfillmentType = "DELIVERY" | "PICKUP";
+export type AdminOrderPaymentMethod = "RAZORPAY" | "CASH" | "UPI";
 
 export interface AdminOrderPickupZone {
   pickupAddress: string | null;
@@ -47,6 +50,8 @@ export interface AdminOrder {
   address: AdminOrderAddress | null;
   pickupKitchenZone: AdminOrderPickupZone | null;
   user: { firstName: string; lastName: string | null; email: string };
+  paymentMethod: AdminOrderPaymentMethod;
+  createdByUserId: string | null;
 }
 
 export interface AdminOrderDetail extends AdminOrder {
@@ -58,6 +63,9 @@ export interface AdminOrderDetail extends AdminOrder {
   isInstant: boolean;
   subscriptionId: string | null;
   userId: string;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  refunds: Refund[];
 }
 
 export type AdminOrdersMeta = PaginationMeta;
@@ -92,6 +100,47 @@ export function updateOrderStatus(id: string, status: string): Promise<AdminOrde
   return proxyFetch<AdminOrder>(`/orders/${id}/status`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
+  });
+}
+
+export interface CreateManualOrderInput {
+  customerUserId: string;
+  fulfillmentType?: "DELIVERY" | "PICKUP";
+  addressId?: string;
+  pickupKitchenZoneId?: string;
+  items: { mealId: string; quantity: number }[];
+  notes?: string;
+  isInstant?: boolean;
+  deliveryDate?: string;
+  deliverySlotId?: string;
+  couponCode?: string;
+  paymentMethod: "CASH" | "UPI";
+  overrideServiceability?: boolean;
+}
+
+/** Admin phone-order path — creates the order settled by cash/UPI, no
+ * Razorpay involved. Lands PENDING_PAYMENT/PENDING; markOrderPaid() is the
+ * separate call that actually confirms the money came in. */
+export function createManualOrder(
+  input: CreateManualOrderInput,
+): Promise<{ order: AdminOrderDetail; serviceabilityOverridden: boolean }> {
+  return proxyFetch<{ order: AdminOrderDetail; serviceabilityOverridden: boolean }>(
+    "/orders/admin",
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+export function markOrderPaid(id: string): Promise<AdminOrderDetail> {
+  return proxyFetch<AdminOrderDetail>(`/orders/admin/${id}/mark-paid`, { method: "POST" });
+}
+
+export function cancelOrderRefund(
+  id: string,
+  input: CancelRefundInput,
+): Promise<{ order: AdminOrderDetail; refund: Refund }> {
+  return proxyFetch<{ order: AdminOrderDetail; refund: Refund }>(`/orders/${id}/cancel-refund`, {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 

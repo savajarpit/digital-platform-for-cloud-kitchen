@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Package } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardPlus, Package } from "lucide-react";
 import {
   ADMIN_SETTABLE_STATUSES,
   ApiError,
@@ -44,6 +44,7 @@ const FULFILLMENT_STYLES: Record<AdminOrderFulfillmentType, string> = {
 
 export default function AdminOrdersPage() {
   const canEdit = usePermission(PERMISSIONS.ORDERS_MANAGE);
+  const canCreateManual = usePermission(PERMISSIONS.ORDERS_MANUAL_CREATE);
   const [status, setStatus] = useState<string>("");
   const [fulfillmentType, setFulfillmentType] = useState<string>("");
   const [page, setPage] = useState(1);
@@ -58,6 +59,12 @@ export default function AdminOrdersPage() {
           </h2>
         </div>
         <div className="flex items-center gap-2">
+          {canCreateManual && (
+            <Link href="/admin/orders/new" className="btn-primary btn-sm">
+              <ClipboardPlus className="h-4 w-4" />
+              New Order
+            </Link>
+          )}
           <Select
             value={fulfillmentType}
             onValueChange={(v) => {

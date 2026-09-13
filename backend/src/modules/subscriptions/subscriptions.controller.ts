@@ -21,14 +21,18 @@ import { UpsertPlanDaysDto } from './dto/upsert-plan-days.dto';
 import { PublishPlanDto } from './dto/publish-plan.dto';
 import { QueryAdminPlansDto } from './dto/query-admin-plans.dto';
 import { QueryAdminSubscriptionsDto } from './dto/query-admin-subscriptions.dto';
+import { QuerySubscriptionAnalyticsDto } from './dto/query-subscription-analytics.dto';
+import { QueryExpiringSoonDto } from './dto/query-expiring-soon.dto';
 import { QueryPrepPlanDto } from './dto/query-prep-plan.dto';
 import { SubscribeDto } from './dto/subscribe.dto';
+import { CreateManualSubscriptionDto } from './dto/create-manual-subscription.dto';
 import { VerifyPlanPaymentDto } from './dto/verify-plan-payment.dto';
 import { SkipDayDto } from './dto/skip-day.dto';
 import { PauseDto } from './dto/pause.dto';
 import { SetDayOverrideDto } from './dto/set-day-override.dto';
 import { UpdateSubscriptionSettingsDto } from './dto/update-subscription-settings.dto';
 import { DeclareDisruptionDto } from './dto/declare-disruption.dto';
+import { CancelRefundDto } from '../../shared-modules/refunds/dto/cancel-refund.dto';
 import { OffsetPaginationDto } from '../../common/dto/pagination.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -334,6 +338,76 @@ export class SubscriptionsController {
     );
   }
 
+  @Get('admin/analytics')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscriptions')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Subscription analytics retrieved successfully')
+  @ApiOperation({
+    summary:
+      'Admin: subscriber/revenue analytics dashboard — new subscribers, active count, gross/refunded/net revenue, a trend chart, and a per-plan breakdown',
+  })
+  getAnalytics(
+    @CurrentTenantId() tenantId: string,
+    @Query() query: QuerySubscriptionAnalyticsDto,
+  ) {
+    return this.subscriptionsService.getAnalytics(tenantId, query);
+  }
+
+  @Get('admin/analytics/expiring')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscriptions')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Expiring subscriptions retrieved successfully')
+  @ApiOperation({
+    summary:
+      'Admin: ACTIVE subscriptions expiring within a custom number of days — the drill-down behind the analytics tile',
+  })
+  getExpiringSoon(
+    @CurrentTenantId() tenantId: string,
+    @Query() query: QueryExpiringSoonDto,
+  ) {
+    return this.subscriptionsService.getExpiringSoon(
+      tenantId,
+      query.withinDays ?? 7,
+    );
+  }
+
+  @Post('admin')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manual-create')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Subscription created')
+  @ApiOperation({
+    summary:
+      'Admin: sign a customer up for a subscription plan on their behalf (e.g. a phone signup), settled by cash/UPI — no Razorpay involved',
+  })
+  createManual(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') staffUserId: string,
+    @Body() dto: CreateManualSubscriptionDto,
+  ) {
+    return this.subscriptionsService.createManual(tenantId, staffUserId, dto);
+  }
+
+  @Post('admin/:id/mark-paid')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('payments.manual-record')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Subscription marked as paid')
+  @ApiOperation({
+    summary:
+      'Admin: confirm cash/UPI payment was actually received for a manually-signed-up subscription',
+  })
+  markPaidManually(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.subscriptionsService.markPaidManually(tenantId, id);
+  }
+
   // Must come after every other literal `admin/...` route above — otherwise
   // this `:id` wildcard would shadow them (e.g. "today" parsed as an id).
   @Get('admin/:id')
@@ -351,6 +425,101 @@ export class SubscriptionsController {
     @Param('id') id: string,
   ) {
     return this.subscriptionsService.findSubscriptionForAdmin(tenantId, id);
+  }
+
+  @Get('admin/:id/refund-preview')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.manage')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Refund preview computed')
+  @ApiOperation({
+    summary:
+      'Admin: suggested refund amount for this subscription, prorated on undelivered days — a starting point for the cancel-refund form, not the final amount',
+  })
+  getRefundPreview(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.subscriptionsService.getRefundPreview(tenantId, id);
+  }
+
+  @Post('admin/:id/cancel-refund')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.cancel-refund')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Subscription cancelled')
+  @ApiOperation({
+    summary:
+      'Admin: cancel a subscription and record/issue a refund (manual, or Razorpay if enabled for this tenant)',
+  })
+  cancelWithRefund(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') staffUserId: string,
+    @Param('id') id: string,
+    @Body() dto: CancelRefundDto,
+  ) {
+    return this.subscriptionsService.cancelWithRefund(
+      tenantId,
+      staffUserId,
+      id,
+      dto,
+    );
+  }
+
+  @Post('admin/:id/skip')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.act-on-behalf')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Day skipped')
+  @ApiOperation({
+    summary:
+      "Admin: skip a single day on a customer's behalf — e.g. they called in — banked forward onto the cycle end",
+  })
+  skipDayAdmin(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: SkipDayDto,
+  ) {
+    return this.subscriptionsService.skipDayAdmin(tenantId, id, dto);
+  }
+
+  @Post('admin/:id/pause')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.act-on-behalf')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Subscription paused for the selected range')
+  @ApiOperation({
+    summary:
+      "Admin: pause a date range on a customer's behalf — banked forward the same as a skip",
+  })
+  pauseAdmin(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: PauseDto,
+  ) {
+    return this.subscriptionsService.pauseAdmin(tenantId, id, dto);
+  }
+
+  @Post('admin/:id/day-override')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('subscriptions.act-on-behalf')
+  @RequireFeature('subscription-curated-plans')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Day updated')
+  @ApiOperation({
+    summary:
+      "Admin: change the address and/or delivery slot for one specific day, on a customer's behalf",
+  })
+  setDayOverrideAdmin(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+    @Body() dto: SetDayOverrideDto,
+  ) {
+    return this.subscriptionsService.setDayOverrideAdmin(tenantId, id, dto);
   }
 
   // ─── Customer ──────────────────────────────────────────────

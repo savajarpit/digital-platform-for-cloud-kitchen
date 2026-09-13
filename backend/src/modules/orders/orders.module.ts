@@ -10,6 +10,8 @@ import { UsersModule } from '../users/users.module';
 import { RazorpayClientModule } from '../../shared-modules/razorpay/razorpay-client.module';
 import { PaginationService } from '../../common/services/pagination.service';
 import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
+import { FeaturesModule } from '../features/features.module';
+import { RefundsModule } from '../../shared-modules/refunds/refunds.module';
 
 @Module({
   imports: [
@@ -20,6 +22,8 @@ import { TenantLimitsModule } from '../tenant-limits/tenant-limits.module';
     UsersModule,
     RazorpayClientModule,
     TenantLimitsModule,
+    FeaturesModule,
+    RefundsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService, OrdersRepository, PaginationService],

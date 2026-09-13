@@ -1,7 +1,9 @@
 import { ApiError, proxyFetch, proxyFetchPaginated } from "@/lib/api/client";
 import type { PaginationMeta } from "@/lib/api/response";
+import type { CancelRefundInput, Refund } from "@/lib/api/refunds";
 
 export { ApiError };
+export type { CancelRefundInput, Refund } from "@/lib/api/refunds";
 
 export type MealSlotType = "BREAKFAST" | "LUNCH" | "DINNER";
 
@@ -109,6 +111,7 @@ export interface SubscriptionInvoice {
 
 export interface AdminSubscriptionDetail {
   id: string;
+  userId: string;
   status: "PENDING_PAYMENT" | "ACTIVE" | "EXPIRED" | "CANCELLED";
   priceInPaiseSnapshot: number;
   durationDaysSnapshot: number;
@@ -136,6 +139,11 @@ export interface AdminSubscriptionDetail {
   deliverySlot: { name: string; startTime: string; endTime: string } | null;
   user: { firstName: string; lastName: string | null; email: string; phone: string | null };
   invoice: SubscriptionInvoice | null;
+  cancelledAt: string | null;
+  cancellationReason: string | null;
+  refunds: Refund[];
+  paymentMethod: "RAZORPAY" | "CASH" | "UPI";
+  createdByUserId: string | null;
 }
 
 export interface AdminSubscription {
@@ -279,6 +287,140 @@ export function listSubscriptionsAdmin(params: {
 
 export function getAdminSubscription(id: string): Promise<AdminSubscriptionDetail> {
   return proxyFetch<AdminSubscriptionDetail>(`/subscriptions/admin/${id}`);
+}
+
+export interface CreateManualSubscriptionInput {
+  customerUserId: string;
+  planId: string;
+  addressId: string;
+  couponCode?: string;
+  deliverySlotId?: string;
+  paymentMethod: "CASH" | "UPI";
+}
+
+/** Admin phone-signup path — creates the subscription settled by cash/UPI,
+ * no Razorpay involved. Lands PENDING_PAYMENT; markSubscriptionPaid() is
+ * the separate call that actually activates it. */
+export function createManualSubscription(
+  input: CreateManualSubscriptionInput,
+): Promise<{ subscription: AdminSubscriptionDetail }> {
+  return proxyFetch<{ subscription: AdminSubscriptionDetail }>("/subscriptions/admin", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function markSubscriptionPaid(id: string): Promise<AdminSubscriptionDetail> {
+  return proxyFetch<AdminSubscriptionDetail>(`/subscriptions/admin/${id}/mark-paid`, {
+    method: "POST",
+  });
+}
+
+// ── Act on behalf of a customer (e.g. they called in) ───────
+
+export function skipDayAdmin(id: string, date: string): Promise<AdminSubscriptionDetail> {
+  return proxyFetch<AdminSubscriptionDetail>(`/subscriptions/admin/${id}/skip`, {
+    method: "POST",
+    body: JSON.stringify({ date }),
+  });
+}
+
+export function pauseAdmin(
+  id: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<AdminSubscriptionDetail> {
+  return proxyFetch<AdminSubscriptionDetail>(`/subscriptions/admin/${id}/pause`, {
+    method: "POST",
+    body: JSON.stringify({ dateFrom, dateTo }),
+  });
+}
+
+export function setDayOverrideAdmin(
+  id: string,
+  input: { date: string; addressId?: string; deliverySlotId?: string; note?: string },
+): Promise<SubscriptionDayOverride> {
+  return proxyFetch<SubscriptionDayOverride>(`/subscriptions/admin/${id}/day-override`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export interface RefundPreview {
+  durationDaysSnapshot: number;
+  deliveredDays: number;
+  pendingDays: number;
+  priceInPaiseSnapshot: number;
+  suggestedAmountInPaise: number;
+  razorpayRefundAvailable: boolean;
+}
+
+/** Suggested refund amount, prorated on undelivered days — a starting point
+ * for the cancel-refund form, not the final submitted amount. */
+export function getRefundPreview(id: string): Promise<RefundPreview> {
+  return proxyFetch<RefundPreview>(`/subscriptions/admin/${id}/refund-preview`);
+}
+
+export function cancelSubscriptionRefund(
+  id: string,
+  input: CancelRefundInput,
+): Promise<{ subscription: AdminSubscriptionDetail; refund: Refund }> {
+  return proxyFetch<{ subscription: AdminSubscriptionDetail; refund: Refund }>(
+    `/subscriptions/admin/${id}/cancel-refund`,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
+// ── Analytics ────────────────────────────────────────────
+
+export interface SubscriptionAnalytics {
+  newSubscribersToday: number;
+  newSubscribersInRange: number;
+  activeSubscribers: number;
+  grossRevenueInPaise: number;
+  refundedInPaise: number;
+  netRevenueInPaise: number;
+  revenueTrend: { date: string; count: number; valueInPaise: number }[];
+  planBreakdown: {
+    planId: string;
+    planName: string;
+    subscriberCount: number;
+    revenueInPaise: number;
+  }[];
+}
+
+export function getSubscriptionAnalytics(params: {
+  days?: number;
+  from?: string;
+  to?: string;
+  planId?: string;
+}): Promise<SubscriptionAnalytics> {
+  const search = new URLSearchParams();
+  if (params.from && params.to) {
+    search.set("from", params.from);
+    search.set("to", params.to);
+  } else if (params.days) {
+    search.set("days", String(params.days));
+  }
+  if (params.planId) search.set("planId", params.planId);
+  const qs = search.toString();
+  return proxyFetch<SubscriptionAnalytics>(`/subscriptions/admin/analytics${qs ? `?${qs}` : ""}`);
+}
+
+export interface ExpiringSoonSubscription {
+  id: string;
+  planName: string;
+  cycleEnd: string;
+  user: { firstName: string; lastName: string | null; email: string };
+}
+
+export interface ExpiringSoon {
+  count: number;
+  subscriptions: ExpiringSoonSubscription[];
+}
+
+export function getExpiringSoon(withinDays: number): Promise<ExpiringSoon> {
+  return proxyFetch<ExpiringSoon>(`/subscriptions/admin/analytics/expiring?withinDays=${withinDays}`);
 }
 
 export function getSubscriptionSettings(): Promise<SubscriptionSettings> {

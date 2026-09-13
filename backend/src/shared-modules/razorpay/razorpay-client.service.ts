@@ -89,6 +89,49 @@ export class RazorpayClientService {
     }
   }
 
+  /**
+   * Refunds (fully or partially) an already-captured payment on the
+   * tenant's own Razorpay account — used by the admin cancel-refund flow,
+   * never automatically. `notes` surfaces in the tenant's own Razorpay
+   * dashboard so a manual reconciliation there can trace it back to this
+   * app's cancellation.
+   */
+  async refundPayment(
+    tenantId: string,
+    params: {
+      razorpayPaymentId: string;
+      amountInPaise: number;
+      notes?: Record<string, string>;
+    },
+  ): Promise<{ razorpayRefundId: string }> {
+    const { keyId, keySecret } = await this.getCredentials(tenantId);
+    const client = new Razorpay({ key_id: keyId, key_secret: keySecret });
+
+    try {
+      const refund = await client.payments.refund(params.razorpayPaymentId, {
+        amount: params.amountInPaise,
+        notes: params.notes,
+      });
+      return { razorpayRefundId: refund.id };
+    } catch (error) {
+      if (isRazorpaySdkError(error)) {
+        this.logger.error(
+          `Razorpay refund failed for tenant ${tenantId}: [${error.error.code}] ${error.error.description}`,
+        );
+        throw new BadRequestException(
+          `Razorpay refund failed: ${error.error.description}`,
+        );
+      }
+      this.logger.error(
+        `Razorpay refund failed for tenant ${tenantId}`,
+        error instanceof Error ? error.stack : JSON.stringify(error),
+      );
+      throw new InternalServerErrorException(
+        'Could not process the Razorpay refund — please try again in a moment.',
+      );
+    }
+  }
+
   async verifyPaymentSignature(
     tenantId: string,
     params: {

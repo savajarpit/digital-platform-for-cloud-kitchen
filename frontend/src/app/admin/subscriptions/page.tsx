@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  BarChart3,
   CalendarClock,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  ClipboardPlus,
   Pencil,
   Plus,
   Search,
@@ -60,14 +62,16 @@ import { PlansPageSettingsCard } from "@/components/subscriptions-admin/PlansPag
 import { PlanFeaturesManager } from "@/components/admin/PlanFeaturesManager";
 import { PlanFaqManager } from "@/components/admin/PlanFaqManager";
 import { DeclareDisruptionForm } from "@/components/admin/DeclareDisruptionForm";
+import { SubscriptionAnalyticsTab } from "@/components/admin/SubscriptionAnalyticsTab";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
-type Tab = "plans" | "subscribers" | "today" | "settings";
+type Tab = "plans" | "subscribers" | "today" | "analytics" | "settings";
 const TABS: { key: Tab; label: string; icon: typeof CalendarClock }[] = [
   { key: "plans", label: "Plans", icon: CalendarClock },
   { key: "subscribers", label: "Subscribers", icon: Users },
   { key: "today", label: "Today's Deliveries", icon: ClipboardList },
+  { key: "analytics", label: "Analytics", icon: BarChart3 },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -227,6 +231,7 @@ export default function AdminSubscriptionsPage() {
 
       {tab === "subscribers" && <SubscribersTab />}
       {tab === "today" && <TodaysDeliveriesTab />}
+      {tab === "analytics" && <SubscriptionAnalyticsTab />}
       {tab === "settings" && (
         <div className="flex flex-col gap-6">
           <SettingsTab canEdit={canEdit} />
@@ -1067,6 +1072,7 @@ const SUBSCRIPTION_STATUS_STYLES: Record<AdminSubscription["status"], string> = 
 };
 
 function SubscribersTab() {
+  const canCreateManual = usePermission(PERMISSIONS.SUBSCRIPTIONS_MANUAL_CREATE);
   const [subs, setSubs] = useState<AdminSubscription[] | null>(null);
   const [meta, setMeta] = useState<PaginationMeta | null>(null);
   const [page, setPage] = useState(1);
@@ -1095,6 +1101,12 @@ function SubscribersTab() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
+        {canCreateManual && (
+          <Link href="/admin/subscriptions/new" className="btn-primary btn-sm">
+            <ClipboardPlus className="h-4 w-4" />
+            New Subscription
+          </Link>
+        )}
         <div className="relative min-w-48 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
           <input

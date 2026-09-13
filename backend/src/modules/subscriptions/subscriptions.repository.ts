@@ -314,7 +314,117 @@ export class SubscriptionsRepository {
         user: {
           select: { firstName: true, lastName: true, email: true, phone: true },
         },
+        refunds: { orderBy: { createdAt: 'desc' } },
       },
+    });
+  }
+
+  // ─── Admin analytics ──────────────────────────────────────
+
+  /** Every real (non-abandoned-checkout) subscription started in range —
+   * the base dataset for new-subscriber counts, gross revenue, the trend
+   * chart, and the plan breakdown, all derived from this one query so they
+   * can never drift from each other. */
+  findRealSubscriptionsInRange(
+    tenantId: string,
+    since: Date,
+    until: Date,
+    planId?: string,
+  ): Promise<
+    { createdAt: Date; priceInPaiseSnapshot: number; planId: string }[]
+  > {
+    return this.prisma.subscription.findMany({
+      where: {
+        tenantId,
+        status: { not: SubscriptionStatus.PENDING_PAYMENT },
+        createdAt: { gte: since, lte: until },
+        ...(planId ? { planId } : {}),
+      },
+      select: { createdAt: true, priceInPaiseSnapshot: true, planId: true },
+    });
+  }
+
+  countActiveSubscribers(tenantId: string, planId?: string): Promise<number> {
+    return this.prisma.subscription.count({
+      where: {
+        tenantId,
+        status: SubscriptionStatus.ACTIVE,
+        ...(planId ? { planId } : {}),
+      },
+    });
+  }
+
+  /** Refunds against a subscription cancellation in range — always via
+   * `subscriptionId`, never `orderId` (that's the Order-side refund total,
+   * a different metric). */
+  findSubscriptionRefundsInRange(
+    tenantId: string,
+    since: Date,
+    until: Date,
+  ): Promise<{ createdAt: Date; netRefundInPaise: number }[]> {
+    return this.prisma.refund.findMany({
+      where: {
+        tenantId,
+        subscriptionId: { not: null },
+        createdAt: { gte: since, lte: until },
+      },
+      select: { createdAt: true, netRefundInPaise: true },
+    });
+  }
+
+  async getPlanBreakdownInRange(
+    tenantId: string,
+    since: Date,
+    until: Date,
+  ): Promise<
+    {
+      planId: string;
+      planName: string;
+      subscriberCount: number;
+      revenueInPaise: number;
+    }[]
+  > {
+    const grouped = await this.prisma.subscription.groupBy({
+      by: ['planId'],
+      where: {
+        tenantId,
+        status: { not: SubscriptionStatus.PENDING_PAYMENT },
+        createdAt: { gte: since, lte: until },
+      },
+      _count: { _all: true },
+      _sum: { priceInPaiseSnapshot: true },
+    });
+    if (grouped.length === 0) return [];
+    const plans = await this.prisma.subscriptionPlan.findMany({
+      where: { id: { in: grouped.map((g) => g.planId) } },
+      select: { id: true, name: true },
+    });
+    const nameById = new Map(plans.map((p) => [p.id, p.name]));
+    return grouped.map((g) => ({
+      planId: g.planId,
+      planName: nameById.get(g.planId) ?? 'Unknown plan',
+      subscriberCount: g._count._all,
+      revenueInPaise: g._sum.priceInPaiseSnapshot ?? 0,
+    }));
+  }
+
+  /** ACTIVE subscriptions whose cycleEnd falls within the given tenant-
+   * local date window — the "expiring soon" drill-down list. */
+  findExpiringSoon(tenantId: string, fromDateStr: string, toDateStr: string) {
+    return this.prisma.subscription.findMany({
+      where: {
+        tenantId,
+        status: SubscriptionStatus.ACTIVE,
+        cycleEnd: {
+          gte: new Date(`${fromDateStr}T00:00:00.000Z`),
+          lte: new Date(`${toDateStr}T23:59:59.999Z`),
+        },
+      },
+      include: {
+        plan: { select: { name: true } },
+        user: { select: { firstName: true, lastName: true, email: true } },
+      },
+      orderBy: { cycleEnd: 'asc' },
     });
   }
 
@@ -338,11 +448,53 @@ export class SubscriptionsRepository {
     });
   }
 
+  /** Customer self-service cancel — stamps cancelledAt (so analytics counts
+   * it) but never cancelledByUserId/cancellationReason, which stay null and
+   * distinguish "customer cancelled themselves" from the admin cancel-
+   * refund path below in any listing that reads this row later. */
   cancelSubscription(id: string): Promise<Subscription> {
     return this.prisma.subscription.update({
       where: { id },
-      data: { status: SubscriptionStatus.CANCELLED },
+      data: { status: SubscriptionStatus.CANCELLED, cancelledAt: new Date() },
     });
+  }
+
+  /** Admin cancel-with-refund path — distinct from the plain
+   * cancelSubscription() above (customer self-service, no refund trail). */
+  cancelWithRefund(
+    id: string,
+    data: { cancelledByUserId: string; cancellationReason?: string },
+  ): Promise<Subscription> {
+    return this.prisma.subscription.update({
+      where: { id },
+      data: {
+        status: SubscriptionStatus.CANCELLED,
+        cancelledAt: new Date(),
+        cancelledByUserId: data.cancelledByUserId,
+        cancellationReason: data.cancellationReason,
+      },
+    });
+  }
+
+  /** The subscription's original signup payment — a customer subscription
+   * is a one-time upfront charge for the whole plan duration (not a
+   * recurring Razorpay Subscription like PlatformSubscription), so this is
+   * the one payment a Razorpay refund would target. */
+  findPaidInvoiceBySubscriptionId(
+    subscriptionId: string,
+  ): Promise<SubscriptionInvoice | null> {
+    return this.prisma.subscriptionInvoice.findFirst({
+      where: { subscriptionId, status: 'PAID' },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** How many days have actually been materialized (delivered) so far —
+   * the basis for the refund-preview's pending-days proration. A skipped/
+   * banked day never created an Order, so it correctly still counts as
+   * "pending" until it's eventually delivered on a later date. */
+  countMaterializedOrders(subscriptionId: string): Promise<number> {
+    return this.prisma.order.count({ where: { subscriptionId } });
   }
 
   /** Any ACTIVE subscription this user has for this plan — used at

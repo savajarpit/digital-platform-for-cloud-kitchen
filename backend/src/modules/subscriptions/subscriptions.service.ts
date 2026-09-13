@@ -9,9 +9,11 @@ import { AddressesService } from '../addresses/addresses.service';
 import { PromotionsService } from '../promotions/promotions.service';
 import { SettingsRepository } from '../settings/settings.repository';
 import { FeaturesService } from '../features/features.service';
+import { UsersRepository } from '../users/users.repository';
 import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-client.service';
 import { PaginationService } from '../../common/services/pagination.service';
 import { DateUtil } from '../../common/utils/date.util';
+import { AnalyticsRangeUtil } from '../../common/utils/analytics-range.util';
 import {
   PlanScheduleKey,
   PlanScheduleUtil,
@@ -26,7 +28,9 @@ import { UpsertPlanDaysDto } from './dto/upsert-plan-days.dto';
 import { PublishPlanDto } from './dto/publish-plan.dto';
 import { QueryAdminPlansDto } from './dto/query-admin-plans.dto';
 import { QueryAdminSubscriptionsDto } from './dto/query-admin-subscriptions.dto';
+import { QuerySubscriptionAnalyticsDto } from './dto/query-subscription-analytics.dto';
 import { SubscribeDto } from './dto/subscribe.dto';
+import { CreateManualSubscriptionDto } from './dto/create-manual-subscription.dto';
 import { VerifyPlanPaymentDto } from './dto/verify-plan-payment.dto';
 import { SkipDayDto } from './dto/skip-day.dto';
 import { PauseDto } from './dto/pause.dto';
@@ -35,6 +39,16 @@ import { UpdateSubscriptionSettingsDto } from './dto/update-subscription-setting
 import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 import { defaultSubscriptionSettings } from '../../common/constants/tenant-default-content';
 import { SubscriptionMaterializationService } from './subscription-materialization.service';
+import { RefundsRepository } from '../../shared-modules/refunds/refunds.repository';
+import { RAZORPAY_REFUNDS_FEATURE_KEY } from '../../shared-modules/refunds/refunds.constants';
+import { CancelRefundDto } from '../../shared-modules/refunds/dto/cancel-refund.dto';
+import {
+  PaymentMethod,
+  Refund,
+  RefundMethod,
+  Role,
+  Subscription,
+} from '../../generated/prisma';
 
 const PREVIEW_DAYS_AHEAD = 14;
 const CANCEL_FEATURE_KEY = 'subscription-self-cancel';
@@ -56,6 +70,8 @@ export class SubscriptionsService {
     private readonly pagination: PaginationService,
     private readonly tenantLimits: TenantLimitsService,
     private readonly materializationService: SubscriptionMaterializationService,
+    private readonly refundsRepo: RefundsRepository,
+    private readonly usersRepo: UsersRepository,
   ) {}
 
   // ─── Admin plan CRUD ─────────────────────────────────────
@@ -709,6 +725,23 @@ export class SubscriptionsService {
       dto.razorpayPaymentId,
     );
 
+    await this.activateSubscriptionNow(tenantId, subscription);
+
+    return { confirmed: true };
+  }
+
+  /**
+   * Shared by verifyPayment() (real Razorpay payment confirmed) and
+   * createManual()/markPaidManually() (admin cash/UPI path) — the actual
+   * "flip PENDING_PAYMENT to ACTIVE" logic: computes startDate/cycleEnd and
+   * inline-materializes today if the tenant's startDateLeadDays is 0 (the
+   * nightly cron already ran/won't run again today). Extracted so both
+   * payment paths can never drift on how a subscription actually activates.
+   */
+  private async activateSubscriptionNow(
+    tenantId: string,
+    subscription: { id: string; planId: string; durationDaysSnapshot: number },
+  ): Promise<void> {
     // Days out from today, tenant-controlled (SubscriptionSettings.
     // startDateLeadDays, default 1 — matches the platform's original
     // always-tomorrow behavior). A tenant that opts into 0 (same-day) is
@@ -737,8 +770,158 @@ export class SubscriptionsService {
         await this.materializationService.materializeOne(materializable);
       }
     }
+  }
 
-    return { confirmed: true };
+  // ─── Admin: manual (cash/UPI) signup ─────────────────────
+
+  /**
+   * Admin phone-signup path — same validation/pricing as a real self-signup
+   * (plan availability, subscriber cap, coupon, time-lock), but for a
+   * chosen existing customer, no Razorpay involved, settled by cash/UPI.
+   * Lands PENDING_PAYMENT, same as a fresh customer signup — a separate
+   * markPaidManually() call (a distinct permission) is what actually
+   * activates it, mirroring the order manual-create/mark-paid split.
+   */
+  async createManual(
+    tenantId: string,
+    staffUserId: string,
+    dto: CreateManualSubscriptionDto,
+  ): Promise<{ subscription: Subscription }> {
+    const customer = await this.usersRepo.findById(
+      dto.customerUserId,
+      tenantId,
+    );
+    if (!customer || customer.role !== Role.CUSTOMER) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const settings = await this.subscriptionsRepo.findSettings(tenantId);
+    if (settings && !settings.isEnabled) {
+      throw new BadRequestException(
+        'Subscriptions are not available for this business right now.',
+      );
+    }
+    if (settings && !settings.isAcceptingNewSubscriptions) {
+      throw new BadRequestException(
+        settings.closureReason ||
+          'This business is not accepting new subscriptions right now.',
+      );
+    }
+
+    await this.tenantLimits.assertSubscriberAllowed(tenantId);
+
+    const plan = await this.subscriptionsRepo.findPlanForSubscribe(
+      tenantId,
+      dto.planId,
+    );
+    if (!plan) throw new NotFoundException('Plan not found or not available');
+
+    await this.addressesService.findOne(
+      tenantId,
+      dto.customerUserId,
+      dto.addressId,
+    );
+
+    if (dto.deliverySlotId) {
+      const timeLocked = await this.featuresService.hasFeature(
+        tenantId,
+        TIME_LOCK_FEATURE_KEY,
+      );
+      if (timeLocked) {
+        throw new BadRequestException(
+          'Delivery time selection is disabled for subscription plans — only address changes are available.',
+        );
+      }
+      const slot = await this.subscriptionsRepo.findDeliverySlotById(
+        tenantId,
+        dto.deliverySlotId,
+      );
+      if (!slot) throw new BadRequestException('Invalid delivery slot');
+    }
+
+    const scheduledDiscountMap =
+      await this.promotionsService.getActiveScheduledDiscountsForPlans(
+        tenantId,
+        [plan.id],
+      );
+    const scheduledDiscount = scheduledDiscountMap.get(plan.id);
+    let discountInPaise = scheduledDiscount
+      ? Math.floor(
+          (plan.priceInPaise * scheduledDiscount.discountPercentage) / 100,
+        )
+      : 0;
+    let couponId: string | undefined;
+    let resolvedCouponCode: string | undefined;
+    if (dto.couponCode) {
+      const result = await this.promotionsService.validatePlanCoupon(
+        tenantId,
+        dto.couponCode,
+        dto.customerUserId,
+        plan.priceInPaise,
+      );
+      discountInPaise += result.discountInPaise;
+      couponId = result.couponId;
+      resolvedCouponCode = result.code;
+    }
+    const amountInPaise = Math.max(0, plan.priceInPaise - discountInPaise);
+
+    const bonusDays = await this.promotionsService.getApplicablePlanBonusDays(
+      tenantId,
+      plan.id,
+      plan.durationDays,
+    );
+
+    const subscription = await this.subscriptionsRepo.createSubscription({
+      tenantId,
+      userId: dto.customerUserId,
+      planId: plan.id,
+      addressId: dto.addressId,
+      deliverySlotId: dto.deliverySlotId,
+      priceInPaiseSnapshot: amountInPaise,
+      durationDaysSnapshot: plan.durationDays + bonusDays,
+      planNameSnapshot: plan.name,
+      couponCode: resolvedCouponCode,
+      bonusDaysGranted: bonusDays,
+      paymentMethod: dto.paymentMethod as PaymentMethod,
+      createdByUserId: staffUserId,
+    });
+
+    if (couponId && resolvedCouponCode) {
+      await this.promotionsService.recordPlanCouponRedemption(
+        tenantId,
+        couponId,
+        dto.customerUserId,
+        subscription.id,
+      );
+    }
+
+    return { subscription };
+  }
+
+  /** Confirms cash/UPI was actually received for a manually-signed-up
+   * subscription — a distinct permission from creating it (see
+   * createManual). Idempotent: a subscription that's already past
+   * PENDING_PAYMENT (activated, or since cancelled/expired) is a no-op. */
+  async markPaidManually(tenantId: string, id: string): Promise<Subscription> {
+    const subscription = await this.subscriptionsRepo.findSubscriptionById(
+      tenantId,
+      id,
+    );
+    if (!subscription) throw new NotFoundException('Subscription not found');
+    if (subscription.paymentMethod === PaymentMethod.RAZORPAY) {
+      throw new BadRequestException(
+        'This subscription was signed up via Razorpay — payment is confirmed through the payment verification flow, not this endpoint.',
+      );
+    }
+    if (subscription.status !== 'PENDING_PAYMENT') {
+      return subscription;
+    }
+    await this.activateSubscriptionNow(tenantId, subscription);
+    const updated = await this.subscriptionsRepo.findSubscriptionById(
+      tenantId,
+      id,
+    );
+    return updated!;
   }
 
   // ─── Customer: my subscriptions ──────────────────────────
@@ -793,6 +976,110 @@ export class SubscriptionsService {
     return { ...subscription, invoice };
   }
 
+  /**
+   * Admin dashboard summary for the new Subscriptions → Analytics tab —
+   * new-subscriber counts, active-subscriber count, gross/refunded/net
+   * revenue, a revenue trend, and a per-plan breakdown, all scoped to
+   * `query` (a `days` preset, default 14, or an explicit `from`/`to`
+   * custom range — `from`/`to` win if both are given — plus an optional
+   * `planId` to scope every figure to one plan). "Today" and "currently
+   * active" are always fixed regardless of that range — headline KPIs,
+   * not part of what's being filtered — same convention as
+   * OrdersService.getOverview(), and reuses its exact date-range/bucketing
+   * math via AnalyticsRangeUtil rather than a second hand-rolled copy.
+   */
+  async getAnalytics(tenantId: string, query: QuerySubscriptionAnalyticsDto) {
+    const now = DateUtil.now();
+    const timezone = await this.getTenantTimezone(tenantId);
+    const { queryStart, queryEnd, bucketStartStr, bucketEndStr } =
+      AnalyticsRangeUtil.resolveRange(query, now, timezone);
+
+    const [
+      rangeSubscriptions,
+      todaySubscriptions,
+      activeSubscribers,
+      refunds,
+      planBreakdown,
+    ] = await Promise.all([
+      this.subscriptionsRepo.findRealSubscriptionsInRange(
+        tenantId,
+        queryStart,
+        queryEnd,
+        query.planId,
+      ),
+      this.subscriptionsRepo.findRealSubscriptionsInRange(
+        tenantId,
+        DateUtil.addDays(now, -1),
+        now,
+        query.planId,
+      ),
+      this.subscriptionsRepo.countActiveSubscribers(tenantId, query.planId),
+      this.subscriptionsRepo.findSubscriptionRefundsInRange(
+        tenantId,
+        queryStart,
+        queryEnd,
+      ),
+      this.subscriptionsRepo.getPlanBreakdownInRange(
+        tenantId,
+        queryStart,
+        queryEnd,
+      ),
+    ]);
+
+    const gross = AnalyticsRangeUtil.sumInWindow(
+      rangeSubscriptions,
+      queryStart,
+      (s) => s.priceInPaiseSnapshot,
+    );
+    const refunded = AnalyticsRangeUtil.sumInWindow(
+      refunds,
+      queryStart,
+      (r) => r.netRefundInPaise,
+    );
+
+    return {
+      newSubscribersToday: todaySubscriptions.length,
+      newSubscribersInRange: gross.count,
+      activeSubscribers,
+      grossRevenueInPaise: gross.valueInPaise,
+      refundedInPaise: refunded.valueInPaise,
+      netRevenueInPaise: gross.valueInPaise - refunded.valueInPaise,
+      revenueTrend: AnalyticsRangeUtil.bucketByDay(
+        rangeSubscriptions,
+        timezone,
+        bucketStartStr,
+        bucketEndStr,
+        (s) => s.priceInPaiseSnapshot,
+      ),
+      planBreakdown: query.planId
+        ? planBreakdown.filter((p) => p.planId === query.planId)
+        : planBreakdown,
+    };
+  }
+
+  /** Drill-down list behind the "expiring in N days" tile — every currently
+   * ACTIVE subscription whose cycleEnd falls in [today, today+withinDays]. */
+  async getExpiringSoon(tenantId: string, withinDays: number) {
+    const timezone = await this.getTenantTimezone(tenantId);
+    const { dateStr: todayStr } = DateUtil.getTenantNow(timezone);
+    const untilStr = DateUtil.addDaysToDateStr(todayStr, withinDays);
+
+    const subscriptions = await this.subscriptionsRepo.findExpiringSoon(
+      tenantId,
+      todayStr,
+      untilStr,
+    );
+    return {
+      count: subscriptions.length,
+      subscriptions: subscriptions.map((s) => ({
+        id: s.id,
+        planName: s.planNameSnapshot,
+        cycleEnd: s.cycleEnd,
+        user: s.user,
+      })),
+    };
+  }
+
   async getInvoice(tenantId: string, userId: string, id: string) {
     const subscription =
       await this.subscriptionsRepo.findSubscriptionByIdWithAddress(
@@ -815,6 +1102,22 @@ export class SubscriptionsService {
       userId,
       id,
     );
+    return this.applySkipDay(tenantId, subscription, dto);
+  }
+
+  /** Admin equivalent of skipDay() — same effect, but for any subscriber in
+   * this tenant (not just the caller's own), for when a customer calls in
+   * and asks the business to skip a day on their behalf. */
+  async skipDayAdmin(tenantId: string, id: string, dto: SkipDayDto) {
+    const subscription = await this.getTenantActiveSubscription(tenantId, id);
+    return this.applySkipDay(tenantId, subscription, dto);
+  }
+
+  private async applySkipDay(
+    tenantId: string,
+    subscription: Subscription,
+    dto: SkipDayDto,
+  ) {
     await this.assertWithinNoticeWindow(tenantId, dto.date);
     await this.subscriptionsRepo.createSkip({
       subscriptionId: subscription.id,
@@ -841,6 +1144,20 @@ export class SubscriptionsService {
       userId,
       id,
     );
+    return this.applyPause(tenantId, subscription, dto);
+  }
+
+  /** Admin equivalent of pause() — see skipDayAdmin(). */
+  async pauseAdmin(tenantId: string, id: string, dto: PauseDto) {
+    const subscription = await this.getTenantActiveSubscription(tenantId, id);
+    return this.applyPause(tenantId, subscription, dto);
+  }
+
+  private async applyPause(
+    tenantId: string,
+    subscription: Subscription,
+    dto: PauseDto,
+  ) {
     if (dto.dateTo < dto.dateFrom) {
       throw new BadRequestException('dateTo must not be before dateFrom');
     }
@@ -879,6 +1196,26 @@ export class SubscriptionsService {
       userId,
       id,
     );
+    return this.applyDayOverride(tenantId, subscription, dto);
+  }
+
+  /** Admin equivalent of setDayOverride() — see skipDayAdmin(). Address/
+   * slot ownership is still checked against the subscription's own
+   * customer (subscription.userId), never the acting staff member. */
+  async setDayOverrideAdmin(
+    tenantId: string,
+    id: string,
+    dto: SetDayOverrideDto,
+  ) {
+    const subscription = await this.getTenantActiveSubscription(tenantId, id);
+    return this.applyDayOverride(tenantId, subscription, dto);
+  }
+
+  private async applyDayOverride(
+    tenantId: string,
+    subscription: Subscription,
+    dto: SetDayOverrideDto,
+  ) {
     await this.assertWithinNoticeWindow(tenantId, dto.date);
     if (!dto.addressId && !dto.deliverySlotId && dto.note === undefined) {
       throw new BadRequestException(
@@ -886,7 +1223,11 @@ export class SubscriptionsService {
       );
     }
     if (dto.addressId) {
-      await this.addressesService.findOne(tenantId, userId, dto.addressId);
+      await this.addressesService.findOne(
+        tenantId,
+        subscription.userId,
+        dto.addressId,
+      );
     }
     if (dto.deliverySlotId) {
       const timeLocked = await this.featuresService.hasFeature(
@@ -925,6 +1266,128 @@ export class SubscriptionsService {
     return this.subscriptionsRepo.cancelSubscription(id);
   }
 
+  /**
+   * Suggested refund amount for an admin cancelling this subscription —
+   * prorated on undelivered days, not a flat leftover-cycle calendar span
+   * (skips/pauses already extend cycleEnd for free, so they don't inflate
+   * what's "pending"). Purely a starting point for the admin's cancel-
+   * refund form; the actual amount submitted there can be anything.
+   */
+  async getRefundPreview(
+    tenantId: string,
+    id: string,
+  ): Promise<{
+    durationDaysSnapshot: number;
+    deliveredDays: number;
+    pendingDays: number;
+    priceInPaiseSnapshot: number;
+    suggestedAmountInPaise: number;
+    razorpayRefundAvailable: boolean;
+  }> {
+    const subscription = await this.subscriptionsRepo.findByIdForTenantAdmin(
+      tenantId,
+      id,
+    );
+    if (!subscription) throw new NotFoundException('Subscription not found');
+
+    const deliveredDays =
+      await this.subscriptionsRepo.countMaterializedOrders(id);
+    const pendingDays = Math.max(
+      0,
+      subscription.durationDaysSnapshot - deliveredDays,
+    );
+    const suggestedAmountInPaise = Math.round(
+      (subscription.priceInPaiseSnapshot * pendingDays) /
+        subscription.durationDaysSnapshot,
+    );
+    const [paidInvoice, razorpayFeatureEnabled] = await Promise.all([
+      this.subscriptionsRepo.findPaidInvoiceBySubscriptionId(id),
+      this.featuresService.hasFeature(tenantId, RAZORPAY_REFUNDS_FEATURE_KEY),
+    ]);
+
+    return {
+      durationDaysSnapshot: subscription.durationDaysSnapshot,
+      deliveredDays,
+      pendingDays,
+      priceInPaiseSnapshot: subscription.priceInPaiseSnapshot,
+      suggestedAmountInPaise,
+      razorpayRefundAvailable:
+        razorpayFeatureEnabled && Boolean(paidInvoice?.razorpayPaymentId),
+    };
+  }
+
+  async cancelWithRefund(
+    tenantId: string,
+    staffUserId: string,
+    id: string,
+    dto: CancelRefundDto,
+  ): Promise<{ subscription: Subscription; refund: Refund }> {
+    const subscription = await this.subscriptionsRepo.findByIdForTenantAdmin(
+      tenantId,
+      id,
+    );
+    if (!subscription) throw new NotFoundException('Subscription not found');
+    if (subscription.status === 'CANCELLED') {
+      throw new BadRequestException('This subscription is already cancelled.');
+    }
+
+    const convenienceFeeInPaise = dto.convenienceFeeInPaise ?? 0;
+    const netRefundInPaise = Math.max(
+      0,
+      dto.amountInPaise - convenienceFeeInPaise,
+    );
+
+    let razorpayRefundId: string | undefined;
+    if (dto.method === RefundMethod.RAZORPAY) {
+      const allowed = await this.featuresService.hasFeature(
+        tenantId,
+        RAZORPAY_REFUNDS_FEATURE_KEY,
+      );
+      if (!allowed) {
+        throw new ForbiddenException(
+          'Razorpay refunds are not enabled for this business — record a manual refund instead, or ask the platform to turn it on.',
+        );
+      }
+      const paidInvoice =
+        await this.subscriptionsRepo.findPaidInvoiceBySubscriptionId(id);
+      if (!paidInvoice?.razorpayPaymentId) {
+        throw new BadRequestException(
+          'This subscription has no Razorpay payment to refund.',
+        );
+      }
+      if (dto.amountInPaise <= 0) {
+        throw new BadRequestException(
+          'Enter a refund amount greater than zero.',
+        );
+      }
+      const result = await this.razorpayClient.refundPayment(tenantId, {
+        razorpayPaymentId: paidInvoice.razorpayPaymentId,
+        amountInPaise: netRefundInPaise,
+        notes: { subscriptionId: subscription.id },
+      });
+      razorpayRefundId = result.razorpayRefundId;
+    }
+
+    const refund = await this.refundsRepo.create({
+      tenantId,
+      subscriptionId: id,
+      method: dto.method,
+      amountInPaise: dto.amountInPaise,
+      convenienceFeeInPaise,
+      netRefundInPaise,
+      razorpayRefundId,
+      recordedByUserId: staffUserId,
+      notes: dto.notes,
+    });
+
+    const updated = await this.subscriptionsRepo.cancelWithRefund(id, {
+      cancelledByUserId: staffUserId,
+      cancellationReason: dto.reason,
+    });
+
+    return { subscription: updated, refund };
+  }
+
   private async getOwnedActiveSubscription(
     tenantId: string,
     userId: string,
@@ -935,6 +1398,23 @@ export class SubscriptionsService {
       id,
     );
     if (!subscription || subscription.userId !== userId) {
+      throw new NotFoundException('Subscription not found');
+    }
+    if (subscription.status !== 'ACTIVE') {
+      throw new BadRequestException('This subscription is not active');
+    }
+    return subscription;
+  }
+
+  /** Admin equivalent of getOwnedActiveSubscription() — scoped to the
+   * tenant, not a specific customer, since the acting user here is staff
+   * managing any subscriber's plan on their behalf. */
+  private async getTenantActiveSubscription(tenantId: string, id: string) {
+    const subscription = await this.subscriptionsRepo.findSubscriptionById(
+      tenantId,
+      id,
+    );
+    if (!subscription) {
       throw new NotFoundException('Subscription not found');
     }
     if (subscription.status !== 'ACTIVE') {

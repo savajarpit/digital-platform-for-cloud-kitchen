@@ -10,11 +10,13 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateManualOrderDto } from './dto/create-manual-order.dto';
 import { PreviewOrderDto } from './dto/preview-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
 import { QueryOverviewDto } from './dto/query-overview.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+import { CancelRefundDto } from '../../shared-modules/refunds/dto/cancel-refund.dto';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RequirePermission } from '../../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -129,6 +131,39 @@ export class OrdersController {
     return this.ordersService.create(tenantId, userId, dto);
   }
 
+  @Post('admin')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('orders.manual-create')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Order created')
+  @ApiOperation({
+    summary:
+      "Admin: create an order on a customer's behalf (e.g. a phone order), settled by cash/UPI — no Razorpay involved",
+  })
+  createManual(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') staffUserId: string,
+    @Body() dto: CreateManualOrderDto,
+  ) {
+    return this.ordersService.createManual(tenantId, staffUserId, dto);
+  }
+
+  @Post('admin/:id/mark-paid')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('payments.manual-record')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Order marked as paid')
+  @ApiOperation({
+    summary:
+      'Admin: confirm cash/UPI payment was actually received for a manually-created order',
+  })
+  markPaidManually(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.ordersService.markPaidManually(tenantId, id);
+  }
+
   @Patch(':id/status')
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
   @RequirePermission('orders.manage')
@@ -143,5 +178,23 @@ export class OrdersController {
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.ordersService.updateStatus(tenantId, id, dto);
+  }
+
+  @Post(':id/cancel-refund')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('orders.cancel-refund')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Order cancelled')
+  @ApiOperation({
+    summary:
+      'Admin: cancel a paid order and record/issue a refund (manual, or Razorpay if enabled for this tenant)',
+  })
+  cancelWithRefund(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') staffUserId: string,
+    @Param('id') id: string,
+    @Body() dto: CancelRefundDto,
+  ) {
+    return this.ordersService.cancelWithRefund(tenantId, staffUserId, id, dto);
   }
 }

@@ -70,11 +70,30 @@ enum OrderFulfillmentType {
   PICKUP
 }
 
+// Shared by Order and Subscription — both a manual order and a manual
+// subscription can be settled by cash/UPI instead of Razorpay.
+enum PaymentMethod {
+  RAZORPAY
+  CASH
+  UPI
+}
+
 enum PaymentStatus {
   PENDING
   PAID
   FAILED
   REFUNDED
+}
+
+enum RefundMethod {
+  // Recorded for audit/display only — the money was returned outside this
+  // app (cash in hand, a manual bank transfer), never a real payout tracked
+  // or reconciled here.
+  MANUAL
+  // Actually calls the tenant's own Razorpay account to refund the original
+  // payment — gated by the `razorpay-refunds` Feature (SUPER_ADMIN-granted
+  // per tenant, same mechanism as every other Feature), off by default.
+  RAZORPAY
 }
 
 enum CouponDiscountType {
@@ -227,6 +246,7 @@ model Tenant {
   meals                       Meal[]
   addresses                   Address[]
   orders                      Order[]
+  refunds                     Refund[]
   deliverySlots               DeliverySlot[]
   notificationLogs            NotificationLog[]
   coupons                     Coupon[]
@@ -283,6 +303,7 @@ model User {
   orders                   Order[]
   subscriptions            Subscription[]
   platformTermsAcceptances PlatformTermsAcceptance[]
+  refundsRecorded          Refund[]
 
   @@index([tenantId])
   @@index([email])
@@ -924,6 +945,13 @@ model Order {
   orderNumber                 String
   status                      OrderStatus          @default(PENDING_PAYMENT)
   paymentStatus               PaymentStatus        @default(PENDING)
+  // RAZORPAY for every customer-placed order (the only path that existed
+  // before manual orders). CASH/UPI only ever come from the admin manual-
+  // order path — set once at creation, never changed later.
+  paymentMethod               PaymentMethod        @default(RAZORPAY)
+  // Set only when an admin placed this order on a customer's behalf (the
+  // manual-order path) — null for every customer-placed order.
+  createdByUserId             String?
   subtotalInPaise             Int
   // Sum of all applied discounts (scheduled promos + BOGO/free-item retail
   // value + coupon), always computed server-side, never trusted from the
@@ -969,6 +997,12 @@ model Order {
   // snapshot of now + the tenant's configured ETA at order time, not a
   // named DeliverySlot's fixed window.
   isInstant                   Boolean              @default(false)
+  // Set only by an admin's cancel+refund action (see Refund below) — never
+  // by the plain admin status-update endpoint, which can still set
+  // CANCELLED for a never-paid order with no money to account for.
+  cancelledAt                 DateTime?
+  cancelledByUserId           String?
+  cancellationReason          String?
   createdAt                   DateTime             @default(now())
   updatedAt                   DateTime             @updatedAt
 
@@ -981,6 +1015,7 @@ model Order {
   items             OrderItem[]
   notificationLogs  NotificationLog[]
   couponRedemption  CouponRedemption?
+  refunds           Refund[]
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId])
@@ -1007,6 +1042,40 @@ model OrderItem {
 
   @@index([orderId])
   @@map("order_items")
+}
+
+/**
+ * One row per cancel-refund action, on either a one-off Order or a
+ * Subscription (never both — enforced in the service layer, same
+ * mode-conditional convention as Order.addressId/pickupKitchenZoneId above).
+ * MANUAL is record-only (see RefundMethod) — amountInPaise/
+ * convenienceFeeInPaise/netRefundInPaise are always what the admin actually
+ * entered, never recomputed later, so this row stays an honest audit trail
+ * even if the tenant's refund-fee default setting changes afterward.
+ */
+model Refund {
+  id                    String       @id @default(uuid())
+  tenantId              String
+  orderId               String?
+  subscriptionId        String?
+  method                RefundMethod
+  amountInPaise         Int
+  convenienceFeeInPaise Int          @default(0)
+  netRefundInPaise      Int
+  razorpayRefundId      String?
+  recordedByUserId      String
+  notes                 String?
+  createdAt             DateTime     @default(now())
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  order        Order?        @relation(fields: [orderId], references: [id])
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+  recordedBy   User          @relation(fields: [recordedByUserId], references: [id])
+
+  @@index([tenantId])
+  @@index([orderId])
+  @@index([subscriptionId])
+  @@map("refunds")
 }
 
 model RazorpayWebhookEvent {
@@ -1232,19 +1301,27 @@ model SubscriptionPlanSlot {
 }
 
 model Subscription {
-  id             String             @id @default(uuid())
-  tenantId       String
-  userId         String
-  planId         String
+  id              String             @id @default(uuid())
+  tenantId        String
+  userId          String
+  planId          String
   // Mutable prospectively (changes only affect days not yet materialized);
   // each materialized day's Order.addressId snapshots and becomes
   // immutable from that point — same rule §1 documents for regular orders.
-  addressId      String
+  addressId       String
   // The default slot used every day unless a SubscriptionDayOverride
   // exists for that specific date. Nullable — a tenant with no delivery
   // slots configured still materializes fine, just with no named window.
-  deliverySlotId String?
-  status         SubscriptionStatus @default(PENDING_PAYMENT)
+  deliverySlotId  String?
+  status          SubscriptionStatus @default(PENDING_PAYMENT)
+  // RAZORPAY for every customer-signed-up subscription (the only path that
+  // existed before manual subscriptions). CASH/UPI only ever come from the
+  // admin manual-subscription path — no SubscriptionInvoice row exists for
+  // those, since there's no Razorpay payment to record.
+  paymentMethod   PaymentMethod      @default(RAZORPAY)
+  // Set only when an admin signed this customer up on their behalf — null
+  // for every customer-initiated subscription.
+  createdByUserId String?
 
   // Snapshotted at signup — a later plan price/duration/name edit never
   // retroactively changes an existing subscriber's terms. couponCode and
@@ -1272,6 +1349,13 @@ model Subscription {
   nextPlanDayNumber Int       @default(1)
   bankedDays        Int       @default(0)
 
+  // Set only by an admin's cancel+refund action (see Refund below) — the
+  // existing self-service `cancel()` (customer-initiated, no refund) leaves
+  // these null, same distinction Order draws above.
+  cancelledAt        DateTime?
+  cancelledByUserId  String?
+  cancellationReason String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1285,6 +1369,7 @@ model Subscription {
   couponRedemption   PlanCouponRedemption?
   dayOverrides       SubscriptionDayOverride[]
   materializedOrders Order[]
+  refunds            Refund[]
 
   @@index([tenantId])
   @@index([tenantId, userId])

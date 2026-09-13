@@ -4,6 +4,7 @@ import {
   Address,
   Order,
   OrderFulfillmentType,
+  PaymentMethod,
   OrderStatus,
   PaymentStatus,
   Prisma,
@@ -44,13 +45,18 @@ export interface CreateOrderInput {
   totalInPaise: number;
   notes?: string;
   items: OrderItemInput[];
-  razorpayOrderId: string;
+  // Absent for a manual (CASH/UPI) order — there is no Razorpay order to
+  // reference at all in that path.
+  razorpayOrderId?: string;
   deliveryDate: Date;
   deliverySlotId: string | null;
   deliverySlotName: string;
   deliveryWindowStart: string;
   deliveryWindowEnd: string;
   isInstant?: boolean;
+  paymentMethod?: PaymentMethod;
+  // Set only by the admin manual-order path — null for a customer-placed order.
+  createdByUserId?: string;
 }
 
 const ORDER_INCLUDE = {
@@ -87,6 +93,7 @@ const ORDER_ADMIN_INCLUDE = {
   address: true,
   pickupKitchenZone: true,
   user: { select: { firstName: true, lastName: true, email: true } },
+  refunds: { orderBy: { createdAt: 'desc' } },
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithAdminDetails = Prisma.OrderGetPayload<{
@@ -157,6 +164,8 @@ export class OrdersRepository {
           deliveryWindowStart: input.deliveryWindowStart,
           deliveryWindowEnd: input.deliveryWindowEnd,
           isInstant: input.isInstant ?? false,
+          paymentMethod: input.paymentMethod ?? PaymentMethod.RAZORPAY,
+          createdByUserId: input.createdByUserId,
           items: {
             create: input.items.map((item) => ({
               mealId: item.mealId,
@@ -262,6 +271,19 @@ export class OrdersRepository {
     });
   }
 
+  /** Confirms a manually-created (CASH/UPI) order once payment is actually
+   * collected — the admin equivalent of markPaid(), with no razorpayPaymentId
+   * since there's no gateway involved. */
+  markPaidManually(id: string): Promise<Order> {
+    return this.prisma.order.update({
+      where: { id },
+      data: {
+        paymentStatus: PaymentStatus.PAID,
+        status: OrderStatus.CONFIRMED,
+      },
+    });
+  }
+
   /**
    * Excludes PENDING_PAYMENT by default — same "abandoned checkout" reasoning
    * as findAllForUser, but here it's unconditional: admin never opts back
@@ -305,6 +327,24 @@ export class OrdersRepository {
 
   updateStatus(id: string, status: OrderStatus): Promise<Order> {
     return this.prisma.order.update({ where: { id }, data: { status } });
+  }
+
+  async cancelWithRefund(
+    id: string,
+    data: { cancelledByUserId: string; cancellationReason?: string },
+  ): Promise<OrderWithAdminDetails> {
+    const order = await this.prisma.order.update({
+      where: { id },
+      data: {
+        status: OrderStatus.CANCELLED,
+        paymentStatus: PaymentStatus.REFUNDED,
+        cancelledAt: new Date(),
+        cancelledByUserId: data.cancelledByUserId,
+        cancellationReason: data.cancellationReason,
+      },
+      include: ORDER_ADMIN_INCLUDE,
+    });
+    return withAddressSnapshot(order);
   }
 
   // ── Overview dashboard aggregates ─────────────────────────

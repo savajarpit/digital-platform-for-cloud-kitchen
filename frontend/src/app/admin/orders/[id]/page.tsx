@@ -7,6 +7,7 @@ import {
   ADMIN_SETTABLE_STATUSES,
   ApiError,
   getAdminOrder,
+  markOrderPaid,
   updateOrderStatus,
   type AdminOrderDetail,
 } from "@/lib/api/admin-orders";
@@ -19,6 +20,8 @@ import { MapLink } from "@/components/ui/MapLink";
 import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
 import { ShareOrderDetailsButton } from "@/components/ui/ShareOrderDetailsButton";
 import { OrderStatusStepper, type OrderStatus } from "@/components/ui/OrderStatusStepper";
+import { CancelRefundForm } from "@/components/admin/CancelRefundForm";
+import { RefundHistoryCard } from "@/components/admin/RefundHistoryCard";
 import { ORDER_STATUS_STYLES as STATUS_STYLES } from "@/lib/format/status-styles";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
@@ -26,15 +29,36 @@ import { formatTime12h } from "@/lib/format/time";
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const canEdit = usePermission(PERMISSIONS.ORDERS_MANAGE);
+  const canCancelRefund = usePermission(PERMISSIONS.ORDERS_CANCEL_REFUND);
+  const canRecordPayment = usePermission(PERMISSIONS.PAYMENTS_MANUAL_RECORD);
   const { showToast } = useToast();
   const [order, setOrder] = useState<AdminOrderDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState(false);
 
   useEffect(() => {
     getAdminOrder(id)
       .then(setOrder)
       .catch(() => setNotFound(true));
   }, [id]);
+
+  function refresh() {
+    getAdminOrder(id).then(setOrder).catch(() => {});
+  }
+
+  async function handleMarkPaid() {
+    if (!order) return;
+    setMarkingPaid(true);
+    try {
+      await markOrderPaid(order.id);
+      showToast("Order marked as paid", "success");
+      refresh();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't mark this order as paid.", "error");
+    } finally {
+      setMarkingPaid(false);
+    }
+  }
 
   async function handleStatusChange(newStatus: string) {
     if (!order) return;
@@ -124,11 +148,26 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {order.paymentMethod !== "RAZORPAY" && (
+            <span className="badge bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+              {order.paymentMethod}
+            </span>
+          )}
           <span
             className={`badge ${isPaid ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"}`}
           >
             {order.paymentStatus}
           </span>
+          {canRecordPayment && order.paymentMethod !== "RAZORPAY" && !isPaid && (
+            <button
+              type="button"
+              onClick={handleMarkPaid}
+              disabled={markingPaid}
+              className="btn-primary btn-sm cursor-pointer"
+            >
+              {markingPaid ? "Marking…" : "Mark Paid"}
+            </button>
+          )}
           {canEdit && isPaid && !isFinal ? (
             <Select value={order.status} onValueChange={handleStatusChange}>
               <SelectTrigger variant="unstyled" className={`badge border-0 ${STATUS_STYLES[order.status] ?? ""}`}>
@@ -150,6 +189,16 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           )}
         </div>
       </div>
+
+      {canCancelRefund && isPaid && order.status !== "CANCELLED" && (
+        <CancelRefundForm kind="order" id={order.id} defaultAmountInPaise={order.totalInPaise} onCancelled={refresh} />
+      )}
+
+      <RefundHistoryCard
+        cancelledAt={order.cancelledAt}
+        cancellationReason={order.cancellationReason}
+        refunds={order.refunds}
+      />
 
       {isPaid && (
         <div className="card flex justify-center p-6">

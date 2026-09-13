@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,6 +13,7 @@ import {
   CreateOrderInput,
 } from './orders.repository';
 import { CreateOrderDto, OrderItemInputDto } from './dto/create-order.dto';
+import { CreateManualOrderDto } from './dto/create-manual-order.dto';
 import { PreviewOrderDto } from './dto/preview-order.dto';
 import { QueryOrdersDto } from './dto/query-orders.dto';
 import { QueryAdminOrdersDto } from './dto/query-admin-orders.dto';
@@ -27,6 +29,17 @@ import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-cl
 import { PaginationService } from '../../common/services/pagination.service';
 import { DateUtil } from '../../common/utils/date.util';
 import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
+import { FeaturesService } from '../features/features.service';
+import { RefundsRepository } from '../../shared-modules/refunds/refunds.repository';
+import { RAZORPAY_REFUNDS_FEATURE_KEY } from '../../shared-modules/refunds/refunds.constants';
+import { CancelRefundDto } from '../../shared-modules/refunds/dto/cancel-refund.dto';
+import {
+  PaymentMethod,
+  PaymentStatus,
+  Refund,
+  RefundMethod,
+  Role,
+} from '../../generated/prisma';
 
 export interface CreatedOrder {
   order: OrderWithDetails;
@@ -62,6 +75,8 @@ export class OrdersService {
     private readonly razorpayClient: RazorpayClientService,
     private readonly pagination: PaginationService,
     private readonly tenantLimits: TenantLimitsService,
+    private readonly featuresService: FeaturesService,
+    private readonly refundsRepo: RefundsRepository,
   ) {}
 
   /**
@@ -171,6 +186,176 @@ export class OrdersService {
   ): Promise<CreatedOrder> {
     await this.orderAcceptanceService.assertAcceptingOrders(tenantId);
 
+    const core = await this.buildOrderCore(tenantId, userId, dto);
+
+    // Razorpay order first, on purpose: if it fails, nothing is written to
+    // our DB at all. Creating the local order first and the Razorpay order
+    // second would risk leaving an orphaned PENDING_PAYMENT row with no
+    // razorpayOrderId — unpayable and unrecoverable — whenever the Razorpay
+    // call itself fails.
+    const { razorpayOrderId, keyId } = await this.razorpayClient.createOrder(
+      tenantId,
+      {
+        amountInPaise: core.totalInPaise,
+        receipt: core.orderNumber,
+      },
+    );
+
+    const order = await this.ordersRepo.create({
+      tenantId,
+      userId,
+      fulfillmentType: dto.fulfillmentType ?? 'DELIVERY',
+      addressId: core.isPickup ? undefined : dto.addressId,
+      addressSnapshot: core.addressSnapshot,
+      pickupKitchenZoneId: core.isPickup ? dto.pickupKitchenZoneId : undefined,
+      orderNumber: core.orderNumber,
+      subtotalInPaise: core.pricing.subtotalInPaise,
+      discountInPaise: core.pricing.discountInPaise,
+      couponCode: core.pricing.resolvedCouponCode,
+      couponId: core.pricing.couponId,
+      deliveryFeeInPaise: core.deliveryFeeInPaise,
+      totalInPaise: core.totalInPaise,
+      notes: dto.notes,
+      items: core.pricing.items,
+      razorpayOrderId,
+      deliveryDate: core.deliveryDate,
+      deliverySlotId: core.deliverySlotId,
+      deliverySlotName: core.deliverySlotName,
+      deliveryWindowStart: core.deliveryWindowStart,
+      deliveryWindowEnd: core.deliveryWindowEnd,
+      isInstant: dto.isInstant ?? false,
+    });
+
+    return { order, razorpayOrderId, razorpayKeyId: keyId };
+  }
+
+  /**
+   * Admin phone-order path — same validation/pricing as a real checkout
+   * (via buildOrderCore), but for a chosen existing customer, no Razorpay
+   * involved, and settled by cash/UPI. Lands PENDING_PAYMENT/PENDING, same
+   * as a fresh customer order — a separate markPaidManually() call (a
+   * distinct permission) is what actually confirms the money came in, so
+   * "built the order" and "confirmed payment received" can be two
+   * different staff members' jobs if the tenant wants that split.
+   */
+  async createManual(
+    tenantId: string,
+    staffUserId: string,
+    dto: CreateManualOrderDto,
+  ): Promise<{
+    order: OrderWithAdminDetails;
+    serviceabilityOverridden: boolean;
+  }> {
+    await this.orderAcceptanceService.assertAcceptingOrders(tenantId);
+
+    const customer = await this.usersRepo.findById(
+      dto.customerUserId,
+      tenantId,
+    );
+    if (!customer || customer.role !== Role.CUSTOMER) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    const core = await this.buildOrderCore(tenantId, dto.customerUserId, dto, {
+      allowUnserviceable: dto.overrideServiceability,
+    });
+
+    const created = await this.ordersRepo.create({
+      tenantId,
+      userId: dto.customerUserId,
+      fulfillmentType: dto.fulfillmentType ?? 'DELIVERY',
+      addressId: core.isPickup ? undefined : dto.addressId,
+      addressSnapshot: core.addressSnapshot,
+      pickupKitchenZoneId: core.isPickup ? dto.pickupKitchenZoneId : undefined,
+      orderNumber: core.orderNumber,
+      subtotalInPaise: core.pricing.subtotalInPaise,
+      discountInPaise: core.pricing.discountInPaise,
+      couponCode: core.pricing.resolvedCouponCode,
+      couponId: core.pricing.couponId,
+      deliveryFeeInPaise: core.deliveryFeeInPaise,
+      totalInPaise: core.totalInPaise,
+      notes: dto.notes,
+      items: core.pricing.items,
+      deliveryDate: core.deliveryDate,
+      deliverySlotId: core.deliverySlotId,
+      deliverySlotName: core.deliverySlotName,
+      deliveryWindowStart: core.deliveryWindowStart,
+      deliveryWindowEnd: core.deliveryWindowEnd,
+      isInstant: dto.isInstant ?? false,
+      paymentMethod: dto.paymentMethod as PaymentMethod,
+      createdByUserId: staffUserId,
+    });
+
+    // create() returns the customer-facing include shape (no `user`/
+    // `refunds`) — refetch with the admin include so the response matches
+    // every other admin order response.
+    const order = await this.ordersRepo.findByIdForTenant(tenantId, created.id);
+    return {
+      order: order!,
+      serviceabilityOverridden: core.serviceabilityOverridden,
+    };
+  }
+
+  /** Confirms cash/UPI was actually received for a manually-created order —
+   * a distinct permission from creating the order itself (see createManual). */
+  async markPaidManually(
+    tenantId: string,
+    id: string,
+  ): Promise<OrderWithAdminDetails> {
+    const order = await this.ordersRepo.findByIdForTenant(tenantId, id);
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.paymentMethod === PaymentMethod.RAZORPAY) {
+      throw new BadRequestException(
+        'This order was placed via Razorpay — payment is confirmed through the payment verification flow, not this endpoint.',
+      );
+    }
+    if (order.paymentStatus === PaymentStatus.PAID) {
+      return order;
+    }
+    await this.ordersRepo.markPaidManually(id);
+    const updated = await this.ordersRepo.findByIdForTenant(tenantId, id);
+    return updated!;
+  }
+
+  /**
+   * Shared by create() (customer checkout, always Razorpay) and
+   * createManual() (admin phone-order path, cash/UPI) — everything that
+   * validates and prices an order, right up to the point of actually
+   * charging/persisting it, so the two entry points can never drift on
+   * pricing, hours, serviceability, or slot rules. `allowUnserviceable`
+   * (admin-only) downgrades an out-of-area address from a hard block to a
+   * flag the caller surfaces as a warning — a manual order already means a
+   * human is vouching for it, same reasoning Petpooja/Swiggy ops consoles
+   * use for phone orders.
+   */
+  private async buildOrderCore(
+    tenantId: string,
+    userId: string,
+    dto: {
+      fulfillmentType?: string;
+      pickupKitchenZoneId?: string;
+      addressId?: string;
+      items: OrderItemInputDto[];
+      couponCode?: string;
+      isInstant?: boolean;
+      deliverySlotId?: string;
+      deliveryDate?: string;
+    },
+    options: { allowUnserviceable?: boolean } = {},
+  ): Promise<{
+    isPickup: boolean;
+    addressSnapshot?: CreateOrderInput['addressSnapshot'];
+    deliveryFeeInPaise: number;
+    totalInPaise: number;
+    pricing: PricingResult;
+    orderNumber: string;
+    deliveryDate: Date;
+    deliverySlotId: string | null;
+    deliverySlotName: string;
+    deliveryWindowStart: string;
+    deliveryWindowEnd: string;
+    serviceabilityOverridden: boolean;
+  }> {
     const isPickup = dto.fulfillmentType === 'PICKUP';
     if (isPickup && dto.isInstant) {
       throw new BadRequestException(
@@ -188,6 +373,7 @@ export class OrdersService {
     let minOrderAmountInPaise = 0;
     let freeDeliveryAboveAmountInPaise: number | undefined;
     let addressSnapshot: CreateOrderInput['addressSnapshot'];
+    let serviceabilityOverridden = false;
     if (isPickup) {
       const zone = await this.settingsRepo.findKitchenZoneById(
         tenantId,
@@ -213,9 +399,12 @@ export class OrdersService {
         },
       );
       if (!serviceability.serviceable) {
-        throw new BadRequestException(
-          `We don't currently deliver to pincode ${address.pincode}`,
-        );
+        if (!options.allowUnserviceable) {
+          throw new BadRequestException(
+            `We don't currently deliver to pincode ${address.pincode}`,
+          );
+        }
+        serviceabilityOverridden = true;
       }
       deliveryFeeInPaise = serviceability.deliveryFeeInPaise ?? 0;
       minOrderAmountInPaise = serviceability.minOrderAmountInPaise ?? 0;
@@ -337,45 +526,20 @@ export class OrdersService {
     const totalInPaise = effectiveSubtotalInPaise + deliveryFeeInPaise;
     const orderNumber = generateOrderNumber();
 
-    // Razorpay order first, on purpose: if it fails, nothing is written to
-    // our DB at all. Creating the local order first and the Razorpay order
-    // second would risk leaving an orphaned PENDING_PAYMENT row with no
-    // razorpayOrderId — unpayable and unrecoverable — whenever the Razorpay
-    // call itself fails.
-    const { razorpayOrderId, keyId } = await this.razorpayClient.createOrder(
-      tenantId,
-      {
-        amountInPaise: totalInPaise,
-        receipt: orderNumber,
-      },
-    );
-
-    const order = await this.ordersRepo.create({
-      tenantId,
-      userId,
-      fulfillmentType: dto.fulfillmentType ?? 'DELIVERY',
-      addressId: isPickup ? undefined : dto.addressId,
+    return {
+      isPickup,
       addressSnapshot,
-      pickupKitchenZoneId: isPickup ? dto.pickupKitchenZoneId : undefined,
-      orderNumber,
-      subtotalInPaise: pricing.subtotalInPaise,
-      discountInPaise: pricing.discountInPaise,
-      couponCode: pricing.resolvedCouponCode,
-      couponId: pricing.couponId,
       deliveryFeeInPaise,
       totalInPaise,
-      notes: dto.notes,
-      items: pricing.items,
-      razorpayOrderId,
+      pricing,
+      orderNumber,
       deliveryDate,
       deliverySlotId,
       deliverySlotName,
       deliveryWindowStart,
       deliveryWindowEnd,
-      isInstant: dto.isInstant ?? false,
-    });
-
-    return { order, razorpayOrderId, razorpayKeyId: keyId };
+      serviceabilityOverridden,
+    };
   }
 
   async findAll(tenantId: string, userId: string, query: QueryOrdersDto) {
@@ -441,6 +605,84 @@ export class OrdersService {
 
     await this.ordersRepo.updateStatus(id, dto.status);
     return { ...order, status: dto.status };
+  }
+
+  /**
+   * The money-touching cancel path — distinct from updateStatus() above,
+   * which any admin-settable-status change (incl. a plain CANCELLED with
+   * nothing paid yet) still goes through untouched. Only reachable for an
+   * already-PAID order, since there's nothing to refund otherwise.
+   */
+  async cancelWithRefund(
+    tenantId: string,
+    staffUserId: string,
+    orderId: string,
+    dto: CancelRefundDto,
+  ): Promise<{ order: OrderWithAdminDetails; refund: Refund }> {
+    const order = await this.ordersRepo.findByIdForTenant(tenantId, orderId);
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.status === 'CANCELLED') {
+      throw new BadRequestException('This order is already cancelled.');
+    }
+    if (order.paymentStatus !== PaymentStatus.PAID) {
+      throw new BadRequestException(
+        'Only a paid order can be cancelled with a refund — use the status dropdown for an order that was never paid.',
+      );
+    }
+
+    const convenienceFeeInPaise = dto.convenienceFeeInPaise ?? 0;
+    const netRefundInPaise = Math.max(
+      0,
+      dto.amountInPaise - convenienceFeeInPaise,
+    );
+
+    let razorpayRefundId: string | undefined;
+    if (dto.method === RefundMethod.RAZORPAY) {
+      const allowed = await this.featuresService.hasFeature(
+        tenantId,
+        RAZORPAY_REFUNDS_FEATURE_KEY,
+      );
+      if (!allowed) {
+        throw new ForbiddenException(
+          'Razorpay refunds are not enabled for this business — record a manual refund instead, or ask the platform to turn it on.',
+        );
+      }
+      if (!order.razorpayPaymentId) {
+        throw new BadRequestException(
+          'This order has no Razorpay payment to refund.',
+        );
+      }
+      if (dto.amountInPaise <= 0) {
+        throw new BadRequestException(
+          'Enter a refund amount greater than zero.',
+        );
+      }
+      const result = await this.razorpayClient.refundPayment(tenantId, {
+        razorpayPaymentId: order.razorpayPaymentId,
+        amountInPaise: netRefundInPaise,
+        notes: { orderId: order.id, orderNumber: order.orderNumber },
+      });
+      razorpayRefundId = result.razorpayRefundId;
+    }
+
+    const refund = await this.refundsRepo.create({
+      tenantId,
+      orderId,
+      method: dto.method,
+      amountInPaise: dto.amountInPaise,
+      convenienceFeeInPaise,
+      netRefundInPaise,
+      razorpayRefundId,
+      recordedByUserId: staffUserId,
+      notes: dto.notes,
+    });
+
+    const updated = await this.ordersRepo.cancelWithRefund(orderId, {
+      cancelledByUserId: staffUserId,
+      cancellationReason: dto.reason,
+    });
+
+    return { order: updated, refund };
   }
 
   /**

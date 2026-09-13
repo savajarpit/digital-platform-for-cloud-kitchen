@@ -63,4 +63,10 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
     description:
       'Lets OWNER/STAFF (with the matching permission) customize their own order-confirmation/welcome/reset-password email wording and pick among SUPER_ADMIN-approved WhatsApp message variants. Off by default — the tenant still gets fully tenant-branded emails, just with platform-authored default wording.',
   },
+  {
+    key: 'razorpay-refunds',
+    name: 'Razorpay Refunds',
+    description:
+      "Lets OWNER/STAFF (with the matching permission) issue a real refund straight to the customer via the tenant's own Razorpay account when cancelling an order or subscription — not just record a manual refund for the books. Off by default.",
+  },
 ];

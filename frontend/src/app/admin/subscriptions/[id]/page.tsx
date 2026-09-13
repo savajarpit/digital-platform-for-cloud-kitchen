@@ -3,12 +3,23 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Clock, FileText, MapPin, Phone, User } from "lucide-react";
-import { getAdminSubscription, type AdminSubscriptionDetail } from "@/lib/api/admin-subscriptions";
+import {
+  ApiError,
+  getAdminSubscription,
+  markSubscriptionPaid,
+  type AdminSubscriptionDetail,
+} from "@/lib/api/admin-subscriptions";
+import { usePermission } from "@/context/PermissionsContext";
+import { PERMISSIONS } from "@/lib/constants/permissions";
+import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { MapLink } from "@/components/ui/MapLink";
 import { PlanDayBreakdown } from "@/components/admin/PlanDayBreakdown";
 import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
 import { DeclareDisruptionForm } from "@/components/admin/DeclareDisruptionForm";
+import { SubscriptionActionsForm } from "@/components/admin/SubscriptionActionsForm";
+import { CancelRefundForm } from "@/components/admin/CancelRefundForm";
+import { RefundHistoryCard } from "@/components/admin/RefundHistoryCard";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
@@ -21,8 +32,13 @@ const SUBSCRIPTION_STATUS_STYLES: Record<string, string> = {
 
 export default function AdminSubscriberDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const canCancelRefund = usePermission(PERMISSIONS.SUBSCRIPTIONS_CANCEL_REFUND);
+  const canActOnBehalf = usePermission(PERMISSIONS.SUBSCRIPTIONS_ACT_ON_BEHALF);
+  const canRecordPayment = usePermission(PERMISSIONS.PAYMENTS_MANUAL_RECORD);
+  const { showToast } = useToast();
   const [sub, setSub] = useState<AdminSubscriptionDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState(false);
 
   useEffect(() => {
     getAdminSubscription(id)
@@ -32,6 +48,20 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
 
   function refresh() {
     getAdminSubscription(id).then(setSub).catch(() => {});
+  }
+
+  async function handleMarkPaid() {
+    if (!sub) return;
+    setMarkingPaid(true);
+    try {
+      await markSubscriptionPaid(sub.id);
+      showToast("Subscription marked as paid and activated", "success");
+      refresh();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't mark this subscription as paid.", "error");
+    } finally {
+      setMarkingPaid(false);
+    }
   }
 
   if (notFound) {
@@ -74,14 +104,50 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {sub.paymentMethod !== "RAZORPAY" && (
+            <span className="badge bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+              {sub.paymentMethod}
+            </span>
+          )}
           <span className={`badge ${SUBSCRIPTION_STATUS_STYLES[sub.status] ?? ""}`}>
             {sub.status.replace("_", " ")}
           </span>
+          {canRecordPayment && sub.paymentMethod !== "RAZORPAY" && sub.status === "PENDING_PAYMENT" && (
+            <button
+              type="button"
+              onClick={handleMarkPaid}
+              disabled={markingPaid}
+              className="btn-primary btn-sm cursor-pointer"
+            >
+              {markingPaid ? "Marking…" : "Mark Paid"}
+            </button>
+          )}
           {sub.status === "ACTIVE" && (
             <DeclareDisruptionForm scope="SINGLE" subscriptionId={sub.id} onDeclared={refresh} />
           )}
+          {canActOnBehalf && sub.status === "ACTIVE" && (
+            <SubscriptionActionsForm
+              subscriptionId={sub.id}
+              customerUserId={sub.userId}
+              onDone={refresh}
+            />
+          )}
+          {canCancelRefund && sub.status === "ACTIVE" && (
+            <CancelRefundForm
+              kind="subscription"
+              id={sub.id}
+              defaultAmountInPaise={sub.priceInPaiseSnapshot}
+              onCancelled={refresh}
+            />
+          )}
         </div>
       </div>
+
+      <RefundHistoryCard
+        cancelledAt={sub.cancelledAt}
+        cancellationReason={sub.cancellationReason}
+        refunds={sub.refunds}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="card flex flex-col gap-2 p-6">

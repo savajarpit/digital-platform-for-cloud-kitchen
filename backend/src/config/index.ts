@@ -5,3 +5,4 @@ export { default as redisConfig } from './redis.config';
 export { default as stripeConfig } from './stripe.config';
 export { default as mailConfig } from './mail.config';
 export { default as platformBillingConfig } from './platform-billing.config';
+export { default as storageConfig } from './storage.config';

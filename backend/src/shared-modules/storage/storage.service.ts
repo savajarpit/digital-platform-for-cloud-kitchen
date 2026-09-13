@@ -1,24 +1,45 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { promises as fs } from 'fs';
-import * as path from 'path';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+} from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
-
-export const UPLOADS_ROOT = path.join(process.cwd(), 'uploads');
+import * as path from 'path';
 
 /**
- * Local-disk implementation for now — no S3/deployment account set up yet.
- * Public contract (buildKey/upload/delete/getPublicUrl) matches what an S3
- * implementation would expose, so swapping the storage backend later is a
- * change to this one file, not to any of its callers.
+ * All tenant images/files live in S3 (see backend/.claude/skills/storage-s3).
+ * Region/bucket/endpoint come from storage.config.ts. Credentials are left
+ * unset in staging/production — the EC2 instance role grants S3 access and
+ * the AWS SDK's default credential chain picks it up automatically.
  */
 @Injectable()
 export class StorageService {
-  private readonly baseUrl: string;
+  private readonly s3: S3Client;
+  private readonly bucket: string;
+  private readonly region: string;
+  private readonly endpoint?: string;
 
   constructor(private readonly config: ConfigService) {
-    this.baseUrl =
-      this.config.get<string>('app.publicUrl') ?? 'http://localhost:3000';
+    this.bucket = this.config.get<string>('storage.bucket')!;
+    this.region = this.config.get<string>('storage.region')!;
+    this.endpoint = this.config.get<string>('storage.endpoint');
+    const accessKeyId = this.config.get<string>('storage.accessKeyId');
+    const secretAccessKey = this.config.get<string>(
+      'storage.secretAccessKey',
+    );
+
+    this.s3 = new S3Client({
+      region: this.region,
+      endpoint: this.endpoint,
+      // Omit entirely (rather than passing undefined fields) so the SDK
+      // falls back to its default credential chain — env vars, shared
+      // config, or the EC2 instance role — instead of an empty credential set.
+      ...(accessKeyId && secretAccessKey
+        ? { credentials: { accessKeyId, secretAccessKey } }
+        : {}),
+    });
   }
 
   buildKey(tenantId: string, resource: string, originalName: string): string {
@@ -26,22 +47,30 @@ export class StorageService {
     return `${tenantId}/${resource}/${uuidv4()}${ext}`;
   }
 
-  async upload(params: { key: string; buffer: Buffer }): Promise<string> {
-    const destination = path.join(UPLOADS_ROOT, params.key);
-    await fs.mkdir(path.dirname(destination), { recursive: true });
-    await fs.writeFile(destination, params.buffer);
+  async upload(params: {
+    key: string;
+    buffer: Buffer;
+    mimeType?: string;
+  }): Promise<string> {
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: params.key,
+        Body: params.buffer,
+        ContentType: params.mimeType,
+      }),
+    );
     return this.getPublicUrl(params.key);
   }
 
   async delete(key: string): Promise<void> {
-    try {
-      await fs.unlink(path.join(UPLOADS_ROOT, key));
-    } catch {
-      // Already gone — nothing to clean up.
-    }
+    await this.s3.send(
+      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
   }
 
   getPublicUrl(key: string): string {
-    return `${this.baseUrl}/uploads/${key}`;
+    if (this.endpoint) return `${this.endpoint}/${this.bucket}/${key}`;
+    return `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
   }
 }

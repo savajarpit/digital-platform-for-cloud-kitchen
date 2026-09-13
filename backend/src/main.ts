@@ -12,7 +12,6 @@ import helmet from 'helmet';
 import compression from 'compression';
 
 import { AppModule } from './app.module';
-import { UPLOADS_ROOT } from './shared-modules/storage/storage.service';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -26,12 +25,6 @@ async function bootstrap() {
     bufferLogs: true,
     rawBody: true, // required for Stripe webhooks
   });
-
-  // Serve locally-uploaded images (see shared-modules/storage) — bypasses
-  // the /api prefix/versioning, so a stored URL like
-  // `${publicUrl}/uploads/<tenantId>/images/<uuid>.jpg` stays stable even if
-  // the API version changes.
-  app.useStaticAssets(UPLOADS_ROOT, { prefix: '/uploads' });
 
   const config = app.get(ConfigService);
   const port = config.get<number>('app.port') ?? 3000;

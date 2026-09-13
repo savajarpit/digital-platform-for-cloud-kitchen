@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.env*
+*.md
+coverage
+.nyc_output
+test
+**/*.spec.ts
+**/*.test.ts
+Dockerfile*
+docker-compose*
+.github

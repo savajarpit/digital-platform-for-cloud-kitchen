@@ -19,6 +19,7 @@ import {
   stripeConfig,
   mailConfig,
   platformBillingConfig,
+  storageConfig,
 } from './config';
 
 // Database
@@ -90,6 +91,7 @@ import { AddonsModule } from './modules/addons/addons.module';
         stripeConfig,
         mailConfig,
         platformBillingConfig,
+        storageConfig,
       ],
       validationSchema: Joi.object({
         NODE_ENV: Joi.string()
@@ -119,6 +121,11 @@ import { AddonsModule } from './modules/addons/addons.module';
         REDIS_PASSWORD: Joi.string().allow('').optional(),
         ALLOWED_ORIGINS: Joi.string().default('http://localhost:3000'),
         ENCRYPTION_KEY: Joi.string().min(32).optional(),
+        STORAGE_BUCKET: Joi.string().required(),
+        STORAGE_REGION: Joi.string().default('ap-south-1'),
+        STORAGE_ACCESS_KEY_ID: Joi.string().allow('').optional(),
+        STORAGE_SECRET_ACCESS_KEY: Joi.string().allow('').optional(),
+        STORAGE_ENDPOINT: Joi.string().allow('').optional(),
       }),
       validationOptions: {
         abortEarly: true,

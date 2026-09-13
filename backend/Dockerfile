@@ -32,26 +32,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD curl -f http://localhost:3000/api/v1/health/ping || exit 1
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
-```
-
----
-
-## Round 6 — File 5: `.dockerignore`
-```
-node_modules
-dist
-.git
-.gitignore
-.env
-.env.*
-!.env.example
-*.md
-coverage
-.nyc_output
-test
-**/*.spec.ts
-**/*.test.ts
-Dockerfile*
-docker-compose*
-.github
-src/generated

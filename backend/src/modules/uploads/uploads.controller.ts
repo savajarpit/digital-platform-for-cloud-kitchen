@@ -65,7 +65,11 @@ export class UploadsController {
   ) {
     if (!file) throw new BadRequestException('No file uploaded');
     const key = this.storage.buildKey(tenantId, 'images', file.originalname);
-    const url = await this.storage.upload({ key, buffer: file.buffer });
+    const url = await this.storage.upload({
+      key,
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+    });
     return { url };
   }
 }

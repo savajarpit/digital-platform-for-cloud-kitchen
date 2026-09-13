@@ -26,6 +26,8 @@ WORKDIR /app
 COPY --from=build --chown=nestjs:nodejs /app/dist ./dist
 COPY --from=build --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=build --chown=nestjs:nodejs /app/package*.json ./
+COPY --from=build --chown=nestjs:nodejs /app/prisma.config.ts ./prisma.config.ts
+COPY --from=build --chown=nestjs:nodejs /app/src/database/prisma ./src/database/prisma
 USER nestjs
 EXPOSE 3000
 ENV NODE_ENV=production

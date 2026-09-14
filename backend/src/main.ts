@@ -39,10 +39,22 @@ async function bootstrap() {
   );
 
   // ── CORS ──────────────────────────────────────────────
+  const rootDomain = config.get<string>('app.platformRootDomain')?.toLowerCase();
   app.enableCors({
     origin: (origin, callback) => {
       const allowed = config.get<string[]>('app.allowedOrigins') ?? [];
-      if (!origin || allowed.includes(origin)) {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      const hostname = new URL(origin).hostname.toLowerCase();
+      // Every tenant is reachable at {slug}.{platformRootDomain} (see
+      // TenantResolverService) with zero per-tenant DNS/CORS setup — a
+      // static allowlist can't cover a domain that doesn't exist yet.
+      const isTenantSubdomain =
+        !!rootDomain &&
+        (hostname === rootDomain || hostname.endsWith(`.${rootDomain}`));
+      if (allowed.includes(origin) || isTenantSubdomain) {
         callback(null, true);
       } else {
         callback(new Error(`CORS blocked: ${origin}`));

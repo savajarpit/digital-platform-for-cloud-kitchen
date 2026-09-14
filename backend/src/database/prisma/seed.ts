@@ -134,6 +134,9 @@ async function main() {
           firstName: ownerFirstName,
           lastName: process.env.SEED_OWNER_LAST_NAME || null,
           role: Role.OWNER,
+          // Bootstrap account, not a normal self-serve signup — skip the OTP
+          // gate (same reasoning as create-platform-admin.ts's SUPER_ADMIN).
+          verifiedAt: new Date(),
         },
       });
 

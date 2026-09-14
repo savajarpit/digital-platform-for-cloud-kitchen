@@ -74,6 +74,12 @@ const SETTINGS_NAV: NavItem[] = [
   { href: "/admin/settings/plan", label: "My Plan", icon: Gauge },
 ];
 
+/** Exact match, or a strict sub-route (`/admin/menu` must not match
+ * `/admin/menu/addons`, only `/admin/menu` and `/admin/menu/123`). */
+function isNavActive(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function AdminSidebar() {
   const pathname = usePathname();
   const { can, loading, isSuperAdmin } = usePermissions();
@@ -81,7 +87,7 @@ export function AdminSidebar() {
 
   function renderLink(item: NavItem) {
     if (item.feature && !featuresLoading && !hasFeature(item.feature)) return null;
-    const isActive = pathname.startsWith(item.href);
+    const isActive = isNavActive(pathname, item.href);
     const editable = !item.permission || loading || can(item.permission);
     return (
       <Link
@@ -107,7 +113,7 @@ export function AdminSidebar() {
           <Link
             href="/admin/platform/tenants"
             className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/admin/platform")
+              isNavActive(pathname, "/admin/platform/tenants")
                 ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
                 : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             }`}
@@ -118,7 +124,7 @@ export function AdminSidebar() {
           <Link
             href="/admin/platform/terms"
             className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/admin/platform/terms")
+              isNavActive(pathname, "/admin/platform/terms")
                 ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
                 : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             }`}
@@ -129,7 +135,7 @@ export function AdminSidebar() {
           <Link
             href="/admin/platform/pages"
             className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/admin/platform/pages")
+              isNavActive(pathname, "/admin/platform/pages")
                 ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
                 : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             }`}
@@ -140,7 +146,7 @@ export function AdminSidebar() {
           <Link
             href="/admin/platform/plans"
             className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/admin/platform/plans")
+              isNavActive(pathname, "/admin/platform/plans")
                 ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
                 : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             }`}
@@ -151,7 +157,7 @@ export function AdminSidebar() {
           <Link
             href="/admin/platform/leads"
             className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/admin/platform/leads")
+              isNavActive(pathname, "/admin/platform/leads")
                 ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
                 : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             }`}
@@ -162,7 +168,7 @@ export function AdminSidebar() {
           <Link
             href="/admin/platform/cancellation-requests"
             className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/admin/platform/cancellation-requests")
+              isNavActive(pathname, "/admin/platform/cancellation-requests")
                 ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
                 : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             }`}
@@ -173,7 +179,7 @@ export function AdminSidebar() {
           <Link
             href="/admin/platform/email-templates"
             className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/admin/platform/email-templates")
+              isNavActive(pathname, "/admin/platform/email-templates")
                 ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
                 : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             }`}
@@ -184,7 +190,7 @@ export function AdminSidebar() {
           <Link
             href="/admin/platform/whatsapp-templates"
             className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/admin/platform/whatsapp-templates")
+              isNavActive(pathname, "/admin/platform/whatsapp-templates")
                 ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
                 : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             }`}
@@ -195,7 +201,7 @@ export function AdminSidebar() {
           <Link
             href="/admin/platform/settings"
             className={`flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-colors ${
-              pathname.startsWith("/admin/platform/settings")
+              isNavActive(pathname, "/admin/platform/settings")
                 ? "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400"
                 : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             }`}

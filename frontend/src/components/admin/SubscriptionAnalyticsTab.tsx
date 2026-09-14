@@ -131,7 +131,9 @@ export function SubscriptionAnalyticsTab() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <PlanBreakdownCard breakdown={analytics?.planBreakdown ?? null} rangeLabel={rangeLabel} />
-        <ExpiringSoonCard />
+        {/* Same feature gate as the analytics call above — skip the nested
+            fetch/banner entirely instead of showing this error a second time. */}
+        {!error && <ExpiringSoonCard />}
       </div>
     </div>
   );

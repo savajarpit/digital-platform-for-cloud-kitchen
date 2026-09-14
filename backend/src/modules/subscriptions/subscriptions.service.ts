@@ -51,6 +51,10 @@ import {
 } from '../../generated/prisma';
 
 const PREVIEW_DAYS_AHEAD = 14;
+// SUPER_ADMIN platform-level kill switch — separate from the tenant's own
+// SubscriptionSettings.isEnabled self-service toggle. Both must be on for
+// the storefront to show plans; this one only SUPER_ADMIN controls.
+const SUBSCRIPTIONS_FEATURE_KEY = 'subscriptions';
 const CANCEL_FEATURE_KEY = 'subscription-self-cancel';
 // SUPER_ADMIN opt-in — presence of the grant HIDES delivery-time selection
 // (both at signup and per-day overrides) rather than unlocking it, so a
@@ -356,10 +360,13 @@ export class SubscriptionsService {
 
   /** Public: the flags/copy the storefront home page + /plans page need. */
   async getPublicSettings(tenantId: string) {
-    const settings = await this.subscriptionsRepo.findSettings(tenantId);
+    const [settings, featureGranted] = await Promise.all([
+      this.subscriptionsRepo.findSettings(tenantId),
+      this.featuresService.hasFeature(tenantId, SUBSCRIPTIONS_FEATURE_KEY),
+    ]);
     const defaults = defaultSubscriptionSettings();
     return {
-      isEnabled: settings?.isEnabled ?? true,
+      isEnabled: (settings?.isEnabled ?? true) && featureGranted,
       showOnHomepage: settings?.showOnHomepage ?? true,
       homepageTitle: settings?.homepageTitle ?? defaults.homepageTitle,
       homepageDescription:
@@ -454,6 +461,12 @@ export class SubscriptionsService {
   // ─── Storefront (public) ─────────────────────────────────
 
   async findPublishedPlans(tenantId: string, search?: string) {
+    const featureGranted = await this.featuresService.hasFeature(
+      tenantId,
+      SUBSCRIPTIONS_FEATURE_KEY,
+    );
+    if (!featureGranted) return [];
+
     const plans = await this.subscriptionsRepo.findPublishedPlans(
       tenantId,
       search,
@@ -470,6 +483,12 @@ export class SubscriptionsService {
   }
 
   async findPublishedPlan(tenantId: string, id: string) {
+    const featureGranted = await this.featuresService.hasFeature(
+      tenantId,
+      SUBSCRIPTIONS_FEATURE_KEY,
+    );
+    if (!featureGranted) throw new NotFoundException('Plan not found');
+
     const plan = await this.subscriptionsRepo.findPublishedPlanById(
       tenantId,
       id,

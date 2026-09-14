@@ -29,8 +29,7 @@ ADD COLUMN     "searchConsoleVerification" TEXT,
 ADD COLUMN     "showFssaiLicense" BOOLEAN NOT NULL DEFAULT false;
 
 -- AlterTable
-ALTER TABLE "meals" ADD COLUMN     "imageUrls" TEXT[] DEFAULT ARRAY[]::TEXT[],
-ADD COLUMN     "weightUnit" "MealWeightUnit",
+ALTER TABLE "meals" ADD COLUMN     "weightUnit" "MealWeightUnit",
 ADD COLUMN     "weightValue" DOUBLE PRECISION;
 
 -- AlterTable
@@ -39,7 +38,6 @@ ADD COLUMN     "fulfillmentType" "OrderFulfillmentType" NOT NULL DEFAULT 'DELIVE
 ADD COLUMN     "guestName" TEXT,
 ADD COLUMN     "guestPhone" TEXT,
 ADD COLUMN     "pickupKitchenZoneId" TEXT,
-ADD COLUMN     "prepNotes" TEXT,
 ADD COLUMN     "tableId" TEXT,
 ADD COLUMN     "tableLabelSnapshot" TEXT,
 ALTER COLUMN "userId" DROP NOT NULL,
@@ -143,48 +141,6 @@ CREATE TABLE "waitlist_entries" (
 );
 
 -- CreateTable
-CREATE TABLE "addon_groups" (
-    "id" TEXT NOT NULL,
-    "tenantId" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "minSelections" INTEGER NOT NULL DEFAULT 0,
-    "maxSelections" INTEGER NOT NULL DEFAULT 1,
-    "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "sortOrder" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "addon_groups_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "addon_items" (
-    "id" TEXT NOT NULL,
-    "tenantId" TEXT NOT NULL,
-    "addonGroupId" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "priceInPaise" INTEGER NOT NULL,
-    "maxQuantityPerOrder" INTEGER NOT NULL DEFAULT 1,
-    "isAvailable" BOOLEAN NOT NULL DEFAULT true,
-    "sortOrder" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "addon_items_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "meal_addon_groups" (
-    "id" TEXT NOT NULL,
-    "mealId" TEXT NOT NULL,
-    "addonGroupId" TEXT NOT NULL,
-    "sortOrder" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "meal_addon_groups_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "home_page_content" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
@@ -237,19 +193,6 @@ CREATE TABLE "plan_faqs" (
 );
 
 -- CreateTable
-CREATE TABLE "order_item_addons" (
-    "id" TEXT NOT NULL,
-    "orderItemId" TEXT NOT NULL,
-    "addonItemId" TEXT,
-    "nameSnapshot" TEXT NOT NULL,
-    "priceInPaiseSnapshot" INTEGER NOT NULL,
-    "quantity" INTEGER NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "order_item_addons_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "subscription_disruptions" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
@@ -294,24 +237,6 @@ CREATE INDEX "waitlist_entries_tenantId_idx" ON "waitlist_entries"("tenantId");
 CREATE INDEX "waitlist_entries_tenantId_kitchenZoneId_status_idx" ON "waitlist_entries"("tenantId", "kitchenZoneId", "status");
 
 -- CreateIndex
-CREATE INDEX "addon_groups_tenantId_idx" ON "addon_groups"("tenantId");
-
--- CreateIndex
-CREATE INDEX "addon_items_tenantId_idx" ON "addon_items"("tenantId");
-
--- CreateIndex
-CREATE INDEX "addon_items_addonGroupId_idx" ON "addon_items"("addonGroupId");
-
--- CreateIndex
-CREATE INDEX "meal_addon_groups_mealId_idx" ON "meal_addon_groups"("mealId");
-
--- CreateIndex
-CREATE INDEX "meal_addon_groups_addonGroupId_idx" ON "meal_addon_groups"("addonGroupId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "meal_addon_groups_mealId_addonGroupId_key" ON "meal_addon_groups"("mealId", "addonGroupId");
-
--- CreateIndex
 CREATE UNIQUE INDEX "home_page_content_tenantId_key" ON "home_page_content"("tenantId");
 
 -- CreateIndex
@@ -328,9 +253,6 @@ CREATE INDEX "plan_faqs_tenantId_idx" ON "plan_faqs"("tenantId");
 
 -- CreateIndex
 CREATE INDEX "plan_faqs_tenantId_isPublished_idx" ON "plan_faqs"("tenantId", "isPublished");
-
--- CreateIndex
-CREATE INDEX "order_item_addons_orderItemId_idx" ON "order_item_addons"("orderItemId");
 
 -- CreateIndex
 CREATE INDEX "subscription_disruptions_tenantId_idx" ON "subscription_disruptions"("tenantId");
@@ -375,21 +297,6 @@ ALTER TABLE "waitlist_entries" ADD CONSTRAINT "waitlist_entries_kitchenZoneId_fk
 ALTER TABLE "waitlist_entries" ADD CONSTRAINT "waitlist_entries_seatedOrderId_fkey" FOREIGN KEY ("seatedOrderId") REFERENCES "orders"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "addon_groups" ADD CONSTRAINT "addon_groups_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "tenants"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "addon_items" ADD CONSTRAINT "addon_items_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "tenants"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "addon_items" ADD CONSTRAINT "addon_items_addonGroupId_fkey" FOREIGN KEY ("addonGroupId") REFERENCES "addon_groups"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "meal_addon_groups" ADD CONSTRAINT "meal_addon_groups_mealId_fkey" FOREIGN KEY ("mealId") REFERENCES "meals"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "meal_addon_groups" ADD CONSTRAINT "meal_addon_groups_addonGroupId_fkey" FOREIGN KEY ("addonGroupId") REFERENCES "addon_groups"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "home_page_content" ADD CONSTRAINT "home_page_content_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "tenants"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -412,12 +319,6 @@ ALTER TABLE "orders" ADD CONSTRAINT "orders_dineInKitchenZoneId_fkey" FOREIGN KE
 
 -- AddForeignKey
 ALTER TABLE "orders" ADD CONSTRAINT "orders_tableId_fkey" FOREIGN KEY ("tableId") REFERENCES "dining_tables"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "order_item_addons" ADD CONSTRAINT "order_item_addons_orderItemId_fkey" FOREIGN KEY ("orderItemId") REFERENCES "order_items"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "order_item_addons" ADD CONSTRAINT "order_item_addons_addonItemId_fkey" FOREIGN KEY ("addonItemId") REFERENCES "addon_items"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "subscription_skips" ADD CONSTRAINT "subscription_skips_disruptionId_fkey" FOREIGN KEY ("disruptionId") REFERENCES "subscription_disruptions"("id") ON DELETE SET NULL ON UPDATE CASCADE;

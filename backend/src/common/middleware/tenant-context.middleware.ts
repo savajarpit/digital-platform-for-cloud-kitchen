@@ -38,6 +38,14 @@ export class TenantContextMiddleware implements NestMiddleware {
         return;
       }
 
+      // Infrastructure-level checks (ALB target group health checks, uptime
+      // monitors) hit this with whatever Host the load balancer happens to
+      // send — never a real tenant domain — and don't need one resolved.
+      if (isHealthCheckRoute(req.path)) {
+        next();
+        return;
+      }
+
       const host =
         (req.headers['x-tenant-domain'] as string | undefined) ??
         req.headers.host ??
@@ -67,4 +75,8 @@ function isPlatformBillingCallbackRoute(path: string): boolean {
     path.endsWith('/platform/billing/webhook') ||
     /\/platform\/activate\/[^/]+(\/verify)?$/.test(path)
   );
+}
+
+function isHealthCheckRoute(path: string): boolean {
+  return /\/health(\/ping)?$/.test(path);
 }

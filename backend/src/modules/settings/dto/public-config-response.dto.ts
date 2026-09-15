@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
+import { BrandDisplayMode } from '../../../generated/prisma';
 
 export class ThemeConfigDto {
   @ApiPropertyOptional({ example: '#16A34A' })
@@ -35,6 +36,46 @@ export class PublicConfigResponseDto {
   @ApiPropertyOptional()
   @Expose()
   heroImageUrl?: string;
+
+  @ApiProperty({ enum: BrandDisplayMode, example: BrandDisplayMode.BOTH })
+  @Expose()
+  headerDisplayMode: BrandDisplayMode;
+
+  @ApiProperty({ enum: BrandDisplayMode, example: BrandDisplayMode.BOTH })
+  @Expose()
+  footerDisplayMode: BrandDisplayMode;
+
+  @ApiProperty({ example: 36 })
+  @Expose()
+  headerLogoHeightPx: number;
+
+  @ApiPropertyOptional({ description: 'Absent means auto (no width cap)' })
+  @Expose()
+  headerLogoWidthPx?: number;
+
+  @ApiProperty({ example: 36 })
+  @Expose()
+  footerLogoHeightPx: number;
+
+  @ApiPropertyOptional({ description: 'Absent means auto (no width cap)' })
+  @Expose()
+  footerLogoWidthPx?: number;
+
+  @ApiPropertyOptional({ description: 'Dedicated social-share image, recommended 1200x630px' })
+  @Expose()
+  ogImageUrl?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  ogImageAlt?: string;
+
+  @ApiPropertyOptional()
+  @Expose()
+  ogImageWidth?: number;
+
+  @ApiPropertyOptional()
+  @Expose()
+  ogImageHeight?: number;
 
   @ApiProperty({ type: ThemeConfigDto })
   @Expose()

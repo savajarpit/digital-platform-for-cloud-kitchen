@@ -4,23 +4,31 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { CalendarClock, Leaf, LayoutDashboard, LogOut, MapPin, Menu, Package, ShoppingCart, User as UserIcon, X } from "lucide-react";
+import { CalendarClock, LayoutDashboard, LogOut, MapPin, Menu, Package, ShoppingCart, User as UserIcon, X } from "lucide-react";
 import { logout } from "@/lib/api/auth";
 import { useToast } from "@/context/ToastContext";
 import { useCartCount } from "@/lib/store/cart-store";
 import { useHasSubscriptions } from "@/lib/hooks/useHasSubscriptions";
+import type { BrandDisplayMode } from "@/lib/api/settings";
+import { BrandLockup } from "./BrandLockup";
 import { ThemeToggle } from "./ThemeToggle";
 import { UserMenu } from "./UserMenu";
 
 export function Header({
   displayName,
   logoUrl,
+  headerDisplayMode,
+  headerLogoHeightPx,
+  headerLogoWidthPx,
   isAuthenticated,
   isAdmin,
   subscriptionsEnabled,
 }: {
   displayName: string;
   logoUrl?: string;
+  headerDisplayMode: BrandDisplayMode;
+  headerLogoHeightPx: number;
+  headerLogoWidthPx?: number;
   isAuthenticated: boolean;
   isAdmin?: boolean;
   subscriptionsEnabled: boolean;
@@ -51,23 +59,24 @@ export function Header({
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/90 backdrop-blur-lg print:hidden dark:border-zinc-800 dark:bg-zinc-950/90">
-      <div className="container-app flex h-16 items-center justify-between sm:h-18">
-        <Link href="/" className="group flex min-w-0 items-center gap-2">
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logoUrl} alt={displayName} className="h-9 w-auto shrink-0" />
-          ) : (
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary-600 shadow-glow transition-transform group-hover:scale-110">
-              <Leaf className="h-5 w-5 text-white" />
-            </div>
-          )}
-          <span className="truncate font-display text-lg font-bold text-zinc-900 sm:text-xl dark:text-zinc-100">
-            {displayName}
-          </span>
+    <header className="sticky top-0 z-50 overflow-x-hidden border-b border-zinc-200 bg-white/90 backdrop-blur-lg print:hidden dark:border-zinc-800 dark:bg-zinc-950/90">
+      <div className="container-app flex min-h-16 items-center justify-between py-2 sm:min-h-18">
+        <Link
+          href="/"
+          className="group flex min-w-0 items-center gap-2"
+          aria-label={headerDisplayMode === "LOGO" ? displayName : undefined}
+        >
+          <BrandLockup
+            mode={headerDisplayMode}
+            logoUrl={logoUrl}
+            displayName={displayName}
+            heightPx={headerLogoHeightPx}
+            widthPx={headerLogoWidthPx}
+            variant="header"
+          />
         </Link>
 
-        <nav className="hidden items-center gap-1 md:flex">
+        <nav className="hidden min-w-0 items-center gap-1 md:flex">
           {navLinks.map((link) => (
             <Link
               key={link.href}
@@ -83,7 +92,7 @@ export function Header({
           ))}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden min-w-0 items-center gap-2 md:flex">
           <ThemeToggle />
           <Link
             href="/cart"

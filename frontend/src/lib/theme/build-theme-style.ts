@@ -1,17 +1,6 @@
 import { generateColorScale } from "./generate-color-scale";
+import { FALLBACK_COLORS, safeHex } from "./brand-color";
 import type { ThemeConfig } from "@/lib/api/settings";
-
-const HEX_PATTERN = /^#[0-9a-fA-F]{6}$/;
-
-const FALLBACK_COLORS = {
-  primaryColor: "#16A34A",
-  secondaryColor: "#0EA5E9",
-  accentColor: "#F59E0B",
-} as const;
-
-function safeHex(value: string | undefined, fallback: string): string {
-  return value && HEX_PATTERN.test(value) ? value : fallback;
-}
 
 /**
  * Builds a CSS custom-properties block for the tenant's brand colors, to be

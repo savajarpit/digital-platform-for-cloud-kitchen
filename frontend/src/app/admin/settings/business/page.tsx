@@ -17,6 +17,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { ImageUploadInput } from "@/components/admin/ImageUploadInput";
 import { SocialLinksCard } from "@/components/admin/SocialLinksCard";
+import { BrandingDisplayCard } from "@/components/admin/BrandingDisplayCard";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 
 type FormState = UpdateBusinessProfileInput;
@@ -40,6 +41,16 @@ export default function BusinessProfilePage() {
           logoUrl: p.logoUrl ?? undefined,
           faviconUrl: p.faviconUrl ?? undefined,
           heroImageUrl: p.heroImageUrl ?? undefined,
+          headerDisplayMode: p.headerDisplayMode,
+          footerDisplayMode: p.footerDisplayMode,
+          headerLogoHeightPx: p.headerLogoHeightPx,
+          headerLogoWidthPx: p.headerLogoWidthPx ?? undefined,
+          footerLogoHeightPx: p.footerLogoHeightPx,
+          footerLogoWidthPx: p.footerLogoWidthPx ?? undefined,
+          ogImageUrl: p.ogImageUrl ?? undefined,
+          ogImageAlt: p.ogImageAlt ?? undefined,
+          ogImageWidth: p.ogImageWidth ?? undefined,
+          ogImageHeight: p.ogImageHeight ?? undefined,
           supportEmail: p.supportEmail ?? undefined,
           supportPhone: p.supportPhone ?? undefined,
           whatsappBusinessNumber: p.whatsappBusinessNumber ?? undefined,
@@ -166,6 +177,8 @@ export default function BusinessProfilePage() {
             />
           </div>
         </div>
+
+        <BrandingDisplayCard form={form} field={field} canEdit={canEdit} />
 
         <div className="card flex flex-col gap-4 p-6">
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Contact</h3>

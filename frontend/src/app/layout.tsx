@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import { NextIntlClientProvider } from "next-intl";
@@ -8,6 +8,7 @@ import { getPublishedPages } from "@/lib/api/content";
 import { getPublicSocialLinks } from "@/lib/api/social-links";
 import { getPlansHomeSettings } from "@/lib/api/plans";
 import { buildThemeStyle } from "@/lib/theme/build-theme-style";
+import { FALLBACK_COLORS, safeHex } from "@/lib/theme/brand-color";
 import { getSiteOrigin } from "@/lib/seo/get-site-origin";
 import { StructuredData } from "@/components/seo/StructuredData";
 import { Header } from "@/components/layout/Header";
@@ -29,16 +30,59 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Only locale this app currently ships (see frontend/src/i18n/request.ts) —
+// mapped to en_IN rather than en_US since every other business default here
+// (currency, timezone, phone format) targets India, not the US.
+const OG_LOCALE_MAP: Record<string, string> = { en: "en_IN" };
+const DEFAULT_OG_LOCALE = "en_IN";
+
+function twitterHandle(socialLinks: { platform: string; url: string }[]): string | undefined {
+  const link = socialLinks.find((l) => l.platform === "TWITTER");
+  if (!link) return undefined;
+  try {
+    const handle = new URL(link.url).pathname.split("/").filter(Boolean)[0];
+    return handle ? `@${handle}` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function generateMetadata(): Promise<Metadata> {
-  const [config, { origin }] = await Promise.all([getPublicConfig(), getSiteOrigin()]);
+  // Next.js request-memoizes identical fetch() calls made during one render
+  // pass, so these don't cost extra round trips beyond what RootLayout()
+  // already fetches below.
+  const [config, { origin }, socialLinks] = await Promise.all([
+    getPublicConfig(),
+    getSiteOrigin(),
+    getPublicSocialLinks(),
+  ]);
   const description = config.description ?? `Order fresh meals from ${config.displayName}.`;
-  const image = config.logoUrl ?? config.heroImageUrl ?? config.heroImageUrls?.[0];
+  // ogImageUrl is the dedicated social-share image (recommended 1200x630,
+  // real dimensions captured client-side at upload) — a square logo is the
+  // wrong shape for OG/Twitter cards, so it's only used as a last-resort
+  // fallback for tenants who haven't set a dedicated image yet.
+  const fallbackImage = config.logoUrl ?? config.heroImageUrl ?? config.heroImageUrls?.[0];
+  const ogImage = config.ogImageUrl
+    ? {
+        url: config.ogImageUrl,
+        width: config.ogImageWidth,
+        height: config.ogImageHeight,
+        alt: config.ogImageAlt ?? config.displayName,
+      }
+    : fallbackImage
+      ? { url: fallbackImage, alt: config.displayName }
+      : undefined;
+  const locale = OG_LOCALE_MAP[config.defaultLocale] ?? DEFAULT_OG_LOCALE;
+  const site = twitterHandle(socialLinks);
 
   return {
     metadataBase: new URL(origin),
     title: config.displayName,
     description,
-    icons: [{ url: config.faviconUrl ?? "/default-favicon.svg" }],
+    icons: [
+      { url: config.faviconUrl ?? "/default-favicon.svg" },
+      { rel: "apple-touch-icon", url: config.faviconUrl ?? "/apple-touch-icon-default.png" },
+    ],
     alternates: { canonical: "/" },
     other: config.searchConsoleVerification
       ? { "google-site-verification": config.searchConsoleVerification }
@@ -48,15 +92,24 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       url: "/",
       siteName: config.displayName,
-      images: image ? [{ url: image }] : undefined,
+      images: ogImage ? [ogImage] : undefined,
+      locale,
       type: "website",
     },
     twitter: {
-      card: image ? "summary_large_image" : "summary",
+      card: ogImage ? "summary_large_image" : "summary",
       title: config.displayName,
       description,
-      images: image ? [image] : undefined,
+      images: ogImage ? [ogImage] : undefined,
+      site,
     },
+  };
+}
+
+export async function generateViewport(): Promise<Viewport> {
+  const config = await getPublicConfig();
+  return {
+    themeColor: safeHex(config.themeConfig.primaryColor, FALLBACK_COLORS.primaryColor),
   };
 }
 
@@ -101,6 +154,9 @@ export default async function RootLayout({
               <Header
                 displayName={config.displayName}
                 logoUrl={config.logoUrl}
+                headerDisplayMode={config.headerDisplayMode}
+                headerLogoHeightPx={config.headerLogoHeightPx}
+                headerLogoWidthPx={config.headerLogoWidthPx}
                 isAuthenticated={isAuthenticated}
                 isAdmin={isAdmin}
                 subscriptionsEnabled={plansHomeSettings.isEnabled}

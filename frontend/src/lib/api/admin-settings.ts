@@ -10,6 +10,8 @@ export interface ThemeConfig {
   accentColor?: string;
 }
 
+export type BrandDisplayMode = "LOGO" | "NAME" | "BOTH";
+
 export interface BusinessProfile {
   id: string;
   displayName: string;
@@ -17,6 +19,16 @@ export interface BusinessProfile {
   logoUrl: string | null;
   faviconUrl: string | null;
   heroImageUrl: string | null;
+  headerDisplayMode: BrandDisplayMode;
+  footerDisplayMode: BrandDisplayMode;
+  headerLogoHeightPx: number;
+  headerLogoWidthPx: number | null;
+  footerLogoHeightPx: number;
+  footerLogoWidthPx: number | null;
+  ogImageUrl: string | null;
+  ogImageAlt: string | null;
+  ogImageWidth: number | null;
+  ogImageHeight: number | null;
   supportEmail: string | null;
   supportPhone: string | null;
   whatsappBusinessNumber: string | null;
@@ -53,6 +65,16 @@ export type UpdateBusinessProfileInput = Partial<
     | "logoUrl"
     | "faviconUrl"
     | "heroImageUrl"
+    | "headerDisplayMode"
+    | "footerDisplayMode"
+    | "headerLogoHeightPx"
+    | "headerLogoWidthPx"
+    | "footerLogoHeightPx"
+    | "footerLogoWidthPx"
+    | "ogImageUrl"
+    | "ogImageAlt"
+    | "ogImageWidth"
+    | "ogImageHeight"
     | "supportEmail"
     | "supportPhone"
     | "whatsappBusinessNumber"

@@ -87,6 +87,16 @@ export class SettingsService {
       logoUrl: profile.logoUrl ?? undefined,
       faviconUrl: profile.faviconUrl ?? undefined,
       heroImageUrl: profile.heroImageUrl ?? undefined,
+      headerDisplayMode: profile.headerDisplayMode,
+      footerDisplayMode: profile.footerDisplayMode,
+      headerLogoHeightPx: profile.headerLogoHeightPx,
+      headerLogoWidthPx: profile.headerLogoWidthPx ?? undefined,
+      footerLogoHeightPx: profile.footerLogoHeightPx,
+      footerLogoWidthPx: profile.footerLogoWidthPx ?? undefined,
+      ogImageUrl: profile.ogImageUrl ?? undefined,
+      ogImageAlt: profile.ogImageAlt ?? undefined,
+      ogImageWidth: profile.ogImageWidth ?? undefined,
+      ogImageHeight: profile.ogImageHeight ?? undefined,
       themeConfig: this.parseThemeConfig(profile.themeConfig),
       defaultLocale: profile.defaultLocale,
       currency: profile.currency,
@@ -204,6 +214,14 @@ export class SettingsService {
     dto: UpdateBusinessProfileDto,
   ): Promise<BusinessProfile> {
     const { themeConfig, ...rest } = dto;
+    // 0 is the form's "clear back to auto width" sentinel (there's no other
+    // way to distinguish "leave unchanged" from "explicitly unset" in a
+    // PATCH body) — translate it to a real null before it hits Prisma.
+    const headerLogoWidthPx =
+      rest.headerLogoWidthPx === 0 ? null : rest.headerLogoWidthPx;
+    const footerLogoWidthPx =
+      rest.footerLogoWidthPx === 0 ? null : rest.footerLogoWidthPx;
+
     let mergedTheme: Record<string, unknown> | undefined;
     if (themeConfig) {
       const current = await this.settingsRepo.findBusinessProfile(tenantId);
@@ -224,6 +242,8 @@ export class SettingsService {
 
     return this.settingsRepo.updateBusinessProfile(tenantId, {
       ...rest,
+      ...(headerLogoWidthPx !== undefined ? { headerLogoWidthPx } : {}),
+      ...(footerLogoWidthPx !== undefined ? { footerLogoWidthPx } : {}),
       ...(mergedTheme
         ? { themeConfig: mergedTheme as unknown as Prisma.InputJsonValue }
         : {}),

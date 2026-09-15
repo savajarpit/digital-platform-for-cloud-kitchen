@@ -7,12 +7,26 @@ export interface ThemeConfig {
   accentColor?: string;
 }
 
+export type BrandDisplayMode = "LOGO" | "NAME" | "BOTH";
+
 export interface PublicConfig {
   displayName: string;
   description?: string;
   logoUrl?: string;
   faviconUrl?: string;
   heroImageUrl?: string;
+  headerDisplayMode: BrandDisplayMode;
+  footerDisplayMode: BrandDisplayMode;
+  headerLogoHeightPx: number;
+  headerLogoWidthPx?: number;
+  footerLogoHeightPx: number;
+  footerLogoWidthPx?: number;
+  /** Dedicated social-share image — recommended 1200x630px. Falls back to
+   * logoUrl/heroImageUrl in generateMetadata() when not set. */
+  ogImageUrl?: string;
+  ogImageAlt?: string;
+  ogImageWidth?: number;
+  ogImageHeight?: number;
   themeConfig: ThemeConfig;
   defaultLocale: string;
   currency: string;
@@ -59,6 +73,10 @@ export interface PublicConfig {
 
 export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   displayName: "Cloud Kitchen",
+  headerDisplayMode: "BOTH",
+  footerDisplayMode: "BOTH",
+  headerLogoHeightPx: 36,
+  footerLogoHeightPx: 36,
   themeConfig: {
     primaryColor: "#16A34A",
     secondaryColor: "#0EA5E9",

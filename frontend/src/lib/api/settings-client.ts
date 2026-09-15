@@ -10,6 +10,10 @@ export type { PublicConfig };
 // duplicated here rather than imported.
 const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   displayName: "Cloud Kitchen",
+  headerDisplayMode: "BOTH",
+  footerDisplayMode: "BOTH",
+  headerLogoHeightPx: 36,
+  footerLogoHeightPx: 36,
   themeConfig: {
     primaryColor: "#16A34A",
     secondaryColor: "#0EA5E9",

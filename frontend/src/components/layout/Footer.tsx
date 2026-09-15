@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
-import { Leaf, Mail, MapPin, Phone } from "lucide-react";
+import { Mail, MapPin, Phone } from "lucide-react";
 import type { PublicConfig } from "@/lib/api/settings";
 import type { StaticPageSummary } from "@/lib/api/content";
 import type { PublicSocialLink } from "@/lib/api/social-links";
 import { SocialIcon } from "@/components/icons/SocialIcon";
 import { FssaiBadge } from "@/components/icons/FssaiBadge";
+import { BrandLockup } from "./BrandLockup";
 
 export async function Footer({
   config,
@@ -36,15 +37,14 @@ export async function Footer({
         <div className={`grid grid-cols-1 gap-8 sm:gap-10 ${gridColsClass[columnCount]}`}>
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              {config.logoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={config.logoUrl} alt={config.displayName} className="h-9 w-auto" />
-              ) : (
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-600">
-                  <Leaf className="h-5 w-5 text-white" />
-                </div>
-              )}
-              <span className="font-display text-lg font-bold text-white">{config.displayName}</span>
+              <BrandLockup
+                mode={config.footerDisplayMode}
+                logoUrl={config.logoUrl}
+                displayName={config.displayName}
+                heightPx={config.footerLogoHeightPx}
+                widthPx={config.footerLogoWidthPx}
+                variant="footer"
+              />
             </div>
             <p className="max-w-xs text-sm leading-relaxed text-zinc-400">
               {config.description || "Fresh, healthy meals delivered to your door."}

@@ -1,16 +1,21 @@
 import {
   IsBoolean,
   IsEmail,
+  IsEnum,
   IsHexColor,
+  IsInt,
   IsOptional,
   IsString,
   IsUrl,
   Matches,
+  Max,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { BrandDisplayMode } from '../../../generated/prisma';
 import {
   INDIA_PHONE_MESSAGE,
   INDIA_PHONE_REGEX,
@@ -60,6 +65,73 @@ export class UpdateBusinessProfileDto {
   @IsOptional()
   @IsUrl()
   heroImageUrl?: string;
+
+  @ApiPropertyOptional({ enum: BrandDisplayMode, example: BrandDisplayMode.BOTH })
+  @IsOptional()
+  @IsEnum(BrandDisplayMode)
+  headerDisplayMode?: BrandDisplayMode;
+
+  @ApiPropertyOptional({ enum: BrandDisplayMode, example: BrandDisplayMode.BOTH })
+  @IsOptional()
+  @IsEnum(BrandDisplayMode)
+  footerDisplayMode?: BrandDisplayMode;
+
+  @ApiPropertyOptional({ example: 36, description: 'Header logo height in px (24-80)' })
+  @IsOptional()
+  @IsInt()
+  @Min(24)
+  @Max(80)
+  headerLogoHeightPx?: number;
+
+  @ApiPropertyOptional({
+    example: 0,
+    description: 'Header logo max-width in px (24-320); 0 clears back to auto width',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(320)
+  headerLogoWidthPx?: number;
+
+  @ApiPropertyOptional({ example: 36, description: 'Footer logo height in px (24-80)' })
+  @IsOptional()
+  @IsInt()
+  @Min(24)
+  @Max(80)
+  footerLogoHeightPx?: number;
+
+  @ApiPropertyOptional({
+    example: 0,
+    description: 'Footer logo max-width in px (24-320); 0 clears back to auto width',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(320)
+  footerLogoWidthPx?: number;
+
+  @ApiPropertyOptional({ description: 'Social share (OG) image — recommended 1200x630px' })
+  @IsOptional()
+  @IsUrl()
+  ogImageUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Alt text for the social share image' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  ogImageAlt?: string;
+
+  @ApiPropertyOptional({ description: 'Social share image width in px, captured at upload time' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ogImageWidth?: number;
+
+  @ApiPropertyOptional({ description: 'Social share image height in px, captured at upload time' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  ogImageHeight?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

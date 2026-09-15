@@ -15,7 +15,7 @@ export function StructuredData({ config, origin }: StructuredDataProps) {
     config.addressLine1 || config.city || config.state || config.pincode || config.country,
   );
 
-  const image = config.logoUrl ?? config.heroImageUrl ?? config.heroImageUrls?.[0];
+  const image = config.ogImageUrl ?? config.logoUrl ?? config.heroImageUrl ?? config.heroImageUrls?.[0];
 
   const jsonLd = {
     "@context": "https://schema.org",

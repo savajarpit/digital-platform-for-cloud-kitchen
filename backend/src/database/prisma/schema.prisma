@@ -185,6 +185,12 @@ enum SocialPlatform {
   PINTEREST
 }
 
+enum BrandDisplayMode {
+  LOGO
+  NAME
+  BOTH
+}
+
 enum MealSlotType {
   BREAKFAST
   LUNCH
@@ -342,6 +348,24 @@ model BusinessProfile {
   logoUrl                   String?
   faviconUrl                String?
   heroImageUrl              String?
+  // Header/footer brand lockup — how the logo/name are shown, and the
+  // logo's display box, independently configurable per placement. Height
+  // defaults match the storefront's previous hardcoded h-9 (36px); width
+  // null means auto (preserves the pre-existing w-auto behavior).
+  headerDisplayMode         BrandDisplayMode @default(BOTH)
+  footerDisplayMode         BrandDisplayMode @default(BOTH)
+  headerLogoHeightPx        Int              @default(36)
+  headerLogoWidthPx         Int?
+  footerLogoHeightPx        Int              @default(36)
+  footerLogoWidthPx         Int?
+  // Dedicated social-share image — kept separate from logoUrl/heroImageUrl
+  // because a square logo is the wrong shape for OG/Twitter cards (which
+  // want ~1200x630). Width/height are captured client-side at upload time
+  // so generateMetadata can emit og:image:width/height without refetching.
+  ogImageUrl                String?
+  ogImageAlt                String?
+  ogImageWidth              Int?
+  ogImageHeight             Int?
   supportEmail              String?
   supportPhone              String?
   whatsappBusinessNumber    String?

@@ -38,7 +38,7 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(origin),
     title: config.displayName,
     description,
-    icons: config.faviconUrl ? [{ url: config.faviconUrl }] : undefined,
+    icons: [{ url: config.faviconUrl ?? "/default-favicon.svg" }],
     alternates: { canonical: "/" },
     other: config.searchConsoleVerification
       ? { "google-site-verification": config.searchConsoleVerification }

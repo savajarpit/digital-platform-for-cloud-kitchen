@@ -78,8 +78,11 @@ export class AuthController {
   @ApiOperation({ summary: 'Login with email and password' })
   @ApiResponse({ status: 200, description: 'Login successful' })
   @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(
+    @Body() dto: LoginDto,
+    @CurrentTenant('id') tenantId: string | undefined,
+  ) {
+    return this.authService.login(dto, tenantId);
   }
 
   @Public()
@@ -88,8 +91,11 @@ export class AuthController {
   @Throttle({ medium: { limit: 5, ttl: 60_000 } })
   @ResponseMessage('If that email is registered, a reset link has been sent')
   @ApiOperation({ summary: 'Request a password reset link by email' })
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
+  forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+    @CurrentTenant('id') tenantId: string | undefined,
+  ) {
+    return this.authService.forgotPassword(dto, tenantId);
   }
 
   @Public()

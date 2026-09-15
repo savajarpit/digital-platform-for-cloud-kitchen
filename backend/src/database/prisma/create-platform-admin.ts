@@ -61,7 +61,10 @@ async function main() {
       return;
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    // email is unique per tenant now, not globally — findFirst (not
+    // findUnique) since there's no tenant to scope this bootstrap check to
+    // yet (the tenant it'll attach to is picked further down).
+    const existingUser = await prisma.user.findFirst({ where: { email } });
     if (existingUser) {
       throw new Error(`A user with email "${email}" already exists.`);
     }

@@ -22,9 +22,30 @@ export class UsersRepository {
     });
   }
 
-  async findByEmail(email: string): Promise<User | null> {
+  /**
+   * email is unique per tenant, not globally (see schema.prisma's User
+   * model) — the same person can be an independent account of more than
+   * one tenant. Always scope this to the tenant the request is actually
+   * for; never look up "by email alone" for a CUSTOMER/STAFF/OWNER lookup.
+   */
+  async findByEmail(email: string, tenantId: string): Promise<User | null> {
     return this.prisma.user.findUnique({
-      where: { email, deletedAt: null },
+      where: { tenantId_email: { tenantId, email }, deletedAt: null },
+    });
+  }
+
+  /**
+   * SUPER_ADMIN is the one role not really "of" a tenant — its `tenantId`
+   * FK is just schema plumbing (required on every User row). Used only for
+   * the platform-admin-host login path, where there's no tenant context to
+   * scope by. There's no self-serve path to this role (see
+   * create-platform-admin.ts), so real SUPER_ADMIN accounts stay few and
+   * deliberately-created — email collisions across tenantId here aren't a
+   * practical concern the way they'd be for CUSTOMER/STAFF/OWNER.
+   */
+  async findSuperAdminByEmail(email: string): Promise<User | null> {
+    return this.prisma.user.findFirst({
+      where: { email, role: Role.SUPER_ADMIN, deletedAt: null },
     });
   }
 

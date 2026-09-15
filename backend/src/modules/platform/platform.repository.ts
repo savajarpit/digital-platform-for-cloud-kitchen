@@ -171,13 +171,6 @@ export class PlatformRepository {
     return this.prisma.tenant.findUnique({ where: { customDomain } });
   }
 
-  async findUserByEmail(email: string) {
-    return this.prisma.user.findUnique({
-      where: { email },
-      select: { id: true },
-    });
-  }
-
   updateTenant(
     id: string,
     data: {

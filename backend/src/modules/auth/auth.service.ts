@@ -70,7 +70,7 @@ export class AuthService {
       profile?.timezone ?? 'Asia/Kolkata',
     );
 
-    const existing = await this.usersRepo.findByEmail(dto.email);
+    const existing = await this.usersRepo.findByEmail(dto.email, tenantId);
     if (existing) throw new ConflictException('Email already in use');
 
     const [hasTerms, hasPrivacy] = await Promise.all([
@@ -202,20 +202,18 @@ export class AuthService {
     dto: LoginDto,
     tenantId: string | undefined,
   ): Promise<AuthTokens> {
-    const user = await this.usersRepo.findByEmail(dto.email);
+    // email is unique per tenant, not globally — on a specific tenant's
+    // domain this lookup can only ever find that tenant's own user, so a
+    // Tenant A account is structurally invisible from Tenant B's login form.
+    // On the platform admin host (tenantId undefined) only a real
+    // SUPER_ADMIN can ever be found.
+    const user = tenantId
+      ? await this.usersRepo.findByEmail(dto.email, tenantId)
+      : await this.usersRepo.findSuperAdminByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
     const valid = await HashUtil.compare(dto.password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
-
-    // email is globally unique, not per-tenant, so the lookup above alone
-    // doesn't confirm this user belongs to the tenant they're actually
-    // logging in through (or, on the platform admin host, that they're
-    // SUPER_ADMIN at all) — same generic message as a wrong password,
-    // never reveal that the email exists under a different tenant.
-    if (user.role !== Role.SUPER_ADMIN && user.tenantId !== tenantId) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
 
     if (!user.isActive) throw new UnauthorizedException('Account is disabled');
 
@@ -234,14 +232,15 @@ export class AuthService {
     dto: ForgotPasswordDto,
     tenantId: string | undefined,
   ): Promise<void> {
-    const user = await this.usersRepo.findByEmail(dto.email);
+    // Same per-tenant scoping as login() — see the comment there.
+    const user = tenantId
+      ? await this.usersRepo.findByEmail(dto.email, tenantId)
+      : await this.usersRepo.findSuperAdminByEmail(dto.email);
     // Always behave the same whether the email exists or not — don't let
-    // this endpoint be used to enumerate registered accounts. Same reasoning
-    // extends to a tenant mismatch: silently no-op rather than error, so
-    // Tenant B's forgot-password form can't be used to confirm a Tenant A
-    // account exists, or trigger a reset email for it.
+    // this endpoint be used to enumerate registered accounts. A tenant
+    // mismatch already looks identical to "no such email", since the
+    // lookup itself never finds a different tenant's user.
     if (!user) return;
-    if (user.role !== Role.SUPER_ADMIN && user.tenantId !== tenantId) return;
 
     const token = CryptoUtil.generateToken(32);
     await this.redis.set(

@@ -53,11 +53,10 @@ export class PlatformService {
   ) {}
 
   async createTenant(dto: CreateTenantDto) {
-    const existingEmail = await this.platformRepo.findUserByEmail(
-      dto.ownerEmail,
-    );
-    if (existingEmail) throw new ConflictException('Email already in use');
-
+    // No email-collision check needed here — email is unique per tenant,
+    // not globally, and this tenant is brand new (zero existing users), so
+    // it can't collide with itself. The same owner email already existing
+    // under a different tenant is expected/allowed by design.
     if (dto.customDomain) {
       const existingDomain = await this.platformRepo.findByCustomDomain(
         dto.customDomain,

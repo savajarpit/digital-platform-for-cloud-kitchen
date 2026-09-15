@@ -23,7 +23,7 @@ export class UsersService {
   ) {}
 
   async create(dto: CreateUserDto, tenantId: string): Promise<User> {
-    const exists = await this.usersRepo.findByEmail(dto.email);
+    const exists = await this.usersRepo.findByEmail(dto.email, tenantId);
     if (exists) throw new ConflictException('Email already in use');
 
     const passwordHash = await HashUtil.hash(dto.password);

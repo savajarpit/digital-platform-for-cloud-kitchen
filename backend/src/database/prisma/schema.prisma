@@ -294,7 +294,13 @@ model Tenant {
 
 model User {
   id              String    @id @default(uuid())
-  email           String    @unique
+  // Unique per tenant, not globally — the same person can be an
+  // independent CUSTOMER/STAFF/OWNER of more than one tenant business with
+  // the same email, each a separate account/order-history/employment
+  // relationship. SUPER_ADMIN is the one exception (see
+  // UsersRepository.findSuperAdminByEmail) — it isn't really "of" a tenant,
+  // that FK exists only because tenantId is required on every User row.
+  email           String
   phone           String?
   passwordHash    String
   firstName       String
@@ -317,6 +323,7 @@ model User {
   platformTermsAcceptances PlatformTermsAcceptance[]
   refundsRecorded          Refund[]
 
+  @@unique([tenantId, email])
   @@index([tenantId])
   @@index([email])
   @@index([tenantId, role])

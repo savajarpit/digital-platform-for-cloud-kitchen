@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Clock, Plus, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -14,7 +15,9 @@ import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { OrderHoursSkeleton } from "@/components/admin/skeletons/OrderHoursSkeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { InstantDeliveryCard } from "@/components/admin/InstantDeliveryCard";
 import { TimeInput12h } from "@/components/ui/TimeInput12h";
@@ -29,49 +32,67 @@ const DAYS: { key: keyof OperatingHours; label: string }[] = [
   { key: "sun", label: "Sunday" },
 ];
 
+type FormState = {
+  hours: OperatingHours;
+  cutoff: string;
+  closedDates: string[];
+  isTemporarilyClosed: boolean;
+  closureReason: string;
+};
+
+function toForm(s: OrderAcceptanceSettings): FormState {
+  return {
+    hours: s.operatingHours ?? {},
+    cutoff: s.dailyCutoffTime ?? "",
+    closedDates: s.closedDates ?? [],
+    isTemporarilyClosed: s.isTemporarilyClosed,
+    closureReason: s.closureReason ?? "",
+  };
+}
+
 export default function OrderHoursPage() {
   const { showToast } = useToast();
   const canEdit = usePermission(PERMISSIONS.ORDER_HOURS_EDIT);
 
-  const [settings, setSettings] = useState<OrderAcceptanceSettings | null>(null);
-  const [hours, setHours] = useState<OperatingHours>({});
-  const [cutoff, setCutoff] = useState("");
-  const [closedDates, setClosedDates] = useState<string[]>([]);
+  const queryClient = useQueryClient();
+  const queryKey = qk.admin("settings", "hours");
+  const { data, isError } = useQuery({
+    queryKey,
+    queryFn: getOrderAcceptance,
+    staleTime: STALE.list,
+  });
+  // Unsaved edits live in `draft`; a background refetch never overwrites them.
+  const [draft, setDraft] = useState<FormState | null>(null);
+  const form = draft ?? (data ? toForm(data) : null);
   const [newClosedDate, setNewClosedDate] = useState("");
-  const [isTemporarilyClosed, setIsTemporarilyClosed] = useState(false);
-  const [closureReason, setClosureReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getOrderAcceptance()
-      .then((s) => {
-        setSettings(s);
-        setHours(s.operatingHours ?? {});
-        setCutoff(s.dailyCutoffTime ?? "");
-        setClosedDates(s.closedDates ?? []);
-        setIsTemporarilyClosed(s.isTemporarilyClosed);
-        setClosureReason(s.closureReason ?? "");
-      })
-      .catch(() => setError("Couldn't load order hours."));
-  }, []);
+  function patchForm(fn: (f: FormState) => Partial<FormState>) {
+    setDraft((prev) => {
+      const base = prev ?? toForm(data!);
+      return { ...base, ...fn(base) };
+    });
+  }
 
   function updateDay(day: keyof OperatingHours, patch: DayHours) {
-    setHours((prev) => ({ ...prev, [day]: { ...prev[day], ...patch } }));
+    patchForm((f) => ({ hours: { ...f.hours, [day]: { ...f.hours[day], ...patch } } }));
   }
 
   function addClosedDate() {
-    if (!newClosedDate || closedDates.includes(newClosedDate)) return;
-    setClosedDates((prev) => [...prev, newClosedDate].sort());
+    if (!form || !newClosedDate || form.closedDates.includes(newClosedDate)) return;
+    patchForm((f) => ({ closedDates: [...f.closedDates, newClosedDate].sort() }));
     setNewClosedDate("");
   }
 
   function removeClosedDate(date: string) {
-    setClosedDates((prev) => prev.filter((d) => d !== date));
+    patchForm((f) => ({ closedDates: f.closedDates.filter((d) => d !== date) }));
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!form) return;
+    const { hours, cutoff, closedDates, isTemporarilyClosed, closureReason } = form;
     setError(null);
     setSaving(true);
     try {
@@ -82,7 +103,9 @@ export default function OrderHoursPage() {
         isTemporarilyClosed,
         closureReason: closureReason || undefined,
       });
-      setSettings(updated);
+      queryClient.setQueryData(queryKey, updated);
+      queryClient.invalidateQueries({ queryKey });
+      setDraft(null);
       showToast("Order hours saved", "success");
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Couldn't save changes.";
@@ -93,14 +116,14 @@ export default function OrderHoursPage() {
     }
   }
 
-  if (!settings) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-40 w-full" />
-      </div>
+  if (!form) {
+    return isError ? (
+      <EmptyState compact icon={Clock} title="Couldn't load order hours." />
+    ) : (
+      <OrderHoursSkeleton />
     );
   }
+  const { hours, cutoff, closedDates, isTemporarilyClosed, closureReason } = form;
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -129,13 +152,13 @@ export default function OrderHoursPage() {
                 Stop accepting new orders immediately, regardless of hours below.
               </p>
             </div>
-            <Toggle checked={isTemporarilyClosed} onChange={setIsTemporarilyClosed} disabled={!canEdit} />
+            <Toggle checked={isTemporarilyClosed} onChange={(v) => patchForm(() => ({ isTemporarilyClosed: v }))} disabled={!canEdit} />
           </div>
           {isTemporarilyClosed && (
             <input
               type="text"
               value={closureReason}
-              onChange={(e) => setClosureReason(e.target.value)}
+              onChange={(e) => patchForm(() => ({ closureReason: e.target.value }))}
               placeholder="Reason shown to customers (optional)"
               className="input w-full"
             />
@@ -171,7 +194,7 @@ export default function OrderHoursPage() {
             <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Daily cutoff time
             </label>
-            <TimeInput12h value={cutoff} onChange={setCutoff} disabled={!canEdit} />
+            <TimeInput12h value={cutoff} onChange={(v) => patchForm(() => ({ cutoff: v }))} disabled={!canEdit} />
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
               Orders stop being accepted after this time each day, even if still within operating hours.
             </p>
@@ -198,7 +221,7 @@ export default function OrderHoursPage() {
               </span>
             ))}
             {closedDates.length === 0 && (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">No closed dates set.</p>
+              <EmptyState compact title="No closed dates set." />
             )}
           </div>
           <div className="flex items-center gap-2">

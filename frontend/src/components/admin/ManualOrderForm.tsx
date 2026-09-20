@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import {
@@ -8,12 +9,15 @@ import {
   createManualOrder,
   type CreateManualOrderInput,
 } from "@/lib/api/admin-orders";
-import { getCustomer, type Customer, type CustomerAddress } from "@/lib/api/admin-customers";
-import { listMeals, type Meal } from "@/lib/api/admin-menu";
-import { checkServiceability, type ServiceabilityResult } from "@/lib/api/addresses";
-import { getDeliverySlots, type DeliverySlot } from "@/lib/api/delivery-slots";
+import { getCustomer, type Customer } from "@/lib/api/admin-customers";
+import { listMeals } from "@/lib/api/admin-menu";
+import { checkServiceability } from "@/lib/api/addresses";
+import { getDeliverySlots } from "@/lib/api/delivery-slots";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateOrderAreas } from "@/lib/query/admin-invalidation";
 import { CustomerCombobox } from "@/components/admin/CustomerCombobox";
 import { MealCombobox } from "@/components/admin/MealCombobox";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
 import { formatPriceFromPaise } from "@/lib/format/currency";
@@ -27,17 +31,15 @@ export function ManualOrderForm() {
   const router = useRouter();
   const { showToast } = useToast();
 
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [addresses, setAddresses] = useState<CustomerAddress[] | null>(null);
-  const [addressId, setAddressId] = useState("");
-  const [serviceability, setServiceability] = useState<ServiceabilityResult | null>(null);
+  const queryClient = useQueryClient();
 
-  const [meals, setMeals] = useState<Meal[]>([]);
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [addressOverride, setAddressOverride] = useState<string | null>(null);
+
   const [cart, setCart] = useState<CartRow[]>([{ mealId: "", quantity: 1 }]);
 
-  const [slots, setSlots] = useState<DeliverySlot[]>([]);
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().slice(0, 10));
-  const [deliverySlotId, setDeliverySlotId] = useState("");
+  const [slotOverride, setSlotOverride] = useState<string | null>(null);
 
   const [couponCode, setCouponCode] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "UPI">("CASH");
@@ -46,48 +48,66 @@ export function ManualOrderForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    listMeals({ limit: 100 }).then(({ data }) => setMeals(data)).catch(() => setMeals([]));
-    getDeliverySlots()
-      .then((config) => {
-        setSlots(config.slots);
-        setDeliverySlotId(config.slots[0]?.id ?? "");
-      })
-      .catch(() => setSlots([]));
-  }, []);
+  const { data: mealsPage } = useQuery({
+    queryKey: qk.admin("menu", "meals", "known", 100),
+    queryFn: () => listMeals({ limit: 100 }),
+    staleTime: STALE.list,
+  });
+  const meals = mealsPage?.data ?? [];
 
-  // A customer switch is a discrete user action, not something to
-  // synchronize via an effect — handled directly in the combobox's
-  // onChange so the stale-previous-customer's addresses are cleared in the
-  // same tick a new fetch starts, never left lingering for a render.
+  const { data: slotsConfig } = useQuery({
+    queryKey: qk.admin("settings", "delivery-slots"),
+    queryFn: getDeliverySlots,
+    staleTime: STALE.list,
+  });
+  const slots = slotsConfig?.slots ?? [];
+  const deliverySlotId = slotOverride ?? slots[0]?.id ?? "";
+
+  // Same key as the customer detail page. Switching customer is a discrete
+  // user action handled in the combobox's onChange: it drops the previous
+  // customer's address choice so a stale one is never shown.
+  const customerQuery = useQuery({
+    queryKey: qk.admin("customers", "detail", customer?.id ?? ""),
+    queryFn: () => getCustomer(customer!.id),
+    enabled: Boolean(customer),
+    staleTime: STALE.short,
+  });
+  const addresses = customer
+    ? customerQuery.isError
+      ? []
+      : (customerQuery.data?.addresses ?? null)
+    : null;
+  const addressId =
+    addressOverride ??
+    addresses?.find((a) => a.isDefault)?.id ??
+    addresses?.[0]?.id ??
+    "";
+
   function handleCustomerChange(next: Customer | null) {
     setCustomer(next);
-    setAddresses(null);
-    setAddressId("");
-    if (!next) return;
-    getCustomer(next.id)
-      .then((detail) => {
-        setAddresses(detail.addresses);
-        setAddressId(detail.addresses.find((a) => a.isDefault)?.id ?? detail.addresses[0]?.id ?? "");
-      })
-      .catch(() => setAddresses([]));
+    setAddressOverride(null);
   }
 
-  useEffect(() => {
-    // No address selected yet — nothing to fetch. Leaves any prior
-    // serviceability result as-is, which is harmless: addressId is reset to
-    // "" whenever the customer changes (see handleCustomerChange), and
-    // canSubmit already requires a real addressId regardless.
-    const address = addresses?.find((a) => a.id === addressId);
-    if (!address) return;
-    checkServiceability({
-      pincode: address.pincode,
-      lat: address.lat ?? undefined,
-      lng: address.lng ?? undefined,
-    })
-      .then(setServiceability)
-      .catch(() => setServiceability(null));
-  }, [addresses, addressId]);
+  // Serviceability only matters once an address is chosen; canSubmit already
+  // requires a real addressId regardless.
+  const selectedAddress = addresses?.find((a) => a.id === addressId);
+  const { data: serviceability = null } = useQuery({
+    queryKey: qk.admin(
+      "orders",
+      "serviceability",
+      selectedAddress?.pincode ?? "",
+      selectedAddress?.lat ?? null,
+      selectedAddress?.lng ?? null,
+    ),
+    queryFn: () =>
+      checkServiceability({
+        pincode: selectedAddress!.pincode,
+        lat: selectedAddress!.lat ?? undefined,
+        lng: selectedAddress!.lng ?? undefined,
+      }).catch(() => null),
+    enabled: Boolean(selectedAddress),
+    staleTime: STALE.list,
+  });
 
   function updateRow(index: number, patch: Partial<CartRow>) {
     setCart((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -129,6 +149,7 @@ export function ManualOrderForm() {
       };
       const { order } = await createManualOrder(input);
       showToast("Order created", "success");
+      void invalidateOrderAreas(queryClient);
       router.push(`/admin/orders/${order.id}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't create the order.");
@@ -155,13 +176,13 @@ export function ManualOrderForm() {
               Delivery address
             </label>
             {!addresses ? (
-              <p className="text-xs text-zinc-400">Loading addresses…</p>
+              <Skeleton className="h-[42px] w-full rounded-xl" />
             ) : addresses.length === 0 ? (
               <p className="text-xs text-red-600 dark:text-red-400">
                 This customer has no saved addresses yet.
               </p>
             ) : (
-              <Select value={addressId} onValueChange={setAddressId}>
+              <Select value={addressId} onValueChange={setAddressOverride}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -245,7 +266,7 @@ export function ManualOrderForm() {
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Delivery slot</label>
-          <Select value={deliverySlotId} onValueChange={setDeliverySlotId}>
+          <Select value={deliverySlotId} onValueChange={setSlotOverride}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>

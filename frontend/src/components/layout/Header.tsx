@@ -8,7 +8,6 @@ import { CalendarClock, LayoutDashboard, LogOut, MapPin, Menu, Package, Shopping
 import { logout } from "@/lib/api/auth";
 import { useToast } from "@/context/ToastContext";
 import { useCartCount } from "@/lib/store/cart-store";
-import { useHasSubscriptions } from "@/lib/hooks/useHasSubscriptions";
 import type { BrandDisplayMode } from "@/lib/api/settings";
 import { BrandLockup } from "./BrandLockup";
 import { ThemeToggle } from "./ThemeToggle";
@@ -42,7 +41,6 @@ export function Header({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const cartCount = useCartCount();
-  const hasSubscriptions = useHasSubscriptions(isAuthenticated);
 
   const navLinks = [
     { href: "/", label: t("home") },
@@ -110,7 +108,7 @@ export function Header({
             )}
           </Link>
           {isAuthenticated ? (
-            <UserMenu isAdmin={isAdmin} hasSubscriptions={hasSubscriptions} />
+            <UserMenu isAdmin={isAdmin} subscriptionsEnabled={subscriptionsEnabled} />
           ) : (
             <>
               <Link
@@ -188,15 +186,7 @@ export function Header({
                   <Package className="h-4 w-4" />
                   {t("myOrders")}
                 </Link>
-                <Link
-                  href="/account/addresses"
-                  className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  <MapPin className="h-4 w-4" />
-                  {t("myAddresses")}
-                </Link>
-                {hasSubscriptions && (
+                {subscriptionsEnabled && (
                   <Link
                     href="/account/subscriptions"
                     className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
@@ -206,6 +196,14 @@ export function Header({
                     {t("mySubscriptions")}
                   </Link>
                 )}
+                <Link
+                  href="/account/addresses"
+                  className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  <MapPin className="h-4 w-4" />
+                  {t("myAddresses")}
+                </Link>
                 {isAdmin && (
                   <Link
                     href="/admin"

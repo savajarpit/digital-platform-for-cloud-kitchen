@@ -1,16 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { MessageSquare } from "lucide-react";
-import {
-  ApiError,
-  getWhatsAppTemplatePreviews,
-  type WhatsAppTemplatePreview,
-} from "@/lib/api/notification-templates";
+import { getWhatsAppTemplatePreviews } from "@/lib/api/notification-templates";
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
-import { useToast } from "@/context/ToastContext";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { DividedListSkeleton } from "@/components/admin/skeletons/DividedListSkeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 
 const KEY_LABEL: Record<string, string> = {
@@ -26,18 +23,13 @@ const KEY_LABEL: Record<string, string> = {
  * doesn't let anyone rewrite the wording itself (see the backend's own
  * comment on PlatformWhatsAppTemplate for why). */
 export function WhatsAppTemplatesCard() {
-  const { showToast } = useToast();
   const canView = usePermission(PERMISSIONS.NOTIFICATION_TEMPLATES_WHATSAPP_EDIT);
-  const [previews, setPreviews] = useState<WhatsAppTemplatePreview[] | null>(null);
-
-  useEffect(() => {
-    if (!canView) return;
-    getWhatsAppTemplatePreviews()
-      .then(setPreviews)
-      .catch((err: unknown) =>
-        showToast(err instanceof ApiError ? err.message : "Couldn't load WhatsApp preview.", "error"),
-      );
-  }, [canView, showToast]);
+  const { data: previews, isError } = useQuery({
+    queryKey: qk.admin("whatsapp-templates"),
+    queryFn: getWhatsAppTemplatePreviews,
+    staleTime: STALE.list,
+    enabled: canView,
+  });
 
   return (
     <div className="card p-6">
@@ -55,7 +47,11 @@ export function WhatsAppTemplatesCard() {
       {!canView ? (
         <ViewOnlyNotice />
       ) : !previews ? (
-        <Skeleton className="h-32 w-full" />
+        isError ? (
+          <EmptyState compact title="Couldn't load WhatsApp preview." />
+        ) : (
+          <DividedListSkeleton rows={4} lines={3} />
+        )
       ) : (
         <div className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
           {previews.map((p) => (

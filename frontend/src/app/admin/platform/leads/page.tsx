@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { UserPlus } from "lucide-react";
 import {
   ApiError,
@@ -9,25 +9,30 @@ import {
   type PlatformLead,
   type PlatformLeadStatus,
 } from "@/lib/api/platform-leads";
+import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PlatformRowListSkeleton } from "@/components/admin/PlatformRowListSkeleton";
 import { PlatformLeadRow } from "@/components/admin/PlatformLeadRow";
 
 export default function PlatformLeadsAdminPage() {
-  const [leads, setLeads] = useState<PlatformLead[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
-
-  useEffect(() => {
-    listPlatformLeads()
-      .then(setLeads)
-      .catch(() => setError("Couldn't load leads."));
-  }, []);
+  const queryClient = useQueryClient();
+  const listKey = qk.admin("platform", "leads");
+  const { data: leads, isError } = useQuery({
+    queryKey: listKey,
+    queryFn: listPlatformLeads,
+    staleTime: STALE.short,
+  });
+  const error = isError ? "Couldn't load leads." : null;
 
   async function handleUpdateStatus(id: string, status: PlatformLeadStatus) {
     try {
       const updated = await updatePlatformLeadStatus(id, status);
-      setLeads((prev) => prev?.map((l) => (l.id === id ? updated : l)) ?? null);
+      queryClient.setQueryData<PlatformLead[]>(listKey, (prev) =>
+        prev?.map((l) => (l.id === id ? updated : l)),
+      );
+      void queryClient.invalidateQueries({ queryKey: listKey });
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update lead.", "error");
     }
@@ -51,12 +56,9 @@ export default function PlatformLeadsAdminPage() {
       )}
 
       {!leads ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-40 w-full" />
-        </div>
+        isError ? null : <PlatformRowListSkeleton />
       ) : leads.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No leads yet.</p>
+        <EmptyState compact title="No leads yet." />
       ) : (
         <div className="card flex flex-col gap-2 p-6">
           {leads.map((lead) => (

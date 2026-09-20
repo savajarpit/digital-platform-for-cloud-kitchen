@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Image as ImageIcon } from "lucide-react";
 import {
   ApiError,
   getHomePageContent,
   updateHomePageContent,
+  type HomePageContent,
   type UpdateHomePageContentInput,
 } from "@/lib/api/admin-home-content";
 import { useToast } from "@/context/ToastContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { HomeContentEditorSkeleton } from "@/components/admin/skeletons/HomeContentEditorSkeleton";
 import { HeroImagesInput } from "@/components/admin/HeroImagesInput";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 
@@ -30,33 +34,39 @@ type FormState = {
   ctaSecondaryLink: string;
 };
 
+function toForm(content: HomePageContent | null): FormState {
+  return {
+    heroTagline: content?.heroTagline ?? "",
+    heroTitle: content?.heroTitle ?? "",
+    heroSubtitle: content?.heroSubtitle ?? "",
+    heroImageUrls: content?.heroImageUrls ?? [],
+    reviewsSectionTitle: content?.reviewsSectionTitle ?? "",
+    reviewsSectionDescription: content?.reviewsSectionDescription ?? "",
+    ctaEnabled: content?.ctaEnabled ?? true,
+    ctaTitle: content?.ctaTitle ?? "",
+    ctaDescription: content?.ctaDescription ?? "",
+    ctaPrimaryLabel: content?.ctaPrimaryLabel ?? "",
+    ctaPrimaryLink: content?.ctaPrimaryLink ?? "",
+    ctaSecondaryLabel: content?.ctaSecondaryLabel ?? "",
+    ctaSecondaryLink: content?.ctaSecondaryLink ?? "",
+  };
+}
+
 export function HomePageContentEditor({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
-  const [form, setForm] = useState<FormState | null>(null);
+  const queryClient = useQueryClient();
+  const queryKey = qk.admin("home", "content");
+  // `data` is null when no content has been saved yet, so "loaded" means !== undefined.
+  const { data, isError } = useQuery({
+    queryKey,
+    queryFn: getHomePageContent,
+    staleTime: STALE.list,
+  });
+  // Unsaved edits live in `draft`; a background refetch never overwrites them.
+  const [draft, setDraft] = useState<FormState | null>(null);
+  const form = draft ?? (data !== undefined ? toForm(data) : null);
+  const setForm = setDraft;
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    getHomePageContent()
-      .then((content) =>
-        setForm({
-          heroTagline: content?.heroTagline ?? "",
-          heroTitle: content?.heroTitle ?? "",
-          heroSubtitle: content?.heroSubtitle ?? "",
-          heroImageUrls: content?.heroImageUrls ?? [],
-          reviewsSectionTitle: content?.reviewsSectionTitle ?? "",
-          reviewsSectionDescription: content?.reviewsSectionDescription ?? "",
-          ctaEnabled: content?.ctaEnabled ?? true,
-          ctaTitle: content?.ctaTitle ?? "",
-          ctaDescription: content?.ctaDescription ?? "",
-          ctaPrimaryLabel: content?.ctaPrimaryLabel ?? "",
-          ctaPrimaryLink: content?.ctaPrimaryLink ?? "",
-          ctaSecondaryLabel: content?.ctaSecondaryLabel ?? "",
-          ctaSecondaryLink: content?.ctaSecondaryLink ?? "",
-        }),
-      )
-      .catch(() => showToast("Couldn't load home page content.", "error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -78,7 +88,10 @@ export function HomePageContentEditor({ canEdit }: { canEdit: boolean }) {
         ctaSecondaryLabel: form.ctaSecondaryLabel || undefined,
         ctaSecondaryLink: form.ctaSecondaryLink || undefined,
       };
-      await updateHomePageContent(input);
+      const updated = await updateHomePageContent(input);
+      queryClient.setQueryData(queryKey, updated);
+      queryClient.invalidateQueries({ queryKey });
+      setDraft(null);
       showToast("Home page content saved", "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't save changes.", "error");
@@ -88,11 +101,12 @@ export function HomePageContentEditor({ canEdit }: { canEdit: boolean }) {
   }
 
   if (!form) {
-    return (
+    return isError ? (
       <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-32 w-full" />
+        <EmptyState compact title="Couldn't load home page content." />
       </div>
+    ) : (
+      <HomeContentEditorSkeleton />
     );
   }
 

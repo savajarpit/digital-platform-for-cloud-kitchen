@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Mail, Send } from "lucide-react";
 import {
   ApiError,
@@ -9,6 +10,8 @@ import {
   updatePlatformEmailTemplate,
   type PlatformEmailTemplate,
 } from "@/lib/api/platform-email-templates";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmailTemplateEditorForm } from "@/components/admin/EmailTemplateEditorForm";
@@ -21,24 +24,25 @@ const SCOPE_LABEL: Record<PlatformEmailTemplate["scope"], string> = {
 
 export function PlatformEmailTemplateList() {
   const { showToast } = useToast();
-  const [templates, setTemplates] = useState<PlatformEmailTemplate[] | null>(null);
+  const queryClient = useQueryClient();
+  const listKey = qk.admin("platform", "email-templates");
+  const { data: templates, isError } = useQuery({
+    queryKey: listKey,
+    queryFn: listPlatformEmailTemplates,
+    staleTime: STALE.short,
+  });
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
-
-  useEffect(() => {
-    listPlatformEmailTemplates()
-      .then(setTemplates)
-      .catch(() => showToast("Couldn't load email templates.", "error"));
-  }, [showToast]);
 
   async function handleSave(key: string, subject: string, bodyHtml: string) {
     setSaving(true);
     try {
       const updated = await updatePlatformEmailTemplate(key, { subject, bodyHtml });
-      setTemplates((prev) =>
+      queryClient.setQueryData<PlatformEmailTemplate[]>(listKey, (prev) =>
         prev ? prev.map((t) => (t.key === key ? updated : t)) : prev,
       );
+      void queryClient.invalidateQueries({ queryKey: listKey });
       showToast("Template saved", "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't save template.", "error");
@@ -60,10 +64,28 @@ export function PlatformEmailTemplateList() {
   }
 
   if (!templates) {
+    if (isError) return <EmptyState compact icon={Mail} title="Couldn't load email templates." />;
     return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="mt-4 h-40 w-full" />
+      <div className="flex flex-col gap-6" aria-busy="true">
+        {[4, 3].map((rows, i) => (
+          <div key={i} className="card p-6">
+            <div className="mb-4 flex items-center gap-2">
+              <Skeleton className="h-4 w-4" />
+              <Skeleton className="h-5 w-72 max-w-full" />
+            </div>
+            <div className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
+              {Array.from({ length: rows }).map((_, r) => (
+                <div key={r} className="flex items-center justify-between gap-3 py-3">
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-3 w-64 max-w-full" />
+                  </div>
+                  <Skeleton className="h-4 w-4 shrink-0" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }

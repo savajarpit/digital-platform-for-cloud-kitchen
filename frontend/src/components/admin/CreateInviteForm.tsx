@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, createSubscriptionInvite, type BillingCycle } from "@/lib/api/platform";
-import { listPlatformPlansAdmin, type PlatformPlan } from "@/lib/api/admin-platform-plans";
+import { listPlatformPlansAdmin } from "@/lib/api/admin-platform-plans";
+import { qk, STALE } from "@/lib/query/keys";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { useToast } from "@/context/ToastContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
@@ -15,24 +18,26 @@ export function CreateInviteForm({
   onCreated: (activationUrl: string) => void;
 }) {
   const { showToast } = useToast();
-  const [plans, setPlans] = useState<PlatformPlan[] | null>(null);
-  const [selectedPlanId, setSelectedPlanId] = useState("");
-  const [manualEntry, setManualEntry] = useState(false);
+  const queryClient = useQueryClient();
+  const plansQuery = useQuery({
+    queryKey: qk.admin("platform", "plans"),
+    queryFn: listPlatformPlansAdmin,
+    staleTime: STALE.short,
+  });
+  const plans = plansQuery.data ?? null;
+  // Picks are drafts over the fetched defaults, so a background refetch never
+  // overwrites what the admin already chose.
+  const [planDraft, setPlanDraft] = useState<string | null>(null);
+  const [manualDraft, setManualDraft] = useState<boolean | null>(null);
+  const selectedPlanId = planDraft ?? plans?.[0]?.id ?? "";
+  const manualEntry = manualDraft ?? (plans ? plans.length === 0 : plansQuery.isError);
+  const setSelectedPlanId = setPlanDraft;
+  const setManualEntry = setManualDraft;
   const [planCode, setPlanCode] = useState("STANDARD");
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("MONTHLY");
   const [amountRupees, setAmountRupees] = useState("999");
   const [trialDays, setTrialDays] = useState("");
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    listPlatformPlansAdmin()
-      .then((list) => {
-        setPlans(list);
-        if (list.length > 0) setSelectedPlanId(list[0].id);
-        else setManualEntry(true);
-      })
-      .catch(() => setManualEntry(true));
-  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -48,6 +53,7 @@ export function CreateInviteForm({
           : { planId: selectedPlanId }),
         trialDays: trialDays ? Math.round(Number(trialDays)) : undefined,
       });
+      void queryClient.invalidateQueries({ queryKey: qk.admin("platform") });
       onCreated(activationUrl);
       showToast("Activation invite created and emailed to the owner", "success");
     } catch (err) {
@@ -87,7 +93,7 @@ export function CreateInviteForm({
           </button>
         </div>
       ) : plans === null ? (
-        <div className="h-10 w-full max-w-xs animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800" />
+        <Skeleton className="h-[42px] w-full max-w-xs rounded-xl" />
       ) : (
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

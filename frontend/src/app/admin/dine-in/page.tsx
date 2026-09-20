@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Utensils } from "lucide-react";
-import { listKitchenZones, type KitchenZone } from "@/lib/api/admin-settings";
-import { listDiningTables, type DiningTable } from "@/lib/api/dine-in";
+import { listKitchenZones } from "@/lib/api/admin-settings";
+import { listDiningTables } from "@/lib/api/dine-in";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { usePermission } from "@/context/PermissionsContext";
 import { useFeatures } from "@/context/FeaturesContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
@@ -11,7 +14,7 @@ import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { DineInFloorView } from "@/components/admin/DineInFloorView";
 import { TableManagementPanel } from "@/components/admin/TableManagementPanel";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { DineInFloorSkeleton, DineInTablesSkeleton } from "@/components/admin/DineInFloorSkeleton";
 import { useToast } from "@/context/ToastContext";
 
 export default function AdminDineInPage() {
@@ -20,22 +23,23 @@ export default function AdminDineInPage() {
   const { has: hasFeature, loading: featuresLoading } = useFeatures();
   const hasDineInFeature = hasFeature("dine-in");
   const { showToast } = useToast();
-  const [zones, setZones] = useState<KitchenZone[] | null>(null);
-  const [zoneId, setZoneId] = useState("");
+  const [zoneOverride, setZoneOverride] = useState<string | null>(null);
   const [tab, setTab] = useState<"floor" | "tables">("floor");
 
+  // Unique key suffix (under "settings") so editing outlets in Settings
+  // invalidates this list without sharing a shape with other consumers.
+  const { data, isError } = useQuery({
+    queryKey: qk.admin("settings", "kitchen-zones", "dine-in"),
+    queryFn: listKitchenZones,
+    enabled: !featuresLoading && hasDineInFeature,
+    staleTime: STALE.list,
+  });
+  const zones = data ?? (isError ? [] : null);
+  const zoneId = zoneOverride ?? data?.find((z) => z.isActive)?.id ?? data?.[0]?.id ?? "";
+
   useEffect(() => {
-    if (featuresLoading || !hasDineInFeature) return;
-    listKitchenZones()
-      .then((data) => {
-        setZones(data);
-        setZoneId(data.find((z) => z.isActive)?.id ?? data[0]?.id ?? "");
-      })
-      .catch(() => {
-        setZones([]);
-        showToast("Couldn't load kitchen zones. Try reloading the page.", "error");
-      });
-  }, [featuresLoading, hasDineInFeature, showToast]);
+    if (isError) showToast("Couldn't load kitchen zones. Try reloading the page.", "error");
+  }, [isError, showToast]);
 
   // Belt-and-braces alongside the sidebar already hiding this link when the
   // feature is off — a tenant who still has the URL (or a stale bookmark)
@@ -68,7 +72,7 @@ export default function AdminDineInPage() {
           </h2>
         </div>
         {zones && zones.length > 1 && (
-          <Select value={zoneId} onValueChange={setZoneId}>
+          <Select value={zoneId} onValueChange={setZoneOverride}>
             <SelectTrigger className="w-52">
               <SelectValue />
             </SelectTrigger>
@@ -95,7 +99,7 @@ export default function AdminDineInPage() {
               className={`cursor-pointer border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
                 tab === t
                   ? "border-primary-600 text-primary-700 dark:text-primary-400"
-                  : "border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                  : "border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
               }`}
             >
               {t === "floor" ? "Floor" : "Manage Tables"}
@@ -105,14 +109,13 @@ export default function AdminDineInPage() {
       )}
 
       {!zones ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-32 w-full" />
-        </div>
+        <DineInFloorSkeleton />
       ) : zones.length === 0 ? (
-        <p className="text-sm text-zinc-400">
-          No outlets configured yet — add one under Settings → Delivery Zones first.
-        </p>
+        <EmptyState
+          compact
+          title="No outlets configured yet"
+          description="Add one under Settings → Delivery Zones first."
+        />
       ) : !zoneId ? null : tab === "tables" && canManageTables ? (
         <TableManagementPanelSection key={zoneId} zoneId={zoneId} />
       ) : (
@@ -127,32 +130,23 @@ export default function AdminDineInPage() {
  * state just for one tab. */
 function TableManagementPanelSection({ zoneId }: { zoneId: string }) {
   const { showToast } = useToast();
-  const [tables, setTables] = useState<DiningTable[] | null>(null);
+  const queryClient = useQueryClient();
+  const { data: tables, isError } = useQuery({
+    queryKey: qk.admin("dine-in", "tables", zoneId),
+    queryFn: () => listDiningTables(zoneId),
+    staleTime: STALE.short,
+  });
 
-  function refresh() {
-    listDiningTables(zoneId)
-      .then(setTables)
-      .catch(() => {
-        setTables([]);
-        showToast("Couldn't load tables. Try reloading the page.", "error");
-      });
-  }
-
-  // Caller keys this component by zoneId, so a zone switch remounts it
-  // fresh (tables already starts at null) instead of resetting state
-  // synchronously in this effect.
   useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [zoneId]);
+    if (isError) showToast("Couldn't load tables. Try reloading the page.", "error");
+  }, [isError, showToast]);
 
-  if (!tables) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-      </div>
-    );
+  // Table changes also affect the floor view and any open order's table picker.
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey: qk.admin("dine-in") });
   }
+
+  if (!tables) return isError ? null : <DineInTablesSkeleton />;
 
   return <TableManagementPanel kitchenZoneId={zoneId} tables={tables} onChanged={refresh} />;
 }

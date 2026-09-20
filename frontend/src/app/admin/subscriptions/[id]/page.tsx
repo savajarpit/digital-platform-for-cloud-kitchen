@@ -1,14 +1,16 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowLeft, Clock, FileText, MapPin, Phone, User } from "lucide-react";
 import {
   ApiError,
   getAdminSubscription,
   markSubscriptionPaid,
-  type AdminSubscriptionDetail,
 } from "@/lib/api/admin-subscriptions";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateSubscriptionAreas } from "@/lib/query/subscription-invalidation";
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
@@ -36,20 +38,17 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
   const canActOnBehalf = usePermission(PERMISSIONS.SUBSCRIPTIONS_ACT_ON_BEHALF);
   const canRecordPayment = usePermission(PERMISSIONS.PAYMENTS_MANUAL_RECORD);
   const { showToast } = useToast();
-  const [sub, setSub] = useState<AdminSubscriptionDetail | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const queryClient = useQueryClient();
   const [markingPaid, setMarkingPaid] = useState(false);
+  const { data: sub, isError: notFound } = useQuery({
+    queryKey: qk.admin("subscriptions", "detail", id),
+    queryFn: () => getAdminSubscription(id),
+    staleTime: STALE.short,
+  });
 
-  useEffect(() => {
-    getAdminSubscription(id)
-      .then(setSub)
-      .catch(() => setNotFound(true));
-  }, [id]);
-
+  // Any write here can change the list, analytics and invoice too.
   function refresh() {
-    getAdminSubscription(id)
-      .then(setSub)
-      .catch(() => showToast("Couldn't refresh this subscription. Try reloading the page.", "error"));
+    void invalidateSubscriptionAreas(queryClient);
   }
 
   async function handleMarkPaid() {
@@ -79,9 +78,34 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
 
   if (!sub) {
     return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-64 w-full" />
+      <div className="flex flex-col gap-6" aria-busy="true">
+        <Skeleton className="h-5 w-40" />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-6 w-16 rounded-full" />
+            <Skeleton className="h-8 w-24 rounded-xl" />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="card flex flex-col gap-2 p-6">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+          ))}
+        </div>
+        <div className="card flex flex-col gap-3 p-6">
+          <Skeleton className="h-4 w-28" />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
+          ))}
+        </div>
       </div>
     );
   }

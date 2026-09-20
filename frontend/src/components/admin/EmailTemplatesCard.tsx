@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Mail, RotateCcw } from "lucide-react";
 import {
   ApiError,
@@ -12,7 +13,9 @@ import {
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { DividedListSkeleton } from "@/components/admin/skeletons/DividedListSkeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { EmailTemplateEditorForm } from "@/components/admin/EmailTemplateEditorForm";
 
@@ -25,25 +28,26 @@ const KEY_LABEL: Record<string, string> = {
 export function EmailTemplatesCard() {
   const { showToast } = useToast();
   const canEdit = usePermission(PERMISSIONS.NOTIFICATION_TEMPLATES_EMAIL_EDIT);
-  const [templates, setTemplates] = useState<TenantEmailTemplate[] | null>(null);
+  const queryClient = useQueryClient();
+  const queryKey = qk.admin("email-templates");
+  const { data: templates, isError } = useQuery({
+    queryKey,
+    queryFn: getTenantEmailTemplates,
+    staleTime: STALE.list,
+  });
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    getTenantEmailTemplates()
-      .then(setTemplates)
-      .catch(() => showToast("Couldn't load email templates.", "error"));
-  }, [showToast]);
 
   async function handleSave(key: string, subject: string, bodyHtml: string) {
     setSaving(true);
     try {
       await updateTenantEmailTemplate(key, { subject, bodyHtml });
-      setTemplates((prev) =>
+      queryClient.setQueryData<TenantEmailTemplate[]>(queryKey, (prev) =>
         prev
           ? prev.map((t) => (t.key === key ? { ...t, subject, bodyHtml, isCustomized: true } : t))
           : prev,
       );
+      queryClient.invalidateQueries({ queryKey });
       showToast("Email wording saved", "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't save changes.", "error");
@@ -56,8 +60,7 @@ export function EmailTemplatesCard() {
     setSaving(true);
     try {
       await resetTenantEmailTemplate(key);
-      const fresh = await getTenantEmailTemplates();
-      setTemplates(fresh);
+      await queryClient.invalidateQueries({ queryKey });
       showToast("Reverted to the platform default", "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't reset template.", "error");
@@ -76,7 +79,11 @@ export function EmailTemplatesCard() {
       </div>
       {!canEdit && <ViewOnlyNotice />}
       {!templates ? (
-        <Skeleton className="h-40 w-full" />
+        isError ? (
+          <EmptyState compact title="Couldn't load email templates." />
+        ) : (
+          <DividedListSkeleton rows={3} />
+        )
       ) : (
         <div className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
           {templates.map((t) => {

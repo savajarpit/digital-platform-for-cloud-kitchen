@@ -31,11 +31,9 @@ function macroValue(nutrition: Record<string, unknown>, key: string): string | n
 export function MealCard({
   meal,
   currency,
-  index = 0,
 }: {
   meal: Meal;
   currency: string;
-  index?: number;
 }) {
   const t = useTranslations("menu");
   const macros = MACRO_KEYS.map((key) => ({
@@ -52,8 +50,7 @@ export function MealCard({
 
   return (
     <article
-      className="card card-hover flex flex-col overflow-hidden opacity-0 animate-fade-up"
-      style={{ animationDelay: `${index * 60}ms` }}
+      className="card card-hover flex flex-col overflow-hidden"
     >
       <Link href={`/menu/${meal.id}`} className="flex flex-1 flex-col">
         <div className="relative aspect-4/3 w-full bg-zinc-100 dark:bg-zinc-800">

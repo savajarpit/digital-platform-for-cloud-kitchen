@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Search, User } from "lucide-react";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { listCustomers, type Customer } from "@/lib/api/admin-customers";
+import { qk, STALE } from "@/lib/query/keys";
 
 const PAGE_SIZE = 15;
 
@@ -19,10 +21,7 @@ export function CustomerCombobox({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [results, setResults] = useState<Customer[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -37,32 +36,27 @@ export function CustomerCombobox({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
-    const handle = setTimeout(() => {
-      setLoading(true);
-      listCustomers({ page: 1, limit: PAGE_SIZE, search: search || undefined })
-        .then(({ data, meta }) => {
-          setResults(data);
-          setPage(1);
-          setHasMore(meta?.hasNext ?? false);
-        })
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
-    }, 250);
+    const handle = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(handle);
-  }, [open, search]);
+  }, [search]);
+
+  // Cached per search term (under the "customers" area).
+  const { data, hasNextPage, isFetching, fetchNextPage } = useInfiniteQuery({
+    queryKey: qk.admin("customers", "picker", debouncedSearch),
+    queryFn: ({ pageParam }) =>
+      listCustomers({ page: pageParam, limit: PAGE_SIZE, search: debouncedSearch || undefined }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.meta?.hasNext ? last.meta.page + 1 : undefined),
+    enabled: open,
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
+  const results: Customer[] = data ? data.pages.flatMap((pg) => pg.data) : [];
+  const hasMore = Boolean(hasNextPage);
+  const loading = isFetching;
 
   function loadMore() {
-    if (loading) return;
-    setLoading(true);
-    const nextPage = page + 1;
-    listCustomers({ page: nextPage, limit: PAGE_SIZE, search: search || undefined })
-      .then(({ data, meta }) => {
-        setResults((prev) => [...prev, ...data]);
-        setPage(nextPage);
-        setHasMore(meta?.hasNext ?? false);
-      })
-      .finally(() => setLoading(false));
+    if (!isFetching) void fetchNextPage();
   }
 
   function handleSelect(customer: Customer) {

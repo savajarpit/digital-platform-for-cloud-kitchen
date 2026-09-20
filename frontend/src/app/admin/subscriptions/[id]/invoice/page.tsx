@@ -1,31 +1,30 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowLeft, Printer } from "lucide-react";
-import { getAdminSubscription, type AdminSubscriptionDetail } from "@/lib/api/admin-subscriptions";
-import { fetchPublicConfig, type PublicConfig } from "@/lib/api/settings-client";
+import { getAdminSubscription } from "@/lib/api/admin-subscriptions";
+import { fetchPublicConfig } from "@/lib/api/settings-client";
+import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function AdminSubscriptionInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [sub, setSub] = useState<AdminSubscriptionDetail | null>(null);
-  const [config, setConfig] = useState<PublicConfig | null>(null);
-  const [notFound, setNotFound] = useState(false);
-
-  useEffect(() => {
-    Promise.all([getAdminSubscription(id), fetchPublicConfig()])
-      .then(([s, c]) => {
-        if (!s.invoice) {
-          setNotFound(true);
-          return;
-        }
-        setSub(s);
-        setConfig(c);
-      })
-      .catch(() => setNotFound(true));
-  }, [id]);
+  const subQuery = useQuery({
+    queryKey: qk.admin("subscriptions", "detail", id),
+    queryFn: () => getAdminSubscription(id),
+    staleTime: STALE.short,
+  });
+  const configQuery = useQuery({
+    queryKey: qk.admin("subscriptions", "invoice-config"),
+    queryFn: fetchPublicConfig,
+    staleTime: STALE.short,
+  });
+  const sub = subQuery.data;
+  const config = configQuery.data;
+  const notFound = subQuery.isError || configQuery.isError || (!!sub && !sub.invoice);
 
   if (notFound) {
     return (
@@ -40,9 +39,44 @@ export default function AdminSubscriptionInvoicePage({ params }: { params: Promi
 
   if (!sub || !config || !sub.invoice) {
     return (
-      <div className="card p-8">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="mt-6 h-32 w-full" />
+      <div aria-busy="true">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-5 w-16" />
+          <Skeleton className="h-8 w-20 rounded-xl" />
+        </div>
+        <div className="card mt-6 p-8">
+          <div className="flex items-start justify-between gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800">
+            <div className="flex max-w-xs flex-col gap-1.5">
+              <Skeleton className="h-7 w-40" />
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-4 w-32" />
+            </div>
+            <div className="flex flex-col items-end gap-1.5">
+              <Skeleton className="h-6 w-16" />
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+          </div>
+          <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-5 w-48" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-6 w-16" />
+            </div>
+          </div>
+          <div className="mt-8 flex flex-col gap-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-8 w-full" />
+          </div>
+          <div className="mt-4 ml-auto flex max-w-60 flex-col gap-1.5">
+            <Skeleton className="h-5 w-full" />
+            <Skeleton className="h-5 w-full" />
+          </div>
+        </div>
       </div>
     );
   }

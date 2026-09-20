@@ -9,7 +9,7 @@ import {
 } from "@/lib/theme/plan-accent";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
-export function PlanCard({ plan, index }: { plan: PublicPlan; index: number }) {
+export function PlanCard({ plan }: { plan: PublicPlan }) {
   const discountPercentage = plan.activePromotion?.discountPercentage ?? 0;
   const discountedPriceInPaise =
     discountPercentage > 0
@@ -19,10 +19,9 @@ export function PlanCard({ plan, index }: { plan: PublicPlan; index: number }) {
   return (
     <Link
       href={`/plans/${plan.id}`}
-      className={`card card-hover relative flex flex-col p-6 opacity-0 animate-fade-up ${
+      className={`card card-hover relative flex flex-col p-6 ${
         plan.isPopular ? "ring-2 ring-primary-500 shadow-soft" : ""
       }`}
-      style={{ animationDelay: `${index * 80}ms` }}
     >
       {plan.badgeText && (
         <div

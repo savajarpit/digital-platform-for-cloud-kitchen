@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowLeft, Clock, FileText, MapPin, Phone, User } from "lucide-react";
 import {
@@ -17,7 +18,9 @@ import { usePermission } from "@/context/PermissionsContext";
 import { useFeatures } from "@/context/FeaturesContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { OrderDetailSkeleton } from "@/components/admin/OrderDetailSkeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateOrderAreas } from "@/lib/query/admin-invalidation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { MapLink } from "@/components/ui/MapLink";
 import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
@@ -38,21 +41,19 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const canOrderCreate = usePermission(PERMISSIONS.DINE_IN_ORDER_CREATE);
   const { has: hasFeature } = useFeatures();
   const { showToast } = useToast();
-  const [order, setOrder] = useState<AdminOrderDetail | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const queryClient = useQueryClient();
+  const detailKey = qk.admin("orders", "detail", id);
+  const { data: order, isPending, isError } = useQuery({
+    queryKey: detailKey,
+    queryFn: () => getAdminOrder(id),
+    staleTime: STALE.short,
+  });
   const [markingPaid, setMarkingPaid] = useState(false);
   const [dineInPaymentMethod, setDineInPaymentMethod] = useState<"CASH" | "UPI">("CASH");
 
-  useEffect(() => {
-    getAdminOrder(id)
-      .then(setOrder)
-      .catch(() => setNotFound(true));
-  }, [id]);
-
+  // After any write: refetch this order plus every list/summary it feeds.
   function refresh() {
-    getAdminOrder(id)
-      .then(setOrder)
-      .catch(() => showToast("Couldn't refresh this order. Try reloading the page.", "error"));
+    void invalidateOrderAreas(queryClient);
   }
 
   async function handleMarkPaid() {
@@ -72,17 +73,18 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   async function handleStatusChange(newStatus: string) {
     if (!order) return;
     const prev = order;
-    setOrder({ ...order, status: newStatus });
+    queryClient.setQueryData<AdminOrderDetail>(detailKey, { ...order, status: newStatus });
     try {
       await updateOrderStatus(order.id, newStatus);
       showToast("Order status updated", "success");
+      refresh();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update order status.", "error");
-      setOrder(prev);
+      queryClient.setQueryData<AdminOrderDetail>(detailKey, prev);
     }
   }
 
-  if (notFound) {
+  if (isError) {
     return (
       <div className="flex flex-col items-center gap-4 py-24 text-center">
         <p className="text-zinc-600 dark:text-zinc-400">Order not found.</p>
@@ -93,14 +95,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     );
   }
 
-  if (!order) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-64 w-full" />
-      </div>
-    );
-  }
+  if (isPending) return <OrderDetailSkeleton />;
 
   const isPaid = order.paymentStatus === "PAID";
   const isFinal = order.status === "DELIVERED" || order.status === "CANCELLED";

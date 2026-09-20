@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
-import { ApiError, getExpiringSoon, type ExpiringSoon } from "@/lib/api/admin-subscriptions";
+import { ApiError, getExpiringSoon } from "@/lib/api/admin-subscriptions";
+import { qk, STALE } from "@/lib/query/keys";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 /** "How many active subscriptions expire soon" tile with a custom day
@@ -11,19 +13,23 @@ import { Skeleton } from "@/components/ui/Skeleton";
  * same inline-expand pattern used elsewhere in the admin subscriptions UI. */
 export function ExpiringSoonCard() {
   const [withinDays, setWithinDays] = useState("7");
-  const [data, setData] = useState<ExpiringSoon | null>(null);
   const [showList, setShowList] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const days = Math.max(1, Math.round(Number(withinDays) || 7));
 
-  useEffect(() => {
-    getExpiringSoon(days)
-      .then(setData)
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "Couldn't load expiring subscriptions."),
-      );
-  }, [days]);
+  // Keyed by the window so each value is cached; typing a new number keeps the
+  // previous count on screen until the next one arrives.
+  const { data, error: queryError } = useQuery({
+    queryKey: qk.admin("subscriptions", "expiring-soon", days),
+    queryFn: () => getExpiringSoon(days),
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
+  const error = queryError
+    ? queryError instanceof ApiError
+      ? queryError.message
+      : "Couldn't load expiring subscriptions."
+    : null;
 
   return (
     <div className="card flex flex-col gap-4 p-6">
@@ -49,7 +55,12 @@ export function ExpiringSoonCard() {
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {!data ? (
-        <Skeleton className="h-16 w-full" />
+        error ? null : (
+          <div className="flex items-baseline gap-2" aria-busy="true">
+            <Skeleton className="h-9 w-10" />
+            <Skeleton className="h-5 w-56" />
+          </div>
+        )
       ) : (
         <>
           <button

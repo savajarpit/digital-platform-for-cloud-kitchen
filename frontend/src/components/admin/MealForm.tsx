@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ApiError, type Category, type MealInput } from "@/lib/api/admin-menu";
-import { listAddonGroups, type AddonGroup } from "@/lib/api/addons";
+import { listAddonGroups } from "@/lib/api/addons";
+import { qk, STALE } from "@/lib/query/keys";
 import { useFeatures } from "@/context/FeaturesContext";
 import { useToast } from "@/context/ToastContext";
 import { Toggle } from "@/components/ui/Toggle";
@@ -28,7 +30,6 @@ export function MealForm({
   const { has: hasFeature } = useFeatures();
   const hasAddonsFeature = hasFeature("menu-addons");
   const [form, setForm] = useState(initial);
-  const [addonGroups, setAddonGroups] = useState<AddonGroup[] | null>(null);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>(
     initialAddonGroupIds ?? [],
   );
@@ -41,12 +42,13 @@ export function MealForm({
   const [fat, setFat] = useState(initial.nutrition?.fat ?? "");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!hasAddonsFeature) return;
-    listAddonGroups()
-      .then(setAddonGroups)
-      .catch(() => setAddonGroups([]));
-  }, [hasAddonsFeature]);
+  // Shared with the Add-ons admin page, so groups created there show up here.
+  const { data: addonGroups } = useQuery({
+    queryKey: qk.admin("menu", "addon-groups"),
+    queryFn: listAddonGroups,
+    enabled: hasAddonsFeature,
+    staleTime: STALE.short,
+  });
 
   function toggleGroup(groupId: string) {
     setSelectedGroupIds((prev) =>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquareQuote, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -14,7 +15,9 @@ import {
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { RowListCardSkeleton } from "@/components/admin/skeletons/RowListCardSkeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ImageUploadInput } from "@/components/admin/ImageUploadInput";
 
@@ -30,20 +33,17 @@ const emptyForm: ReviewInput = {
 export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
   const confirm = useConfirm();
-  const [reviews, setReviews] = useState<Review[] | null>(null);
+  const queryClient = useQueryClient();
+  const { data: reviews, isError } = useQuery({
+    queryKey: qk.admin("reviews"),
+    queryFn: listReviewsAdmin,
+    staleTime: STALE.list,
+  });
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
 
-  useEffect(() => {
-    listReviewsAdmin()
-      .then(setReviews)
-      .catch(() => showToast("Couldn't load reviews.", "error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // Every write refreshes the cached review list.
   function refetch() {
-    listReviewsAdmin()
-      .then(setReviews)
-      .catch(() => showToast("Couldn't refresh reviews. Try reloading the page.", "error"));
+    queryClient.invalidateQueries({ queryKey: qk.admin("reviews") });
   }
 
   async function handleTogglePublished(review: Review) {
@@ -75,11 +75,12 @@ export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
   }
 
   if (!reviews) {
-    return (
+    return isError ? (
       <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-32 w-full" />
+        <EmptyState compact title="Couldn't load reviews." />
       </div>
+    ) : (
+      <RowListCardSkeleton rows={3} rowLines={2} description headerAction />
     );
   }
 
@@ -115,7 +116,7 @@ export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
       )}
 
       {reviews.length === 0 && editingId !== "new" && (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No reviews yet.</p>
+        <EmptyState compact title="No reviews yet." />
       )}
 
       <div className="flex flex-col gap-2">

@@ -1,13 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   pauseAdmin,
   setDayOverrideAdmin,
   skipDayAdmin,
 } from "@/lib/api/admin-subscriptions";
-import { getCustomer, type CustomerAddress } from "@/lib/api/admin-customers";
+import { getCustomer } from "@/lib/api/admin-customers";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateSubscriptionAreas } from "@/lib/query/subscription-invalidation";
 import { useToast } from "@/context/ToastContext";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 
@@ -30,22 +34,28 @@ export function SubscriptionActionsForm({
   onDone: () => void;
 }) {
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("SKIP");
   const [date, setDate] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [addresses, setAddresses] = useState<CustomerAddress[] | null>(null);
   const [addressId, setAddressId] = useState("");
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (!open || mode !== "OVERRIDE" || addresses) return;
-    getCustomer(customerUserId)
-      .then((detail) => setAddresses(detail.addresses))
-      .catch(() => setAddresses([]));
-  }, [open, mode, addresses, customerUserId]);
+  // Only fetched once the override form is open; cached per customer.
+  const customerQuery = useQuery({
+    queryKey: qk.admin("subscriptions", "customer", customerUserId),
+    queryFn: () => getCustomer(customerUserId),
+    enabled: open && mode === "OVERRIDE",
+    staleTime: STALE.short,
+  });
+  const addresses = customerQuery.data
+    ? customerQuery.data.addresses
+    : customerQuery.isError
+      ? []
+      : null;
 
   const canSubmit =
     mode === "SKIP"
@@ -77,6 +87,7 @@ export function SubscriptionActionsForm({
       setDateTo("");
       setAddressId("");
       setNote("");
+      void invalidateSubscriptionAreas(queryClient);
       onDone();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't apply that change.", "error");
@@ -155,7 +166,7 @@ export function SubscriptionActionsForm({
               Deliver to a different saved address that day (optional)
             </label>
             {!addresses ? (
-              <p className="text-xs text-zinc-400">Loading addresses…</p>
+              <Skeleton className="h-[42px] w-full rounded-xl" />
             ) : addresses.length === 0 ? (
               <p className="text-xs text-zinc-400">This customer has no other saved addresses.</p>
             ) : (

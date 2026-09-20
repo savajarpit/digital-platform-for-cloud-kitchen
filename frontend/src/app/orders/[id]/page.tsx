@@ -1,11 +1,13 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { CheckCircle2, ChevronLeft, Clock, FileText, MapPin, Package, Phone } from "lucide-react";
-import { ApiError, getOrder, type Order } from "@/lib/api/orders";
+import { ApiError, getOrder } from "@/lib/api/orders";
+import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 import { ORDER_STATUS_STYLES } from "@/lib/format/status-styles";
@@ -17,20 +19,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const t = useTranslations("order");
   const tInvoice = useTranslations("invoice");
   const router = useRouter();
-  const [order, setOrder] = useState<Order | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  // Order status changes while a customer watches, so this is fresh for only
+  // a short window; the cached copy still shows instantly on revisit.
+  const {
+    data: order,
+    error,
+    isError,
+  } = useQuery({
+    queryKey: qk.orders.detail(id),
+    queryFn: () => getOrder(id),
+    staleTime: STALE.short,
+  });
+  const unauthorized = error instanceof ApiError && error.status === 401;
 
   useEffect(() => {
-    getOrder(id)
-      .then(setOrder)
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) {
-          router.push(`/login?redirect=/orders/${id}`);
-          return;
-        }
-        setNotFound(true);
-      });
-  }, [id, router]);
+    if (unauthorized) router.push(`/login?redirect=/orders/${id}`);
+  }, [unauthorized, id, router]);
+
+  const notFound = isError && !unauthorized;
 
   if (notFound) {
     return (

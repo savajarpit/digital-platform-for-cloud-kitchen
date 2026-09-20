@@ -1,5 +1,6 @@
 import { PUBLIC_API_URL } from "@/lib/config/env";
 import { ApiError, parseOrThrow } from "@/lib/api/client";
+import { clearQueryCache } from "@/lib/query/client";
 
 export { ApiError };
 
@@ -72,6 +73,7 @@ export async function verifyOtp(userId: string, code: string): Promise<void> {
     body: JSON.stringify({ userId, code }),
   });
   await parseOrThrow<void>(res);
+  clearQueryCache();
 }
 
 export async function login(email: string, password: string): Promise<void> {
@@ -81,8 +83,10 @@ export async function login(email: string, password: string): Promise<void> {
     body: JSON.stringify({ email, password }),
   });
   await parseOrThrow<void>(res);
+  clearQueryCache();
 }
 
 export async function logout(): Promise<void> {
   await fetch(`/api/auth/logout`, { method: "POST" });
+  clearQueryCache();
 }

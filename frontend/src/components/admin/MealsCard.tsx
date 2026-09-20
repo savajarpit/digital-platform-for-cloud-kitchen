@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, Search, Star } from "lucide-react";
 import {
   ApiError,
@@ -13,10 +14,12 @@ import {
   type MealInput,
 } from "@/lib/api/admin-menu";
 import { setMealAddonGroups } from "@/lib/api/addons";
-import type { PaginationMeta } from "@/lib/api/response";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateMenuAreas } from "@/lib/query/admin-invalidation";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { MealListSkeleton } from "@/components/admin/MealListSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { MealForm } from "@/components/admin/MealForm";
 import { MealListItem } from "@/components/admin/MealListItem";
@@ -37,35 +40,44 @@ type VegFilter = "all" | "veg" | "nonveg";
 export function MealsCard({ categories, canEdit }: { categories: Category[]; canEdit: boolean }) {
   const { showToast } = useToast();
   const confirm = useConfirm();
-  const [meals, setMeals] = useState<Meal[] | null>(null);
-  const [meta, setMeta] = useState<PaginationMeta | null>(null);
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [vegFilter, setVegFilter] = useState<VegFilter>("all");
   const [popularOnly, setPopularOnly] = useState(false);
-  const [reloadToken, setReloadToken] = useState(0);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
 
   useEffect(() => {
-    const handle = setTimeout(() => {
+    const handle = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(handle);
+  }, [search]);
+
+  // Every filter is in the key; paging/filtering keeps the previous grid on
+  // screen (no skeleton) until the next result arrives.
+  const {
+    data: mealsPage,
+    isPending,
+    isError,
+    isPlaceholderData,
+  } = useQuery({
+    queryKey: qk.admin("menu", "meals", page, debouncedSearch, vegFilter, popularOnly),
+    queryFn: () =>
       listMeals({
         page,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         isVegetarian: vegFilter === "all" ? undefined : vegFilter === "veg",
         isPopular: popularOnly ? true : undefined,
-      })
-        .then(({ data, meta }) => {
-          setMeals(data);
-          setMeta(meta ?? null);
-        })
-        .catch(() => setLoadError("Couldn't load meals."));
-    }, 250);
-    return () => clearTimeout(handle);
-  }, [page, search, vegFilter, popularOnly, reloadToken]);
+      }),
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
+  const meals = mealsPage?.data ?? null;
+  const meta = mealsPage?.meta ?? null;
+  const loadError = isError ? "Couldn't load meals." : null;
 
   function refetch() {
-    setReloadToken((t) => t + 1);
+    void invalidateMenuAreas(queryClient);
   }
 
   async function handleToggleAvailable(meal: Meal) {
@@ -176,14 +188,12 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
         />
       )}
 
-      {!meals ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 w-full" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {isPending ? (
+        <MealListSkeleton />
+      ) : !meals ? null : (
+        <div
+          className={`grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 ${isPlaceholderData ? "opacity-60" : ""}`}
+        >
           {meals.map((meal) =>
             editingId === meal.id ? (
               <div key={meal.id} className="col-span-full">
@@ -227,7 +237,9 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
             ),
           )}
           {meals.length === 0 && editingId !== "new" && (
-            <p className="col-span-full text-sm text-zinc-500 dark:text-zinc-400">No meals match.</p>
+            <div className="col-span-full">
+              <EmptyState compact title="No meals match." />
+            </div>
           )}
         </div>
       )}

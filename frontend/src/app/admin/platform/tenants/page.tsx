@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Building2, ExternalLink, Plus } from "lucide-react";
-import { ApiError, listTenants, type TenantListItem } from "@/lib/api/platform";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { ApiError, listTenants } from "@/lib/api/platform";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { TableSkeleton } from "@/components/ui/skeletons/TableSkeleton";
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
@@ -20,14 +22,16 @@ const BILLING_STATUS_STYLES: Record<string, string> = {
 };
 
 export default function TenantsPage() {
-  const [tenants, setTenants] = useState<TenantListItem[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listTenants()
-      .then(setTenants)
-      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : "Couldn't load tenants."));
-  }, []);
+  const { data: tenants, error: queryError } = useQuery({
+    queryKey: qk.admin("platform", "tenants", "list"),
+    queryFn: listTenants,
+    staleTime: STALE.short,
+  });
+  const error = queryError
+    ? queryError instanceof ApiError
+      ? queryError.message
+      : "Couldn't load tenants."
+    : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -51,10 +55,7 @@ export default function TenantsPage() {
       )}
 
       {!tenants ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-40 w-full" />
-        </div>
+        error ? null : <TableSkeleton cols={7} />
       ) : (
         <div className="card overflow-x-auto">
           <table className="w-full text-sm">
@@ -114,8 +115,8 @@ export default function TenantsPage() {
               ))}
               {tenants.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-5 py-8 text-center text-zinc-500 dark:text-zinc-400">
-                    No tenants yet.
+                  <td colSpan={7}>
+                    <EmptyState compact title="No tenants yet." />
                   </td>
                 </tr>
               )}

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Store } from "lucide-react";
 import {
   ApiError,
@@ -12,7 +13,9 @@ import {
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { BusinessProfileSkeleton } from "@/components/admin/BusinessProfileSkeleton";
 import { Toggle } from "@/components/ui/Toggle";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { ImageUploadInput } from "@/components/admin/ImageUploadInput";
@@ -23,67 +26,73 @@ import { PhoneInput } from "@/components/ui/PhoneInput";
 
 type FormState = UpdateBusinessProfileInput;
 
+function toForm(p: BusinessProfile): FormState {
+  return {
+    displayName: p.displayName,
+    description: p.description ?? undefined,
+    logoUrl: p.logoUrl ?? undefined,
+    faviconUrl: p.faviconUrl ?? undefined,
+    heroImageUrl: p.heroImageUrl ?? undefined,
+    headerDisplayMode: p.headerDisplayMode,
+    footerDisplayMode: p.footerDisplayMode,
+    headerLogoHeightPx: p.headerLogoHeightPx,
+    headerLogoWidthPx: p.headerLogoWidthPx ?? undefined,
+    footerLogoHeightPx: p.footerLogoHeightPx,
+    footerLogoWidthPx: p.footerLogoWidthPx ?? undefined,
+    headerNameColor: p.headerNameColor,
+    footerNameColor: p.footerNameColor,
+    ogImageUrl: p.ogImageUrl ?? undefined,
+    ogImageAlt: p.ogImageAlt ?? undefined,
+    ogImageWidth: p.ogImageWidth ?? undefined,
+    ogImageHeight: p.ogImageHeight ?? undefined,
+    supportEmail: p.supportEmail ?? undefined,
+    supportPhone: p.supportPhone ?? undefined,
+    whatsappBusinessNumber: p.whatsappBusinessNumber ?? undefined,
+    addressLine1: p.addressLine1 ?? undefined,
+    addressLine2: p.addressLine2 ?? undefined,
+    city: p.city ?? undefined,
+    state: p.state ?? undefined,
+    country: p.country ?? undefined,
+    pincode: p.pincode ?? undefined,
+    timezone: p.timezone,
+    currency: p.currency,
+    gstNumber: p.gstNumber ?? undefined,
+    fssaiLicenseNumber: p.fssaiLicenseNumber ?? undefined,
+    showFssaiLicense: p.showFssaiLicense,
+    pickupEnabled: p.pickupEnabled,
+    defaultLocale: p.defaultLocale,
+    themeConfig: p.themeConfig,
+    showReviewsOnHomepage: p.showReviewsOnHomepage,
+    searchConsoleVerification: p.searchConsoleVerification ?? undefined,
+  };
+}
+
 export default function BusinessProfilePage() {
   const { showToast } = useToast();
   const canEdit = usePermission(PERMISSIONS.BRANDING_EDIT);
+  const queryClient = useQueryClient();
+  const { data: profile, isError } = useQuery({
+    queryKey: qk.admin("settings", "business"),
+    queryFn: getBusinessProfile,
+    staleTime: STALE.list,
+  });
 
-  const [profile, setProfile] = useState<BusinessProfile | null>(null);
-  const [form, setForm] = useState<FormState | null>(null);
+  // Unsaved edits live in `draft`; until the user types, the form is derived
+  // from the cached profile so a background refetch never clobbers edits.
+  const [draft, setDraft] = useState<FormState | null>(null);
+  const form = draft ?? (profile ? toForm(profile) : null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getBusinessProfile()
-      .then((p) => {
-        setProfile(p);
-        setForm({
-          displayName: p.displayName,
-          description: p.description ?? undefined,
-          logoUrl: p.logoUrl ?? undefined,
-          faviconUrl: p.faviconUrl ?? undefined,
-          heroImageUrl: p.heroImageUrl ?? undefined,
-          headerDisplayMode: p.headerDisplayMode,
-          footerDisplayMode: p.footerDisplayMode,
-          headerLogoHeightPx: p.headerLogoHeightPx,
-          headerLogoWidthPx: p.headerLogoWidthPx ?? undefined,
-          footerLogoHeightPx: p.footerLogoHeightPx,
-          footerLogoWidthPx: p.footerLogoWidthPx ?? undefined,
-          headerNameColor: p.headerNameColor,
-          footerNameColor: p.footerNameColor,
-          ogImageUrl: p.ogImageUrl ?? undefined,
-          ogImageAlt: p.ogImageAlt ?? undefined,
-          ogImageWidth: p.ogImageWidth ?? undefined,
-          ogImageHeight: p.ogImageHeight ?? undefined,
-          supportEmail: p.supportEmail ?? undefined,
-          supportPhone: p.supportPhone ?? undefined,
-          whatsappBusinessNumber: p.whatsappBusinessNumber ?? undefined,
-          addressLine1: p.addressLine1 ?? undefined,
-          addressLine2: p.addressLine2 ?? undefined,
-          city: p.city ?? undefined,
-          state: p.state ?? undefined,
-          country: p.country ?? undefined,
-          pincode: p.pincode ?? undefined,
-          timezone: p.timezone,
-          currency: p.currency,
-          gstNumber: p.gstNumber ?? undefined,
-          fssaiLicenseNumber: p.fssaiLicenseNumber ?? undefined,
-          showFssaiLicense: p.showFssaiLicense,
-          pickupEnabled: p.pickupEnabled,
-          defaultLocale: p.defaultLocale,
-          themeConfig: p.themeConfig,
-          showReviewsOnHomepage: p.showReviewsOnHomepage,
-          searchConsoleVerification: p.searchConsoleVerification ?? undefined,
-        });
-      })
-      .catch(() => setError("Couldn't load business profile."));
-  }, []);
-
   function field<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+    setDraft((prev) => ({ ...(prev ?? toForm(profile!)), [key]: value }));
   }
 
   function themeField(key: keyof NonNullable<FormState["themeConfig"]>, value: string | null) {
-    setForm((prev) => (prev ? { ...prev, themeConfig: { ...prev.themeConfig, [key]: value } } : prev));
+    setDraft((prev) => {
+      const base = prev ?? toForm(profile!);
+      return { ...base, themeConfig: { ...base.themeConfig, [key]: value } };
+    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -93,7 +102,9 @@ export default function BusinessProfilePage() {
     setSaving(true);
     try {
       const updated = await updateBusinessProfile(form);
-      setProfile(updated);
+      queryClient.setQueryData(qk.admin("settings", "business"), updated);
+      queryClient.invalidateQueries({ queryKey: qk.admin("settings", "business") });
+      setDraft(null);
       showToast("Business profile saved", "success");
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Couldn't save changes.";
@@ -104,13 +115,16 @@ export default function BusinessProfilePage() {
     }
   }
 
-  if (!profile || !form) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-10 w-full" />
-        <Skeleton className="mt-3 h-10 w-full" />
-      </div>
+  if (!form) {
+    return isError ? (
+      <EmptyState
+        compact
+        icon={Store}
+        title="Couldn't load business profile."
+        description="Please try again in a moment."
+      />
+    ) : (
+      <BusinessProfileSkeleton />
     );
   }
 

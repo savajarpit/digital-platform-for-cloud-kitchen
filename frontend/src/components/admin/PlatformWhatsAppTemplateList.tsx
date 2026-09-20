@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare } from "lucide-react";
 import {
   ApiError,
@@ -8,19 +9,21 @@ import {
   updatePlatformWhatsAppTemplate,
   type PlatformWhatsAppTemplate,
 } from "@/lib/api/platform-whatsapp-templates";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/context/ToastContext";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 export function PlatformWhatsAppTemplateList() {
   const { showToast } = useToast();
-  const [templates, setTemplates] = useState<PlatformWhatsAppTemplate[] | null>(null);
+  const queryClient = useQueryClient();
+  const listKey = qk.admin("platform", "whatsapp-templates");
+  const { data: templates, isError } = useQuery({
+    queryKey: listKey,
+    queryFn: listPlatformWhatsAppTemplates,
+    staleTime: STALE.short,
+  });
   const [saving, setSaving] = useState<string | null>(null);
-
-  useEffect(() => {
-    listPlatformWhatsAppTemplates()
-      .then(setTemplates)
-      .catch(() => showToast("Couldn't load WhatsApp templates.", "error"));
-  }, [showToast]);
 
   async function handleSave(
     key: string,
@@ -33,7 +36,10 @@ export function PlatformWhatsAppTemplateList() {
         templateKey,
         placeholders,
       });
-      setTemplates((prev) => (prev ? prev.map((t) => (t.key === key ? updated : t)) : prev));
+      queryClient.setQueryData<PlatformWhatsAppTemplate[]>(listKey, (prev) =>
+        prev ? prev.map((t) => (t.key === key ? updated : t)) : prev,
+      );
+      void queryClient.invalidateQueries({ queryKey: listKey });
       showToast("WhatsApp template saved", "success");
     } catch (err) {
       showToast(
@@ -46,10 +52,28 @@ export function PlatformWhatsAppTemplateList() {
   }
 
   if (!templates) {
+    if (isError) {
+      return <EmptyState compact icon={MessageSquare} title="Couldn't load WhatsApp templates." />;
+    }
     return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="mt-4 h-40 w-full" />
+      <div className="card p-6" aria-busy="true">
+        <div className="mb-2 flex items-center gap-2">
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-5 w-56" />
+        </div>
+        <div className="mb-4 flex flex-col gap-1.5">
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="h-3 w-2/3" />
+        </div>
+        <div className="flex flex-col divide-y divide-zinc-200 dark:divide-zinc-800">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex flex-col gap-3 py-4">
+              <Skeleton className="h-5 w-40" />
+              <Skeleton className="h-[42px] w-full max-w-xs rounded-xl" />
+              <Skeleton className="h-8 w-16 rounded-xl" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

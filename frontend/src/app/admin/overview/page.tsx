@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   BarChart3,
   ClipboardList,
@@ -9,7 +10,10 @@ import {
   Users,
 } from "lucide-react";
 import { ApiError, getOrdersOverview, type OrdersOverview } from "@/lib/api/admin-orders";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { StatCardsSkeleton } from "@/components/ui/skeletons/StatCardsSkeleton";
+import { BarRowsSkeleton, RevenueChartSkeleton } from "@/components/admin/OverviewSkeletons";
 import { formatCompactPriceFromPaise, formatPriceFromPaise } from "@/lib/format/currency";
 
 const STATUS_BAR_COLORS: Record<string, string> = {
@@ -33,8 +37,6 @@ const STATUS_LABELS: Record<string, string> = {
 type RangePreset = "14" | "30" | "custom";
 
 export default function OverviewPage() {
-  const [overview, setOverview] = useState<OrdersOverview | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [preset, setPreset] = useState<RangePreset>("14");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -44,19 +46,18 @@ export default function OverviewPage() {
   const customReady =
     preset !== "custom" || (customFrom !== "" && customTo !== "" && customFrom <= customTo);
 
-  useEffect(() => {
-    if (!customReady) return;
-    // Deliberately doesn't null out `overview` first — the last good range
-    // keeps showing while the new one loads, no skeleton flash on every
-    // filter change (only the very first load, from its useState(null)).
-    const params =
-      preset === "custom" ? { from: customFrom, to: customTo } : { days: Number(preset) };
-    getOrdersOverview(params)
-      .then(setOverview)
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "Couldn't load overview."),
-      );
-  }, [preset, customFrom, customTo, customReady]);
+  // keepPreviousData: the last good range stays on screen while a new one
+  // loads — the skeleton only shows on the very first load.
+  const { data: overview, isPending, error } = useQuery({
+    queryKey: qk.admin("overview", preset, preset === "custom" ? customFrom : "", preset === "custom" ? customTo : ""),
+    queryFn: () =>
+      getOrdersOverview(
+        preset === "custom" ? { from: customFrom, to: customTo } : { days: Number(preset) },
+      ),
+    enabled: customReady,
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
 
   const rangeLabel =
     preset === "custom" && customReady ? `${customFrom} to ${customTo}` : `last ${preset} days`;
@@ -72,42 +73,35 @@ export default function OverviewPage() {
 
       {error && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
-          {error}
+          {error instanceof ApiError ? error.message : "Couldn't load overview."}
         </p>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {overview ? (
-          <>
-            <StatTile
-              icon={IndianRupee}
-              label="Today's Revenue"
-              value={formatPriceFromPaise(overview.today.revenueInPaise)}
-              sublabel={`${overview.today.orders} order${overview.today.orders === 1 ? "" : "s"}`}
-            />
-            <StatTile
-              icon={IndianRupee}
-              label="Last 7 Days Revenue"
-              value={formatPriceFromPaise(overview.last7Days.revenueInPaise)}
-              sublabel={`${overview.last7Days.orders} order${overview.last7Days.orders === 1 ? "" : "s"}`}
-            />
-            <StatTile
-              icon={ClipboardList}
-              label="Active Orders"
-              value={String(overview.activeOrders)}
-              sublabel="Needs kitchen/delivery attention"
-            />
-            <StatTile icon={Users} label="Total Customers" value={String(overview.totalCustomers)} />
-          </>
-        ) : (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="card p-5">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="mt-3 h-7 w-32" />
-            </div>
-          ))
-        )}
-      </div>
+      {isPending || !overview ? (
+        <StatCardsSkeleton />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatTile
+            icon={IndianRupee}
+            label="Today's Revenue"
+            value={formatPriceFromPaise(overview.today.revenueInPaise)}
+            sublabel={`${overview.today.orders} order${overview.today.orders === 1 ? "" : "s"}`}
+          />
+          <StatTile
+            icon={IndianRupee}
+            label="Last 7 Days Revenue"
+            value={formatPriceFromPaise(overview.last7Days.revenueInPaise)}
+            sublabel={`${overview.last7Days.orders} order${overview.last7Days.orders === 1 ? "" : "s"}`}
+          />
+          <StatTile
+            icon={ClipboardList}
+            label="Active Orders"
+            value={String(overview.activeOrders)}
+            sublabel="Needs kitchen/delivery attention"
+          />
+          <StatTile icon={Users} label="Total Customers" value={String(overview.totalCustomers)} />
+        </div>
+      )}
 
       <RevenueTrendChart
         trend={overview?.revenueTrend ?? null}
@@ -277,7 +271,7 @@ function RevenueTrendChart({
       )}
 
       {!trend ? (
-        <Skeleton className="h-40 w-full" />
+        <RevenueChartSkeleton />
       ) : !hasData ? (
         <div className="flex h-40 flex-col items-center justify-center gap-1 text-center">
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
@@ -393,7 +387,7 @@ function RevenueTrendChart({
           </div>
           <div>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">All-time Revenue</p>
-            {allTimeRevenue ? (
+            {allTimeRevenue && (
               <>
                 <p className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
                   {formatPriceFromPaise(allTimeRevenue.revenueInPaise)}
@@ -402,8 +396,6 @@ function RevenueTrendChart({
                   {allTimeRevenue.orders} order{allTimeRevenue.orders === 1 ? "" : "s"}
                 </p>
               </>
-            ) : (
-              <Skeleton className="mt-1 h-6 w-24" />
             )}
           </div>
         </div>
@@ -431,9 +423,9 @@ function StatusBreakdownCard({
         </h3>
       </div>
       {!breakdown ? (
-        <Skeleton className="h-32 w-full" />
+        <BarRowsSkeleton rows={6} />
       ) : total === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No orders in this period.</p>
+        <EmptyState compact title="No orders in this period." />
       ) : (
         <div className="flex flex-col gap-3">
           {breakdown.map((b) => (
@@ -476,9 +468,9 @@ function TopMealsCard({
         </h3>
       </div>
       {!meals ? (
-        <Skeleton className="h-32 w-full" />
+        <BarRowsSkeleton rows={5} />
       ) : meals.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No paid orders yet.</p>
+        <EmptyState compact title="No paid orders yet." />
       ) : (
         <div className="flex max-h-72 flex-col gap-3 overflow-y-auto pr-1">
           {meals.map((meal, i) => (

@@ -3,16 +3,13 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { MapPin, Pencil, Plus, Star, Trash2 } from "lucide-react";
-import {
-  ApiError,
-  deleteAddress,
-  listAddresses,
-  updateAddress,
-  type Address,
-} from "@/lib/api/addresses";
+import { MapPin, Plus } from "lucide-react";
+import { ApiError, deleteAddress, updateAddress } from "@/lib/api/addresses";
+import { useAddresses, useAddressCacheSync } from "@/lib/query/addresses";
 import { AddressForm } from "@/components/addresses/AddressForm";
+import { AddressCard } from "@/components/addresses/AddressCard";
 import { AddressCardSkeleton } from "@/components/addresses/AddressCardSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { PageHeader } from "@/components/account/PageHeader";
@@ -23,21 +20,17 @@ export default function AddressesPage() {
   const { showToast } = useToast();
   const confirm = useConfirm();
 
-  const [addresses, setAddresses] = useState<Address[] | null>(null);
+  // Cached: revisiting shows the saved list instantly. Every mutation below
+  // patches/invalidates the address cache, so it never needs a timed refetch.
+  const { data: addresses, isPending, error } = useAddresses();
+  const { afterSave, afterDelete } = useAddressCacheSync();
+  const unauthorized = error instanceof ApiError && error.status === 401;
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   useEffect(() => {
-    listAddresses()
-      .then(setAddresses)
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) {
-          router.push("/login?redirect=/account/addresses");
-          return;
-        }
-        setAddresses([]);
-      });
-  }, [router]);
+    if (unauthorized) router.push("/login?redirect=/account/addresses");
+  }, [unauthorized, router]);
 
   function handleDelete(id: string) {
     confirm({
@@ -49,7 +42,7 @@ export default function AddressesPage() {
       onConfirm: async () => {
         try {
           await deleteAddress(id);
-          setAddresses((prev) => prev?.filter((a) => a.id !== id) ?? null);
+          afterDelete(id);
           showToast(t("deleted"), "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Something went wrong.", "error");
@@ -60,13 +53,62 @@ export default function AddressesPage() {
 
   async function handleSetDefault(id: string) {
     try {
-      const updated = await updateAddress(id, { isDefault: true });
-      setAddresses(
-        (prev) => prev?.map((a) => ({ ...a, isDefault: a.id === updated.id })) ?? null,
-      );
+      afterSave(await updateAddress(id, { isDefault: true }));
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Something went wrong.", "error");
     }
+  }
+
+  function renderBody() {
+    // A failed background refetch keeps showing the cached list; the error
+    // state is only for "nothing to show at all".
+    if (!addresses) {
+      if (isPending || unauthorized) {
+        return (
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <AddressCardSkeleton key={i} />
+            ))}
+          </div>
+        );
+      }
+      return (
+        <EmptyState
+          icon={MapPin}
+          title="Couldn't load your addresses"
+          description="Please try again in a moment."
+        />
+      );
+    }
+    if (addresses.length === 0 && !showForm) {
+      return <EmptyState icon={MapPin} title={t("empty")} />;
+    }
+    return (
+      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {addresses.map((address) =>
+          editingId === address.id ? (
+            <div key={address.id} className="card p-6">
+              <AddressForm
+                address={address}
+                onSaved={(updated) => {
+                  afterSave(updated);
+                  setEditingId(null);
+                }}
+                onCancel={() => setEditingId(null)}
+              />
+            </div>
+          ) : (
+            <AddressCard
+              key={address.id}
+              address={address}
+              onEdit={() => setEditingId(address.id)}
+              onDelete={() => handleDelete(address.id)}
+              onSetDefault={() => handleSetDefault(address.id)}
+            />
+          ),
+        )}
+      </div>
+    );
   }
 
   return (
@@ -88,7 +130,7 @@ export default function AddressesPage() {
         <div className="card mt-6 p-6">
           <AddressForm
             onSaved={(address) => {
-              setAddresses((prev) => [address, ...(prev ?? [])]);
+              afterSave(address);
               setShowForm(false);
             }}
             onCancel={() => setShowForm(false)}
@@ -96,85 +138,7 @@ export default function AddressesPage() {
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {addresses === null ? (
-          Array.from({ length: 4 }).map((_, i) => <AddressCardSkeleton key={i} />)
-        ) : addresses.length === 0 && !showForm ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">{t("empty")}</p>
-        ) : (
-          addresses.map((address) =>
-            editingId === address.id ? (
-              <div key={address.id} className="card p-6">
-                <AddressForm
-                  address={address}
-                  onSaved={(updated) => {
-                    setAddresses(
-                      (prev) => prev?.map((a) => (a.id === updated.id ? updated : a)) ?? null,
-                    );
-                    setEditingId(null);
-                  }}
-                  onCancel={() => setEditingId(null)}
-                />
-              </div>
-            ) : (
-              <div key={address.id} className="card flex flex-col gap-2 p-5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-4 w-4 shrink-0 text-primary-600" />
-                    <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                      {address.label || t("line1")}
-                    </span>
-                    {address.isDefault && (
-                      <span className="badge bg-primary-100 text-primary-700 dark:bg-primary-950 dark:text-primary-400">
-                        {t("default")}
-                      </span>
-                    )}
-                    {!address.serviceable && (
-                      <span className="badge bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400">
-                        {t("notDeliverable")}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(address.id)}
-                      className="rounded p-1 text-zinc-400 hover:text-primary-600"
-                      aria-label={t("edit")}
-                      title={t("edit")}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(address.id)}
-                      className="rounded p-1 text-zinc-400 hover:text-red-600"
-                      aria-label={t("deleteConfirm")}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                  {address.line1}
-                  {address.line2 ? `, ${address.line2}` : ""}, {address.city}, {address.state} —{" "}
-                  {address.pincode}
-                </p>
-                {!address.isDefault && (
-                  <button
-                    type="button"
-                    onClick={() => handleSetDefault(address.id)}
-                    className="mt-1 inline-flex w-fit items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
-                  >
-                    <Star className="h-3 w-3" />
-                    {t("setDefault")}
-                  </button>
-                )}
-              </div>
-            ),
-          )
-        )}
-      </div>
+      {renderBody()}
     </main>
   );
 }

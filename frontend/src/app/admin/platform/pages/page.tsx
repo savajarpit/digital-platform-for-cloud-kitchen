@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -11,25 +12,34 @@ import {
   type PlatformPage,
   type PlatformPageInput,
 } from "@/lib/api/admin-platform-pages";
+import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PlatformItemListSkeleton } from "@/components/admin/PlatformItemListSkeleton";
 
 const emptyForm: PlatformPageInput = { slug: "", title: "", content: "", isPublished: false };
 
 export default function PlatformPagesAdminPage() {
-  const [pages, setPages] = useState<PlatformPage[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const listKey = qk.admin("platform", "pages");
+  const { data: pages, isError } = useQuery({
+    queryKey: listKey,
+    queryFn: listPlatformPagesAdmin,
+    staleTime: STALE.short,
+  });
+  const error = isError ? "Couldn't load platform pages." : null;
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const { showToast } = useToast();
   const confirm = useConfirm();
 
-  useEffect(() => {
-    listPlatformPagesAdmin()
-      .then(setPages)
-      .catch(() => setError("Couldn't load platform pages."));
-  }, []);
+  // Patch the cached list immediately, then refetch so it settles on the
+  // server's truth.
+  function patchPages(fn: (prev: PlatformPage[]) => PlatformPage[]) {
+    queryClient.setQueryData<PlatformPage[]>(listKey, (prev) => (prev ? fn(prev) : prev));
+    void queryClient.invalidateQueries({ queryKey: listKey });
+  }
 
   function handleDelete(page: PlatformPage) {
     confirm({
@@ -40,7 +50,7 @@ export default function PlatformPagesAdminPage() {
       onConfirm: async () => {
         try {
           await deletePlatformPage(page.id);
-          setPages((prev) => prev?.filter((p) => p.id !== page.id) ?? null);
+          patchPages((prev) => prev.filter((p) => p.id !== page.id));
           showToast("Page deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete page.", "error");
@@ -52,7 +62,7 @@ export default function PlatformPagesAdminPage() {
   async function handleTogglePublished(page: PlatformPage) {
     try {
       const updated = await updatePlatformPage(page.id, { isPublished: !page.isPublished });
-      setPages((prev) => prev?.map((p) => (p.id === page.id ? updated : p)) ?? null);
+      patchPages((prev) => prev.map((p) => (p.id === page.id ? updated : p)));
       showToast(`Page ${updated.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update page.", "error");
@@ -86,10 +96,7 @@ export default function PlatformPagesAdminPage() {
       )}
 
       {!pages ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-40 w-full" />
-        </div>
+        isError ? null : <PlatformItemListSkeleton />
       ) : (
         <div className="card flex flex-col gap-4 p-6">
           {editingId === "new" && (
@@ -98,14 +105,14 @@ export default function PlatformPagesAdminPage() {
               onCancel={() => setEditingId(null)}
               onSave={async (input) => {
                 const created = await createPlatformPage(input);
-                setPages((prev) => [created, ...(prev ?? [])]);
+                patchPages((prev) => [created, ...prev]);
                 setEditingId(null);
               }}
             />
           )}
 
           {pages.length === 0 && editingId !== "new" && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">No pages yet.</p>
+            <EmptyState compact title="No pages yet." />
           )}
 
           <div className="flex flex-col gap-2">
@@ -122,7 +129,7 @@ export default function PlatformPagesAdminPage() {
                   onCancel={() => setEditingId(null)}
                   onSave={async (input) => {
                     const updated = await updatePlatformPage(page.id, input);
-                    setPages((prev) => prev?.map((p) => (p.id === page.id ? updated : p)) ?? null);
+                    patchPages((prev) => prev.map((p) => (p.id === page.id ? updated : p)));
                     setEditingId(null);
                   }}
                 />

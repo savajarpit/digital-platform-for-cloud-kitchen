@@ -1,16 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   ApiError,
   createManualSubscription,
   listPlansAdmin,
   type CreateManualSubscriptionInput,
-  type Plan,
 } from "@/lib/api/admin-subscriptions";
-import { getCustomer, type Customer, type CustomerAddress } from "@/lib/api/admin-customers";
-import { getDeliverySlots, type DeliverySlot } from "@/lib/api/delivery-slots";
+import { getCustomer, type Customer } from "@/lib/api/admin-customers";
+import { getDeliverySlots } from "@/lib/api/delivery-slots";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateSubscriptionAreas } from "@/lib/query/subscription-invalidation";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { CustomerCombobox } from "@/components/admin/CustomerCombobox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
@@ -19,16 +22,45 @@ import { formatPriceFromPaise } from "@/lib/format/currency";
 export function ManualSubscriptionForm() {
   const router = useRouter();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
 
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [addresses, setAddresses] = useState<CustomerAddress[] | null>(null);
-  const [addressId, setAddressId] = useState("");
-
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [planId, setPlanId] = useState("");
-
-  const [slots, setSlots] = useState<DeliverySlot[]>([]);
+  // Picks are drafts over the fetched defaults, so a background refetch cannot
+  // clobber a choice the admin already made.
+  const [addressDraft, setAddressDraft] = useState<string | null>(null);
+  const [planDraft, setPlanDraft] = useState<string | null>(null);
   const [deliverySlotId, setDeliverySlotId] = useState("");
+
+  const plansQuery = useQuery({
+    queryKey: qk.admin("subscriptions", "plans", "options"),
+    queryFn: () => listPlansAdmin({ limit: 100 }),
+    staleTime: STALE.short,
+  });
+  const plans = (plansQuery.data?.data ?? []).filter((p) => p.isPublished && p.isActive);
+  const planId = planDraft ?? plans[0]?.id ?? "";
+
+  const slotsQuery = useQuery({
+    queryKey: qk.admin("subscriptions", "manual-delivery-slots"),
+    queryFn: getDeliverySlots,
+    staleTime: STALE.short,
+  });
+  const slots = slotsQuery.data?.slots ?? [];
+
+  const customerQuery = useQuery({
+    queryKey: qk.admin("subscriptions", "customer", customer?.id),
+    queryFn: () => getCustomer(customer!.id),
+    enabled: Boolean(customer),
+    staleTime: STALE.short,
+  });
+  const addresses = customer
+    ? customerQuery.data
+      ? customerQuery.data.addresses
+      : customerQuery.isError
+        ? []
+        : null
+    : null;
+  const addressId =
+    addressDraft ?? addresses?.find((a) => a.isDefault)?.id ?? addresses?.[0]?.id ?? "";
 
   const [couponCode, setCouponCode] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "UPI">("CASH");
@@ -36,28 +68,9 @@ export function ManualSubscriptionForm() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    listPlansAdmin({ limit: 100 }).then(({ data }) => {
-      const published = data.filter((p) => p.isPublished && p.isActive);
-      setPlans(published);
-      setPlanId(published[0]?.id ?? "");
-    });
-    getDeliverySlots()
-      .then((config) => setSlots(config.slots))
-      .catch(() => setSlots([]));
-  }, []);
-
   function handleCustomerChange(next: Customer | null) {
     setCustomer(next);
-    setAddresses(null);
-    setAddressId("");
-    if (!next) return;
-    getCustomer(next.id)
-      .then((detail) => {
-        setAddresses(detail.addresses);
-        setAddressId(detail.addresses.find((a) => a.isDefault)?.id ?? detail.addresses[0]?.id ?? "");
-      })
-      .catch(() => setAddresses([]));
+    setAddressDraft(null);
   }
 
   const selectedPlan = plans.find((p) => p.id === planId);
@@ -77,6 +90,7 @@ export function ManualSubscriptionForm() {
         paymentMethod,
       };
       const { subscription } = await createManualSubscription(input);
+      await invalidateSubscriptionAreas(queryClient);
       showToast("Subscription created", "success");
       router.push(`/admin/subscriptions/${subscription.id}`);
     } catch (err) {
@@ -104,13 +118,13 @@ export function ManualSubscriptionForm() {
               Delivery address
             </label>
             {!addresses ? (
-              <p className="text-xs text-zinc-400">Loading addresses…</p>
+              <Skeleton className="h-[42px] w-full rounded-xl" />
             ) : addresses.length === 0 ? (
               <p className="text-xs text-red-600 dark:text-red-400">
                 This customer has no saved addresses yet.
               </p>
             ) : (
-              <Select value={addressId} onValueChange={setAddressId}>
+              <Select value={addressId} onValueChange={setAddressDraft}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -130,22 +144,32 @@ export function ManualSubscriptionForm() {
 
       <div className="card flex flex-col gap-4 p-6">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Plan</h3>
-        <Select value={planId} onValueChange={setPlanId}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {plans.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name} — {formatPriceFromPaise(p.priceInPaise)} / {p.durationDays} days
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {plans.length === 0 && (
+        {plansQuery.isPending ? (
+          <Skeleton className="h-[42px] w-full rounded-xl" />
+        ) : (
+          <Select value={planId} onValueChange={setPlanDraft}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {plans.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name} — {formatPriceFromPaise(p.priceInPaise)} / {p.durationDays} days
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {!plansQuery.isPending && plans.length === 0 && (
           <p className="text-xs text-zinc-400">No published plans available.</p>
         )}
 
+        {slotsQuery.isPending && (
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-[42px] w-full rounded-xl" />
+          </div>
+        )}
         {slots.length > 0 && (
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">

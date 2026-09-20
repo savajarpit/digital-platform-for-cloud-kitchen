@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LayoutGrid, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -13,28 +14,27 @@ import {
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { RowListCardSkeleton } from "@/components/admin/skeletons/RowListCardSkeleton";
 import { HomeSectionEditor } from "@/components/admin/HomeSectionEditor";
 
 export function HomeSectionsManager({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
   const confirm = useConfirm();
-  const [sections, setSections] = useState<HomeSection[] | null>(null);
+  const queryClient = useQueryClient();
+  const { data: sections, isError } = useQuery({
+    queryKey: qk.admin("home", "sections"),
+    queryFn: listHomeSectionsAdmin,
+    staleTime: STALE.list,
+  });
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    listHomeSectionsAdmin()
-      .then(setSections)
-      .catch(() => showToast("Couldn't load home sections.", "error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // Every write refreshes the cached section list.
   function refetch() {
-    listHomeSectionsAdmin()
-      .then(setSections)
-      .catch(() => showToast("Couldn't refresh home sections. Try reloading the page.", "error"));
+    queryClient.invalidateQueries({ queryKey: qk.admin("home", "sections") });
   }
 
   async function handleCreate() {
@@ -79,11 +79,12 @@ export function HomeSectionsManager({ canEdit }: { canEdit: boolean }) {
   }
 
   if (!sections) {
-    return (
+    return isError ? (
       <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-32 w-full" />
+        <EmptyState compact title="Couldn't load home sections." />
       </div>
+    ) : (
+      <RowListCardSkeleton rows={2} description headerAction />
     );
   }
 
@@ -125,7 +126,7 @@ export function HomeSectionsManager({ canEdit }: { canEdit: boolean }) {
       )}
 
       {sections.length === 0 && !creating && (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No home page sections yet.</p>
+        <EmptyState compact title="No home page sections yet." />
       )}
 
       <div className="flex flex-col gap-3">

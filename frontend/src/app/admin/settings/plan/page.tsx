@@ -1,18 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Gauge } from "lucide-react";
 import {
   ApiError,
   getMyEligiblePlans,
   switchPlatformPlan,
   verifySwitchPlan,
-  type EligiblePlansResponse,
 } from "@/lib/api/admin-platform-plans";
-import { getMyUsage, type UsageSummary } from "@/lib/api/tenant-limits";
+import { getMyUsage } from "@/lib/api/tenant-limits";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { MyPlanSkeleton } from "@/components/admin/skeletons/MyPlanSkeleton";
 import { EligiblePlanCard } from "@/components/admin/EligiblePlanCard";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
@@ -26,26 +28,32 @@ const CANCELLATION_REQUEST_ENABLED = false;
 export default function MyPlanPage() {
   const { showToast } = useToast();
   const confirm = useConfirm();
-  const [eligible, setEligible] = useState<EligiblePlansResponse | null>(null);
-  const [usage, setUsage] = useState<UsageSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const { data: eligible, error: loadError } = useQuery({
+    queryKey: qk.admin("plan", "eligible"),
+    queryFn: getMyEligiblePlans,
+    staleTime: STALE.short,
+  });
+  const { data: usage } = useQuery({
+    queryKey: qk.admin("usage"),
+    queryFn: getMyUsage,
+    staleTime: STALE.short,
+  });
+  const error = loadError
+    ? loadError instanceof ApiError
+      ? loadError.message
+      : "Couldn't load plans."
+    : null;
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [showCancelForm, setShowCancelForm] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [submittingCancelRequest, setSubmittingCancelRequest] = useState(false);
 
+  // A completed plan switch changes both the eligible-plans list and the limits.
   function reload() {
-    getMyEligiblePlans()
-      .then(setEligible)
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "Couldn't load plans."),
-      );
-    getMyUsage()
-      .then(setUsage)
-      .catch(() => setUsage(null));
+    queryClient.invalidateQueries({ queryKey: qk.admin("plan") });
+    queryClient.invalidateQueries({ queryKey: qk.admin("usage") });
   }
-
-  useEffect(reload, []);
 
   function handleSwitch(planId: string, planName: string, isUpgrade: boolean) {
     confirm({
@@ -131,10 +139,7 @@ export default function MyPlanPage() {
       )}
 
       {!eligible ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-32 w-full" />
-        </div>
+        error ? null : <MyPlanSkeleton />
       ) : (
         <>
           <div className="card flex flex-col gap-2 p-6">
@@ -187,9 +192,7 @@ export default function MyPlanPage() {
               )}
 
               {eligible.plans.length === 0 ? (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                  No other plans available to switch to right now.
-                </p>
+                <EmptyState compact title="No other plans available to switch to right now." />
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {eligible.plans.map((plan) => (
@@ -213,7 +216,7 @@ export default function MyPlanPage() {
               {showCancelForm ? (
                 <div className="flex flex-col gap-2">
                   <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                    Tell us why — we'll reach out before anything is cancelled.
+                    Tell us why — we&apos;ll reach out before anything is cancelled.
                   </label>
                   <textarea
                     value={cancelReason}

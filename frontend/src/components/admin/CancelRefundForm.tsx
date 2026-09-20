@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { invalidateSubscriptionAreas } from "@/lib/query/subscription-invalidation";
+import { invalidateOrderAreas } from "@/lib/query/admin-invalidation";
 import { ApiError, cancelOrderRefund } from "@/lib/api/admin-orders";
-import {
-  cancelSubscriptionRefund,
-  getRefundPreview,
-  type RefundPreview,
-} from "@/lib/api/admin-subscriptions";
+import { cancelSubscriptionRefund, getRefundPreview } from "@/lib/api/admin-subscriptions";
+import { qk } from "@/lib/query/keys";
 import type { CancelRefundInput, RefundMethod } from "@/lib/api/refunds";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { formatPriceFromPaise } from "@/lib/format/currency";
@@ -31,24 +31,33 @@ export function CancelRefundForm({
   onCancelled: () => void;
 }) {
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [preview, setPreview] = useState<RefundPreview | null>(null);
   const [method, setMethod] = useState<RefundMethod>("MANUAL");
-  const [amountRupees, setAmountRupees] = useState(String(defaultAmountInPaise / 100));
+  // Draft pattern: null until the admin types, so the suggested amount can
+  // arrive from the preview without an effect copying it into state.
+  const [amountDraft, setAmountDraft] = useState<string | null>(null);
   const [feeRupees, setFeeRupees] = useState("0");
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Subscription cancellations start from the pending-days refund preview.
+  // staleTime 0: it depends on today's delivery progress, so refetch each open.
+  const { data: previewData, isError: previewError } = useQuery({
+    queryKey: qk.admin("subscriptions", "refund-preview", id),
+    queryFn: () => getRefundPreview(id),
+    enabled: open && kind === "subscription",
+    staleTime: 0,
+  });
+  const preview = previewData ?? null;
+  const amountRupees =
+    amountDraft ?? String((preview?.suggestedAmountInPaise ?? defaultAmountInPaise) / 100);
+  const setAmountRupees = setAmountDraft;
+
   useEffect(() => {
-    if (!open || kind !== "subscription") return;
-    getRefundPreview(id)
-      .then((p) => {
-        setPreview(p);
-        setAmountRupees(String(p.suggestedAmountInPaise / 100));
-      })
-      .catch(() => showToast("Couldn't load the suggested refund amount.", "error"));
-  }, [open, kind, id]);
+    if (previewError) showToast("Couldn't load the suggested refund amount.", "error");
+  }, [previewError, showToast]);
 
   const amountInPaise = Math.round((Number(amountRupees) || 0) * 100);
   const feeInPaise = Math.round((Number(feeRupees) || 0) * 100);
@@ -66,8 +75,10 @@ export function CancelRefundForm({
       };
       if (kind === "order") {
         await cancelOrderRefund(id, input);
+        void invalidateOrderAreas(queryClient);
       } else {
         await cancelSubscriptionRefund(id, input);
+        void invalidateSubscriptionAreas(queryClient);
       }
       showToast(kind === "order" ? "Order cancelled" : "Subscription cancelled", "success");
       setOpen(false);

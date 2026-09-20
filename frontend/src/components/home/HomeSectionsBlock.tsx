@@ -29,8 +29,8 @@ export function HomeSectionsBlock({
             </Link>
           </div>
           <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {section.items.map((item, index) => (
-              <MealCard key={item.id} meal={item.meal} currency={currency} index={index} />
+            {section.items.map((item) => (
+              <MealCard key={item.id} meal={item.meal} currency={currency} />
             ))}
           </div>
         </section>

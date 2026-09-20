@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, CheckCircle2 } from "lucide-react";
 import {
   ApiError,
@@ -15,7 +16,9 @@ import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SettingsFormSkeleton } from "@/components/admin/skeletons/SettingsFormSkeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -33,52 +36,80 @@ function ConfiguredBadge({ configured }: { configured: boolean }) {
   );
 }
 
+// Secrets (API key, SMTP password...) are never returned by the API, so they
+// always start blank; "configured" badges come from the settings flags.
+type FormState = {
+  whatsappEnabled: boolean;
+  whatsappProvider: WhatsappProvider | "";
+  whatsappApiKey: string;
+  whatsappAccountSid: string;
+  whatsappSenderNumber: string;
+  ownerWhatsappNumber: string;
+  emailEnabled: boolean;
+  emailProvider: EmailProvider | "";
+  emailFromAddress: string;
+  emailFromName: string;
+  ownerNotificationEmail: string;
+  smtpHost: string;
+  smtpPort: string;
+  smtpSecure: boolean;
+  smtpUser: string;
+  smtpPassword: string;
+};
+
+function toForm(s: NotificationSettings | null): FormState {
+  return {
+    whatsappEnabled: s?.whatsappEnabled ?? false,
+    whatsappProvider: s?.whatsappProvider ?? "",
+    whatsappApiKey: "",
+    whatsappAccountSid: "",
+    whatsappSenderNumber: s?.whatsappSenderNumber ?? "",
+    ownerWhatsappNumber: s?.ownerWhatsappNumber ?? "",
+    emailEnabled: s?.emailEnabled ?? false,
+    emailProvider: s?.emailProvider ?? "",
+    emailFromAddress: s?.emailFromAddress ?? "",
+    emailFromName: s?.emailFromName ?? "",
+    ownerNotificationEmail: s?.ownerNotificationEmail ?? "",
+    smtpHost: "",
+    smtpPort: "",
+    smtpSecure: false,
+    smtpUser: "",
+    smtpPassword: "",
+  };
+}
+
 export default function NotificationsPage() {
   const { showToast } = useToast();
   const canEdit = usePermission(PERMISSIONS.NOTIFICATIONS_EDIT);
 
-  const [settings, setSettings] = useState<NotificationSettings | null>(null);
-  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
-  const [whatsappProvider, setWhatsappProvider] = useState<WhatsappProvider | "">("");
-  const [whatsappApiKey, setWhatsappApiKey] = useState("");
-  const [whatsappAccountSid, setWhatsappAccountSid] = useState("");
-  const [whatsappSenderNumber, setWhatsappSenderNumber] = useState("");
-  const [ownerWhatsappNumber, setOwnerWhatsappNumber] = useState("");
-
-  const [emailEnabled, setEmailEnabled] = useState(false);
-  const [emailProvider, setEmailProvider] = useState<EmailProvider | "">("");
-  const [emailFromAddress, setEmailFromAddress] = useState("");
-  const [emailFromName, setEmailFromName] = useState("");
-  const [ownerNotificationEmail, setOwnerNotificationEmail] = useState("");
-  const [smtpHost, setSmtpHost] = useState("");
-  const [smtpPort, setSmtpPort] = useState("");
-  const [smtpSecure, setSmtpSecure] = useState(false);
-  const [smtpUser, setSmtpUser] = useState("");
-  const [smtpPassword, setSmtpPassword] = useState("");
-
+  const queryClient = useQueryClient();
+  const queryKey = qk.admin("settings", "notifications");
+  // `data` is null when nothing has been configured yet, so "loaded" means !== undefined.
+  const { data, isError } = useQuery({
+    queryKey,
+    queryFn: getNotificationSettings,
+    staleTime: STALE.list,
+  });
+  // Unsaved edits live in `draft`; a background refetch never overwrites them.
+  const [draft, setDraft] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getNotificationSettings()
-      .then((s) => {
-        setSettings(s ?? ({} as NotificationSettings));
-        if (!s) return;
-        setWhatsappEnabled(s.whatsappEnabled);
-        setWhatsappProvider(s.whatsappProvider ?? "");
-        setWhatsappSenderNumber(s.whatsappSenderNumber ?? "");
-        setOwnerWhatsappNumber(s.ownerWhatsappNumber ?? "");
-        setEmailEnabled(s.emailEnabled);
-        setEmailProvider(s.emailProvider ?? "");
-        setEmailFromAddress(s.emailFromAddress ?? "");
-        setEmailFromName(s.emailFromName ?? "");
-        setOwnerNotificationEmail(s.ownerNotificationEmail ?? "");
-      })
-      .catch(() => setError("Couldn't load notification settings."));
-  }, []);
+  const settings = data ?? ({} as NotificationSettings);
+  const form = draft ?? (data !== undefined ? toForm(data) : null);
+
+  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setDraft((prev) => ({ ...(prev ?? toForm(data ?? null)), [key]: value }));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!form) return;
+    const {
+      whatsappEnabled, whatsappProvider, whatsappApiKey, whatsappAccountSid, whatsappSenderNumber,
+      ownerWhatsappNumber, emailEnabled, emailProvider, emailFromAddress, emailFromName,
+      ownerNotificationEmail, smtpHost, smtpPort, smtpSecure, smtpUser, smtpPassword,
+    } = form;
     setError(null);
     setSaving(true);
     try {
@@ -109,13 +140,10 @@ export default function NotificationsPage() {
             }
           : {}),
       });
-      setSettings(updated);
-      setWhatsappApiKey("");
-      setWhatsappAccountSid("");
-      setSmtpHost("");
-      setSmtpPort("");
-      setSmtpUser("");
-      setSmtpPassword("");
+      queryClient.setQueryData(queryKey, updated);
+      queryClient.invalidateQueries({ queryKey });
+      // Re-derives the form from the saved settings and blanks the secret inputs.
+      setDraft(null);
       showToast("Notification settings saved", "success");
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Couldn't save changes.";
@@ -126,14 +154,19 @@ export default function NotificationsPage() {
     }
   }
 
-  if (!settings) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-40 w-full" />
-      </div>
+  if (!form) {
+    return isError ? (
+      <EmptyState compact icon={Bell} title="Couldn't load notification settings." />
+    ) : (
+      <SettingsFormSkeleton cards={2} fields={4} columns={2} />
     );
   }
+
+  const {
+    whatsappEnabled, whatsappProvider, whatsappApiKey, whatsappAccountSid, whatsappSenderNumber,
+    ownerWhatsappNumber, emailEnabled, emailProvider, emailFromAddress, emailFromName,
+    ownerNotificationEmail, smtpHost, smtpPort, smtpSecure, smtpUser, smtpPassword,
+  } = form;
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -155,7 +188,7 @@ export default function NotificationsPage() {
         <div className="card flex flex-col gap-4 p-6">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">WhatsApp</h3>
-            <Toggle checked={whatsappEnabled} onChange={setWhatsappEnabled} disabled={!canEdit} />
+            <Toggle checked={whatsappEnabled} onChange={(v) => set("whatsappEnabled", v)} disabled={!canEdit} />
           </div>
           {whatsappEnabled && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -165,7 +198,7 @@ export default function NotificationsPage() {
                 </label>
                 <Select
                   value={whatsappProvider}
-                  onValueChange={(v) => setWhatsappProvider(v as WhatsappProvider)}
+                  onValueChange={(v) => set("whatsappProvider", v as WhatsappProvider)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select provider…" />
@@ -187,7 +220,7 @@ export default function NotificationsPage() {
                 </label>
                 <PasswordInput
                   value={whatsappApiKey}
-                  onChange={(e) => setWhatsappApiKey(e.target.value)}
+                  onChange={(e) => set("whatsappApiKey", e.target.value)}
                   placeholder={settings.whatsappApiKeyConfigured ? "Leave blank to keep current" : ""}
                   className="input w-full"
                 />
@@ -201,7 +234,7 @@ export default function NotificationsPage() {
                   <input
                     type="text"
                     value={whatsappAccountSid}
-                    onChange={(e) => setWhatsappAccountSid(e.target.value)}
+                    onChange={(e) => set("whatsappAccountSid", e.target.value)}
                     placeholder={
                       settings.whatsappConfigConfigured ? "Leave blank to keep current" : "ACxxxxxxxxxxxxxxxx"
                     }
@@ -216,7 +249,7 @@ export default function NotificationsPage() {
                 <input
                   type="tel"
                   value={whatsappSenderNumber}
-                  onChange={(e) => setWhatsappSenderNumber(e.target.value)}
+                  onChange={(e) => set("whatsappSenderNumber", e.target.value)}
                   placeholder="e.g. +14155238886 for Twilio sandbox, or your WhatsApp Business number"
                   className="input w-full"
                 />
@@ -225,7 +258,7 @@ export default function NotificationsPage() {
                 <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                   Owner alert number
                 </label>
-                <PhoneInput value={ownerWhatsappNumber} onChange={setOwnerWhatsappNumber} />
+                <PhoneInput value={ownerWhatsappNumber} onChange={(v) => set("ownerWhatsappNumber", v)} />
               </div>
             </div>
           )}
@@ -234,7 +267,7 @@ export default function NotificationsPage() {
         <div className="card flex flex-col gap-4 p-6">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Email</h3>
-            <Toggle checked={emailEnabled} onChange={setEmailEnabled} disabled={!canEdit} />
+            <Toggle checked={emailEnabled} onChange={(v) => set("emailEnabled", v)} disabled={!canEdit} />
           </div>
           {emailEnabled && (
             <>
@@ -243,7 +276,7 @@ export default function NotificationsPage() {
                   <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                     Provider
                   </label>
-                  <Select value={emailProvider} onValueChange={(v) => setEmailProvider(v as EmailProvider)}>
+                  <Select value={emailProvider} onValueChange={(v) => set("emailProvider", v as EmailProvider)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select provider…" />
                     </SelectTrigger>
@@ -264,7 +297,7 @@ export default function NotificationsPage() {
                   <input
                     type="email"
                     value={emailFromAddress}
-                    onChange={(e) => setEmailFromAddress(e.target.value)}
+                    onChange={(e) => set("emailFromAddress", e.target.value)}
                     className="input w-full"
                   />
                 </div>
@@ -275,7 +308,7 @@ export default function NotificationsPage() {
                   <input
                     type="text"
                     value={emailFromName}
-                    onChange={(e) => setEmailFromName(e.target.value)}
+                    onChange={(e) => set("emailFromName", e.target.value)}
                     className="input w-full"
                   />
                 </div>
@@ -286,7 +319,7 @@ export default function NotificationsPage() {
                   <input
                     type="email"
                     value={ownerNotificationEmail}
-                    onChange={(e) => setOwnerNotificationEmail(e.target.value)}
+                    onChange={(e) => set("ownerNotificationEmail", e.target.value)}
                     className="input w-full"
                   />
                 </div>
@@ -308,7 +341,7 @@ export default function NotificationsPage() {
                       <input
                         type="text"
                         value={smtpHost}
-                        onChange={(e) => setSmtpHost(e.target.value)}
+                        onChange={(e) => set("smtpHost", e.target.value)}
                         placeholder={settings.emailConfigConfigured ? "Leave blank to keep current" : "smtp.gmail.com"}
                         className="input w-full"
                       />
@@ -320,7 +353,7 @@ export default function NotificationsPage() {
                       <input
                         type="number"
                         value={smtpPort}
-                        onChange={(e) => setSmtpPort(e.target.value)}
+                        onChange={(e) => set("smtpPort", e.target.value)}
                         placeholder="587"
                         className="input w-full"
                       />
@@ -332,7 +365,7 @@ export default function NotificationsPage() {
                       <input
                         type="text"
                         value={smtpUser}
-                        onChange={(e) => setSmtpUser(e.target.value)}
+                        onChange={(e) => set("smtpUser", e.target.value)}
                         className="input w-full"
                       />
                     </div>
@@ -342,12 +375,12 @@ export default function NotificationsPage() {
                       </label>
                       <PasswordInput
                         value={smtpPassword}
-                        onChange={(e) => setSmtpPassword(e.target.value)}
+                        onChange={(e) => set("smtpPassword", e.target.value)}
                         className="input w-full"
                       />
                     </div>
                     <div className="flex items-center gap-2">
-                      <Toggle checked={smtpSecure} onChange={setSmtpSecure} disabled={!canEdit} />
+                      <Toggle checked={smtpSecure} onChange={(v) => set("smtpSecure", v)} disabled={!canEdit} />
                       <span className="text-sm text-zinc-700 dark:text-zinc-300">Use TLS (secure)</span>
                     </div>
                   </div>

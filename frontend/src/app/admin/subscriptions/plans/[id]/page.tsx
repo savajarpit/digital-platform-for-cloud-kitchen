@@ -1,9 +1,11 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowLeft, Check, Clock, Star } from "lucide-react";
-import { getPlanAdmin, type Plan } from "@/lib/api/admin-subscriptions";
+import { getPlanAdmin } from "@/lib/api/admin-subscriptions";
+import { qk, STALE } from "@/lib/query/keys";
 import {
   PLAN_ACCENT_BADGE,
   PLAN_ACCENT_GRADIENT,
@@ -16,14 +18,11 @@ import { formatPriceFromPaise } from "@/lib/format/currency";
 
 export default function AdminPlanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [plan, setPlan] = useState<Plan | null>(null);
-  const [notFound, setNotFound] = useState(false);
-
-  useEffect(() => {
-    getPlanAdmin(id)
-      .then(setPlan)
-      .catch(() => setNotFound(true));
-  }, [id]);
+  const { data: plan, isError: notFound } = useQuery({
+    queryKey: qk.admin("subscriptions", "plan", id),
+    queryFn: () => getPlanAdmin(id),
+    staleTime: STALE.short,
+  });
 
   if (notFound) {
     return (
@@ -38,9 +37,34 @@ export default function AdminPlanDetailPage({ params }: { params: Promise<{ id: 
 
   if (!plan) {
     return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-64 w-full" />
+      <div className="flex flex-col gap-6" aria-busy="true">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-6 w-20 rounded-full" />
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="card flex flex-col gap-3 p-6 lg:col-span-1">
+            <Skeleton className="mb-2 h-2 w-full rounded-full" />
+            <Skeleton className="h-7 w-2/3" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="mt-2 h-10 w-32" />
+            <Skeleton className="h-4 w-20" />
+            <div className="mt-3 flex flex-col gap-2.5">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+                  <Skeleton className="h-4 w-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="card flex flex-col gap-3 p-6 lg:col-span-2">
+            <Skeleton className="h-4 w-32" />
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full rounded-xl" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

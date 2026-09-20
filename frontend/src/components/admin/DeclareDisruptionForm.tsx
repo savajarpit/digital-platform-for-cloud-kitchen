@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidateSubscriptionAreas } from "@/lib/query/subscription-invalidation";
 import {
   ApiError,
   declareDisruption,
@@ -36,6 +38,7 @@ export function DeclareDisruptionForm({
   startOpen?: boolean;
 }) {
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(startOpen);
   const [date, setDate] = useState("");
   const [reason, setReason] = useState("");
@@ -55,6 +58,7 @@ export function DeclareDisruptionForm({
         planId: scope === "PLAN" ? planId : undefined,
       };
       await declareDisruption(input);
+      void invalidateSubscriptionAreas(queryClient);
       showToast(
         scope === "PLAN"
           ? "Disruption declared for every active subscriber."

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Gauge } from "lucide-react";
 import {
   ApiError,
@@ -8,21 +9,24 @@ import {
   updateTenantLimits,
   type TenantLimits,
 } from "@/lib/api/platform";
+import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { FormSkeleton } from "@/components/ui/skeletons/FormSkeleton";
 
 export function TenantLimitsCard({ tenantId }: { tenantId: string }) {
   const { showToast } = useToast();
-  const [limits, setLimits] = useState<TenantLimits | null>(null);
+  const queryClient = useQueryClient();
+  const [draft, setLimits] = useState<TenantLimits | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    getTenantLimits(tenantId)
-      .then(setLimits)
-      .catch(() => showToast("Couldn't load usage limits.", "error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tenantId]);
+  const { data, isError } = useQuery({
+    queryKey: qk.admin("platform", "tenants", tenantId, "limits"),
+    queryFn: () => getTenantLimits(tenantId),
+    staleTime: STALE.short,
+  });
+  // Unsaved edits live in `draft`; a background refetch never overwrites them.
+  const limits = draft ?? data ?? null;
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -35,7 +39,9 @@ export function TenantLimitsCard({ tenantId }: { tenantId: string }) {
         signupLimitEnabled: limits.signupLimitEnabled,
         maxSignupsPerMonth: limits.maxSignupsPerMonth,
       });
-      setLimits(updated);
+      queryClient.setQueryData(qk.admin("platform", "tenants", tenantId, "limits"), updated);
+      setLimits(null);
+      void queryClient.invalidateQueries({ queryKey: qk.admin("platform", "tenants") });
       showToast("Usage limits saved", "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't save limits.", "error");
@@ -45,12 +51,14 @@ export function TenantLimitsCard({ tenantId }: { tenantId: string }) {
   }
 
   if (!limits) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-32 w-full" />
-      </div>
-    );
+    if (isError) {
+      return (
+        <div className="card p-6">
+          <p className="text-sm text-red-600 dark:text-red-400">Couldn&apos;t load usage limits.</p>
+        </div>
+      );
+    }
+    return <FormSkeleton fields={2} columns={2} />;
   }
 
   return (

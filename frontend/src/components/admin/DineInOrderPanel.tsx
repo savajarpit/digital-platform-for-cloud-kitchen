@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
-import { addOrderItems, assignOrderTable, listDiningTables, type DiningTable } from "@/lib/api/dine-in";
+import { addOrderItems, assignOrderTable, listDiningTables } from "@/lib/api/dine-in";
+import { qk, STALE } from "@/lib/query/keys";
 import { ApiError, type AdminOrderDetail } from "@/lib/api/admin-orders";
 import { MealCombobox } from "@/components/admin/MealCombobox";
-import { listMeals, type Meal } from "@/lib/api/admin-menu";
+import { listMeals } from "@/lib/api/admin-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
 
@@ -17,7 +19,8 @@ interface CartRow {
 /** Embedded in the order detail page for a DINE_IN/TAKEAWAY order — lets
  * staff add another round of items to the still-open bill, and (DINE_IN
  * only) assign or move the table. Nothing here applies once the order is
- * closed (served/picked up or cancelled). */
+ * closed (served/picked up or cancelled). Both writes call `onChanged`, which
+ * the order page wires to the shared order-area cache invalidation. */
 export function DineInOrderPanel({
   order,
   onChanged,
@@ -28,22 +31,26 @@ export function DineInOrderPanel({
   const { showToast } = useToast();
   const isOpen = order.status !== "DELIVERED" && order.status !== "CANCELLED";
 
-  const [meals, setMeals] = useState<Meal[]>([]);
   const [cart, setCart] = useState<CartRow[]>([{ mealId: "", quantity: 1 }]);
   const [submittingItems, setSubmittingItems] = useState(false);
 
-  const [tables, setTables] = useState<DiningTable[] | null>(null);
   const [tableId, setTableId] = useState(order.tableId ?? "");
   const [assigning, setAssigning] = useState(false);
 
-  useEffect(() => {
-    listMeals({ limit: 100 }).then(({ data }) => setMeals(data)).catch(() => setMeals([]));
-  }, []);
+  const { data: mealsPage } = useQuery({
+    queryKey: qk.admin("menu", "meals", "known", 100),
+    queryFn: () => listMeals({ limit: 100 }),
+    staleTime: STALE.list,
+  });
+  const meals = mealsPage?.data ?? [];
 
-  useEffect(() => {
-    if (order.fulfillmentType !== "DINE_IN" || !order.dineInKitchenZone) return;
-    listDiningTables(order.dineInKitchenZone.id).then(setTables).catch(() => setTables([]));
-  }, [order.fulfillmentType, order.dineInKitchenZone]);
+  const zoneId = order.dineInKitchenZone?.id;
+  const { data: tables } = useQuery({
+    queryKey: qk.admin("dine-in", "tables", zoneId ?? ""),
+    queryFn: () => listDiningTables(zoneId),
+    enabled: order.fulfillmentType === "DINE_IN" && Boolean(zoneId),
+    staleTime: STALE.short,
+  });
 
   function updateRow(index: number, patch: Partial<CartRow>) {
     setCart((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));

@@ -1,18 +1,27 @@
 import { Skeleton } from "@/components/ui/Skeleton";
+import { PlanCardSkeleton } from "@/components/subscriptions/PlanCardSkeleton";
 
+/** Mirrors plans/page.tsx: gradient header (`py-12`, centered title +
+ * subtitle), then the `bg-zinc-50` body with the 1/2/3-column plan grid. */
 export default function PlansLoading() {
   return (
-    <main className="container-app flex-1 py-16 text-center">
-      <Skeleton className="mx-auto h-6 w-28 rounded-full" />
-      <Skeleton className="mx-auto mt-4 h-9 w-64 max-w-full" />
-      <Skeleton className="mx-auto mt-4 h-5 w-full max-w-xl" />
-      <Skeleton className="mx-auto mt-2 h-5 w-2/3 max-w-xl" />
-      <div className="mt-8 flex flex-wrap justify-center gap-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-8 w-24 rounded-full" />
-        ))}
+    <main className="flex-1">
+      <div className="bg-linear-to-br from-primary-50 to-white py-12 dark:from-primary-950 dark:to-zinc-950">
+        <div className="container-app text-center">
+          <Skeleton className="mx-auto h-8 w-64 max-w-full sm:h-9" />
+          <Skeleton className="mx-auto mt-3 h-6 w-full max-w-xl" />
+        </div>
       </div>
-      <Skeleton className="mx-auto mt-10 h-12 w-48 rounded-xl" />
+
+      <div className="bg-zinc-50 dark:bg-zinc-950">
+        <div className="container-app py-12">
+          <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <PlanCardSkeleton key={i} />
+            ))}
+          </div>
+        </div>
+      </div>
     </main>
   );
 }

@@ -1,10 +1,13 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowLeft, CalendarClock, Mail, MapPin, Package, Phone, User } from "lucide-react";
-import { getCustomer, type CustomerDetail } from "@/lib/api/admin-customers";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { getCustomer } from "@/lib/api/admin-customers";
+import { qk, STALE } from "@/lib/query/keys";
+import { CustomerDetailSkeleton } from "@/components/admin/CustomerDetailSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { MapLink } from "@/components/ui/MapLink";
 import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
@@ -25,16 +28,13 @@ const SUB_STATUS_STYLES: Record<string, string> = {
 
 export default function AdminCustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [customer, setCustomer] = useState<CustomerDetail | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const { data: customer, isPending, isError } = useQuery({
+    queryKey: qk.admin("customers", "detail", id),
+    queryFn: () => getCustomer(id),
+    staleTime: STALE.short,
+  });
 
-  useEffect(() => {
-    getCustomer(id)
-      .then(setCustomer)
-      .catch(() => setNotFound(true));
-  }, [id]);
-
-  if (notFound) {
+  if (isError) {
     return (
       <div className="flex flex-col items-center gap-4 py-24 text-center">
         <p className="text-zinc-600 dark:text-zinc-400">Customer not found.</p>
@@ -45,14 +45,7 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
     );
   }
 
-  if (!customer) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-64 w-full" />
-      </div>
-    );
-  }
+  if (isPending) return <CustomerDetailSkeleton />;
 
   return (
     <div className="flex flex-col gap-6">
@@ -115,7 +108,7 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
             Addresses
           </h3>
           {customer.addresses.length === 0 ? (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">No saved addresses.</p>
+            <EmptyState compact title="No saved addresses." />
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {customer.addresses.map((address) => (
@@ -156,7 +149,7 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
           Recent orders
         </h3>
         {customer.orders.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">No orders yet.</p>
+          <EmptyState compact title="No orders yet." />
         ) : (
           <div className="flex flex-col gap-2">
             {customer.orders.map((order) => (
@@ -189,7 +182,7 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
           Subscriptions
         </h3>
         {customer.subscriptions.length === 0 ? (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">No subscriptions yet.</p>
+          <EmptyState compact title="No subscriptions yet." />
         ) : (
           <div className="flex flex-col gap-2">
             {customer.subscriptions.map((sub) => (

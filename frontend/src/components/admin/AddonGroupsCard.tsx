@@ -14,6 +14,7 @@ import {
 } from "@/lib/api/addons";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Toggle } from "@/components/ui/Toggle";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
@@ -162,7 +163,7 @@ export function AddonGroupsCard({
           </div>
         ))}
         {groups.length === 0 && (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">No add-on groups yet.</p>
+          <EmptyState compact title="No add-on groups yet." />
         )}
       </div>
 

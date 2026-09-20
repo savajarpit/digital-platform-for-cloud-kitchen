@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { ChevronLeft, ChevronRight, FileText, Package } from "lucide-react";
-import { ApiError, listOrders, type Order, type OrdersMeta } from "@/lib/api/orders";
+import { ApiError, listOrders } from "@/lib/api/orders";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { ORDER_STATUS_STYLES } from "@/lib/format/status-styles";
 import { OrderCardSkeleton } from "@/components/orders/OrderCardSkeleton";
@@ -18,9 +21,7 @@ export default function OrdersPage() {
   return (
     <main className="container-app flex-1 py-10">
       <PageHeader icon={Package} title={t("viewOrders")} />
-      {/* Keyed by page so switching pages remounts fresh (starts at null
-          again) instead of a synchronous setState-to-null in an effect. */}
-      <OrdersList key={page} page={page} onPageChange={setPage} />
+      <OrdersList page={page} onPageChange={setPage} />
     </main>
   );
 }
@@ -35,25 +36,22 @@ function OrdersList({
   const t = useTranslations("order");
   const tInvoice = useTranslations("invoice");
   const router = useRouter();
-  const [orders, setOrders] = useState<Order[] | null>(null);
-  const [meta, setMeta] = useState<OrdersMeta | null>(null);
+  // Cached per page: revisiting shows the last result instantly and only
+  // refetches quietly once it is older than STALE.list; paging keeps the
+  // previous page on screen until the next arrives (no skeleton flash).
+  const { data, isPending, isError, error } = useQuery({
+    queryKey: qk.orders.list(page),
+    queryFn: () => listOrders({ page }),
+    staleTime: STALE.list,
+    placeholderData: keepPreviousData,
+  });
+  const unauthorized = error instanceof ApiError && error.status === 401;
 
   useEffect(() => {
-    listOrders({ page })
-      .then(({ data, meta }) => {
-        setOrders(data);
-        setMeta(meta ?? null);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) {
-          router.push("/login?redirect=/orders");
-          return;
-        }
-        setOrders([]);
-      });
-  }, [page, router]);
+    if (unauthorized) router.push("/login?redirect=/orders");
+  }, [unauthorized, router]);
 
-  if (orders === null) {
+  if (isPending || unauthorized) {
     return (
       <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -63,15 +61,30 @@ function OrdersList({
     );
   }
 
+  if (isError) {
+    return (
+      <EmptyState
+        icon={Package}
+        title="Couldn't load your orders"
+        description="Please try again in a moment."
+      />
+    );
+  }
+
+  const orders = data.data;
+  const meta = data.meta;
+
   if (orders.length === 0) {
     return (
-      <div className="mt-16 flex flex-col items-center gap-3 text-center">
-        <Package className="h-12 w-12 text-zinc-300 dark:text-zinc-700" />
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No orders yet.</p>
-        <Link href="/menu" className="btn-primary">
-          {t("backToMenu")}
-        </Link>
-      </div>
+      <EmptyState
+        icon={Package}
+        title="No orders yet."
+        action={
+          <Link href="/menu" className="btn-primary">
+            {t("backToMenu")}
+          </Link>
+        }
+      />
     );
   }
 

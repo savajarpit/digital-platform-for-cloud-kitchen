@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { XCircle } from "lucide-react";
 import {
   ApiError,
@@ -9,25 +9,30 @@ import {
   type PlatformCancellationRequest,
   type PlatformCancellationRequestStatus,
 } from "@/lib/api/platform-cancellation-requests";
+import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PlatformRowListSkeleton } from "@/components/admin/PlatformRowListSkeleton";
 import { PlatformCancellationRequestRow } from "@/components/admin/PlatformCancellationRequestRow";
 
 export default function PlatformCancellationRequestsAdminPage() {
-  const [requests, setRequests] = useState<PlatformCancellationRequest[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
-
-  useEffect(() => {
-    listCancellationRequests()
-      .then(setRequests)
-      .catch(() => setError("Couldn't load cancellation requests."));
-  }, []);
+  const queryClient = useQueryClient();
+  const listKey = qk.admin("platform", "cancellation-requests");
+  const { data: requests, isError } = useQuery({
+    queryKey: listKey,
+    queryFn: listCancellationRequests,
+    staleTime: STALE.short,
+  });
+  const error = isError ? "Couldn't load cancellation requests." : null;
 
   async function handleUpdateStatus(id: string, status: PlatformCancellationRequestStatus) {
     try {
       const updated = await updateCancellationRequestStatus(id, status);
-      setRequests((prev) => prev?.map((r) => (r.id === id ? updated : r)) ?? null);
+      queryClient.setQueryData<PlatformCancellationRequest[]>(listKey, (prev) =>
+        prev?.map((r) => (r.id === id ? updated : r)),
+      );
+      void queryClient.invalidateQueries({ queryKey: listKey });
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update request.", "error");
     }
@@ -52,12 +57,9 @@ export default function PlatformCancellationRequestsAdminPage() {
       )}
 
       {!requests ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-40 w-full" />
-        </div>
+        isError ? null : <PlatformRowListSkeleton />
       ) : requests.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No cancellation requests yet.</p>
+        <EmptyState compact title="No cancellation requests yet." />
       ) : (
         <div className="card flex flex-col gap-2 p-6">
           {requests.map((request) => (

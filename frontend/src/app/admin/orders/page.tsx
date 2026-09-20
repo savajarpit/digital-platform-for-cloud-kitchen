@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, ClipboardPlus, Package } from "lucide-react";
 import {
@@ -12,12 +13,13 @@ import {
   updateOrderStatus,
   type AdminOrder,
   type AdminOrderFulfillmentType,
-  type AdminOrdersMeta,
 } from "@/lib/api/admin-orders";
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { TableSkeleton } from "@/components/ui/skeletons/TableSkeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateOrderAreas } from "@/lib/query/admin-invalidation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { formatPriceFromPaise } from "@/lib/format/currency";
@@ -116,11 +118,7 @@ export default function AdminOrdersPage() {
 
       {!canEdit && <ViewOnlyNotice />}
 
-      {/* Keyed by page+status+fulfillmentType so switching any of them
-          remounts fresh (starts at null again) instead of a synchronous
-          setState-to-null in an effect. */}
       <OrdersTable
-        key={`${page}-${status}-${fulfillmentType}`}
         page={page}
         status={status}
         fulfillmentType={fulfillmentType}
@@ -145,53 +143,53 @@ function OrdersTable({
   onPageChange: (page: number) => void;
 }) {
   const { showToast } = useToast();
-  const [orders, setOrders] = useState<AdminOrder[] | null>(null);
-  const [meta, setMeta] = useState<AdminOrdersMeta | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listAdminOrders({
-      page,
-      status: status || undefined,
-      fulfillmentType: (fulfillmentType || undefined) as AdminOrderFulfillmentType | undefined,
-    })
-      .then(({ data, meta }) => {
-        setOrders(data);
-        setMeta(meta ?? null);
-      })
-      .catch(() => setError("Couldn't load orders."));
-  }, [page, status, fulfillmentType]);
+  const queryClient = useQueryClient();
+  // Every input the request depends on is in the key. Changing a filter or
+  // page keeps the current rows on screen (no remount, no skeleton) until the
+  // next result arrives.
+  const listKey = qk.admin("orders", "list", page, status, fulfillmentType);
+  const { data, isPending, isError, isPlaceholderData } = useQuery({
+    queryKey: listKey,
+    queryFn: () =>
+      listAdminOrders({
+        page,
+        status: status || undefined,
+        fulfillmentType: (fulfillmentType || undefined) as AdminOrderFulfillmentType | undefined,
+      }),
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
+  type OrdersPage = NonNullable<typeof data>;
 
   async function handleStatusChange(order: AdminOrder, newStatus: string) {
-    const prevOrders = orders;
-    setOrders((prev) =>
-      prev ? prev.map((o) => (o.id === order.id ? { ...o, status: newStatus } : o)) : prev,
+    const prevPage = queryClient.getQueryData<OrdersPage>(listKey);
+    queryClient.setQueryData<OrdersPage>(listKey, (old) =>
+      old
+        ? { ...old, data: old.data.map((o) => (o.id === order.id ? { ...o, status: newStatus } : o)) }
+        : old,
     );
     try {
       await updateOrderStatus(order.id, newStatus);
       showToast("Order status updated", "success");
+      void invalidateOrderAreas(queryClient);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update order status.", "error");
-      setOrders(prevOrders);
+      queryClient.setQueryData<OrdersPage>(listKey, prevPage);
     }
   }
 
-  if (error) {
+  if (isError) {
     return (
       <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
-        {error}
+        Couldn&apos;t load orders.
       </p>
     );
   }
 
-  if (!orders) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-40 w-full" />
-      </div>
-    );
-  }
+  if (isPending) return <TableSkeleton cols={7} rows={6} />;
+
+  const orders = data.data;
+  const meta = data.meta ?? null;
 
   return (
     <div className="card overflow-x-auto">
@@ -207,7 +205,7 @@ function OrdersTable({
             <th className="px-5 py-3">Status</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className={isPlaceholderData ? "opacity-60" : undefined}>
           {orders.map((order) => {
             const isPaid = order.paymentStatus === "PAID";
             const isFinal = order.status === "DELIVERED" || order.status === "CANCELLED";

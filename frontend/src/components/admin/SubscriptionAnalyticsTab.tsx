@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { IndianRupee, TrendingDown, UserPlus, Users } from "lucide-react";
 import {
   ApiError,
   getSubscriptionAnalytics,
   listPlansAdmin,
-  type Plan,
   type SubscriptionAnalytics,
 } from "@/lib/api/admin-subscriptions";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { StatCardsSkeleton } from "@/components/ui/skeletons/StatCardsSkeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { SubscriptionRevenueTrendChart } from "@/components/admin/SubscriptionRevenueTrendChart";
 import { ExpiringSoonCard } from "@/components/admin/ExpiringSoonCard";
@@ -19,35 +22,38 @@ type RangePreset = "14" | "30" | "custom";
 const ALL_PLANS = "all";
 
 export function SubscriptionAnalyticsTab() {
-  const [analytics, setAnalytics] = useState<SubscriptionAnalytics | null>(null);
-  const [plans, setPlans] = useState<Plan[] | null>(null);
   const [planId, setPlanId] = useState(ALL_PLANS);
   const [preset, setPreset] = useState<RangePreset>("14");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
   const customReady =
     preset !== "custom" || (customFrom !== "" && customTo !== "" && customFrom <= customTo);
 
-  useEffect(() => {
-    listPlansAdmin({ limit: 100 })
-      .then((res) => setPlans(res.data))
-      .catch(() => setPlans([]));
-  }, []);
+  const plansQuery = useQuery({
+    queryKey: qk.admin("subscriptions", "plans", "options"),
+    queryFn: () => listPlansAdmin({ limit: 100 }),
+    staleTime: STALE.short,
+  });
+  const plans = plansQuery.data?.data ?? null;
 
-  useEffect(() => {
-    if (!customReady) return;
-    const params = {
-      ...(preset === "custom" ? { from: customFrom, to: customTo } : { days: Number(preset) }),
-      ...(planId !== ALL_PLANS ? { planId } : {}),
-    };
-    getSubscriptionAnalytics(params)
-      .then(setAnalytics)
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "Couldn't load subscription analytics."),
-      );
-  }, [preset, customFrom, customTo, customReady, planId]);
+  // Every input of the request is in the key; changing range/plan keeps the
+  // previous figures visible until the new ones land.
+  const params = {
+    ...(preset === "custom" ? { from: customFrom, to: customTo } : { days: Number(preset) }),
+    ...(planId !== ALL_PLANS ? { planId } : {}),
+  };
+  const { data: analytics, error: queryError } = useQuery({
+    queryKey: qk.admin("subscriptions", "analytics", params),
+    queryFn: () => getSubscriptionAnalytics(params),
+    enabled: customReady,
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
+  const error = queryError
+    ? queryError instanceof ApiError
+      ? queryError.message
+      : "Couldn't load subscription analytics."
+    : null;
 
   const rangeLabel =
     preset === "custom" && customReady ? `${customFrom} to ${customTo}` : `last ${preset} days`;
@@ -79,9 +85,8 @@ export function SubscriptionAnalyticsTab() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {analytics ? (
-          <>
+      {analytics ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile
               icon={UserPlus}
               label="New Subscribers Today"
@@ -105,16 +110,10 @@ export function SubscriptionAnalyticsTab() {
               value={formatPriceFromPaise(analytics.refundedInPaise)}
               sublabel={rangeLabel}
             />
-          </>
-        ) : (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="card p-5">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="mt-3 h-7 w-32" />
-            </div>
-          ))
-        )}
-      </div>
+        </div>
+      ) : (
+        <StatCardsSkeleton />
+      )}
 
       <SubscriptionRevenueTrendChart
         trend={analytics?.revenueTrend ?? null}
@@ -177,9 +176,18 @@ function PlanBreakdownCard({
         Revenue by Plan — {rangeLabel}
       </h3>
       {!breakdown ? (
-        <Skeleton className="h-32 w-full" />
+        <div className="flex flex-col gap-3" aria-busy="true">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Skeleton className="h-4 w-32 shrink-0" />
+              <Skeleton className="h-2 flex-1 rounded-full" />
+              <Skeleton className="h-4 w-24 shrink-0" />
+              <Skeleton className="h-4 w-14 shrink-0" />
+            </div>
+          ))}
+        </div>
       ) : breakdown.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No subscribers in this period.</p>
+        <EmptyState compact title="No subscribers in this period." />
       ) : (
         <div className="flex flex-col gap-3">
           {breakdown.map((p) => (

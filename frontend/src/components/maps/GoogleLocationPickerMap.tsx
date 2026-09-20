@@ -158,7 +158,7 @@ export function GoogleLocationPickerMap({
   if (!isLoaded) {
     return (
       <div
-        className="animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-800"
+        className="skeleton rounded-xl"
         style={{ height }}
       />
     );

@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
-import { getMyUsage, type UsageStat, type UsageSummary } from "@/lib/api/tenant-limits";
+import { useQuery } from "@tanstack/react-query";
+import { getMyUsage, type UsageStat } from "@/lib/api/tenant-limits";
+import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
 
 function describe(label: string, stat: UsageStat): string | null {
@@ -20,17 +22,16 @@ function describe(label: string, stat: UsageStat): string | null {
 
 export function UsageLimitBanner() {
   const { showToast } = useToast();
-  const [usage, setUsage] = useState<UsageSummary | null>(null);
+  const { data: usage, isError } = useQuery({
+    queryKey: qk.admin("usage"),
+    queryFn: getMyUsage,
+    staleTime: STALE.short,
+  });
 
   useEffect(() => {
-    getMyUsage()
-      .then(setUsage)
-      .catch(() => {
-        setUsage(null);
-        showToast("Couldn't load your plan usage.", "error");
-      });
+    if (isError) showToast("Couldn't load your plan usage.", "error");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isError]);
 
   if (!usage) return null;
 

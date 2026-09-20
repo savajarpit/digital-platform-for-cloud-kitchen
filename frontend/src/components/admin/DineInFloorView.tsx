@@ -1,35 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
-import { listDiningTables, type DiningTable } from "@/lib/api/dine-in";
+import { listDiningTables } from "@/lib/api/dine-in";
+import { qk, STALE } from "@/lib/query/keys";
 import type { AdminOrderDetail } from "@/lib/api/admin-orders";
 import { TableGrid } from "@/components/admin/TableGrid";
 import { WaitlistPanel } from "@/components/admin/WaitlistPanel";
 import { NewDineInOrderForm } from "@/components/admin/NewDineInOrderForm";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { DineInFloorSkeleton } from "@/components/admin/DineInFloorSkeleton";
 
 /** The counter's day-to-day view: table grid + waitlist for one outlet.
  * Table CRUD lives in a separate tab (TableManagementPanel) — this is
  * purely the "take/seat orders" surface. */
 export function DineInFloorView({ kitchenZoneId }: { kitchenZoneId: string }) {
   const router = useRouter();
-  const [tables, setTables] = useState<DiningTable[] | null>(null);
+  const queryClient = useQueryClient();
   const [openForTableId, setOpenForTableId] = useState<string | null>(null);
   const [openGeneric, setOpenGeneric] = useState(false);
 
-  function refresh() {
-    listDiningTables(kitchenZoneId).then(setTables).catch(() => setTables([]));
-  }
+  // Cached per outlet, so switching zones back and forth is instant. A failed
+  // load falls back to an empty grid, as before.
+  const { data, isError } = useQuery({
+    queryKey: qk.admin("dine-in", "tables", kitchenZoneId),
+    queryFn: () => listDiningTables(kitchenZoneId),
+    staleTime: STALE.short,
+  });
+  const tables = data ?? (isError ? [] : null);
 
-  // Parent keys this component by kitchenZoneId, so a zone switch remounts
-  // it fresh (tables already starts at null) instead of resetting state
-  // synchronously in this effect.
-  useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kitchenZoneId]);
+  // Seating a party changes tables, the waitlist and orders alike.
+  function refresh() {
+    void queryClient.invalidateQueries({ queryKey: qk.admin("dine-in") });
+  }
 
   function handleCreated(order: AdminOrderDetail) {
     setOpenForTableId(null);
@@ -37,14 +41,7 @@ export function DineInFloorView({ kitchenZoneId }: { kitchenZoneId: string }) {
     router.push(`/admin/orders/${order.id}`);
   }
 
-  if (!tables) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-32 w-full" />
-      </div>
-    );
-  }
+  if (!tables) return <DineInFloorSkeleton />;
 
   const freeTables = tables.filter((t) => t.isActive && !t.activeOrderId);
 

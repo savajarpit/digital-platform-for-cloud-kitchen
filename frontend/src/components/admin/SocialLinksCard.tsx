@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Share2, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -15,7 +16,9 @@ import { SocialIcon } from "@/components/icons/SocialIcon";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { RowListCardSkeleton } from "@/components/admin/skeletons/RowListCardSkeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 
 const ALL_PLATFORMS: SocialPlatform[] = [
@@ -41,22 +44,20 @@ const PLATFORM_LABELS: Record<SocialPlatform, string> = {
 export function SocialLinksCard({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
   const confirm = useConfirm();
-  const [links, setLinks] = useState<SocialLink[] | null>(null);
+  const queryClient = useQueryClient();
+  const { data: links, isError } = useQuery({
+    queryKey: qk.admin("social-links"),
+    queryFn: listSocialLinksAdmin,
+    staleTime: STALE.list,
+  });
   const [newPlatform, setNewPlatform] = useState<SocialPlatform>("INSTAGRAM");
   const [newUrl, setNewUrl] = useState("");
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    listSocialLinksAdmin()
-      .then(setLinks)
-      .catch(() => showToast("Couldn't load social links.", "error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // Every write refreshes the cached list (the storefront footer reads the
+  // same data server-side, but that is not cached here).
   function refetch() {
-    listSocialLinksAdmin()
-      .then(setLinks)
-      .catch(() => showToast("Couldn't refresh social links. Try reloading the page.", "error"));
+    queryClient.invalidateQueries({ queryKey: qk.admin("social-links") });
   }
 
   const availablePlatforms = ALL_PLATFORMS.filter(
@@ -118,10 +119,13 @@ export function SocialLinksCard({ canEdit }: { canEdit: boolean }) {
 
   if (!links) {
     return (
-      <div className="card flex flex-col gap-4 p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-24 w-full" />
-      </div>
+      isError ? (
+        <div className="card p-6">
+          <EmptyState compact title="Couldn't load social links." />
+        </div>
+      ) : (
+        <RowListCardSkeleton rows={2} description footer />
+      )
     );
   }
 

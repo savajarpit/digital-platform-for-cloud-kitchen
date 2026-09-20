@@ -10,10 +10,10 @@ import { useToast } from "@/context/ToastContext";
 
 export function UserMenu({
   isAdmin,
-  hasSubscriptions,
+  subscriptionsEnabled,
 }: {
   isAdmin?: boolean;
-  hasSubscriptions?: boolean;
+  subscriptionsEnabled?: boolean;
 }) {
   const t = useTranslations("nav");
   const router = useRouter();
@@ -53,10 +53,10 @@ export function UserMenu({
   const links = [
     { href: "/account/profile", label: t("profile"), icon: UserIcon },
     { href: "/orders", label: t("myOrders"), icon: Package },
-    { href: "/account/addresses", label: t("myAddresses"), icon: MapPin },
-    ...(hasSubscriptions
+    ...(subscriptionsEnabled
       ? [{ href: "/account/subscriptions", label: t("mySubscriptions"), icon: CalendarClock }]
       : []),
+    { href: "/account/addresses", label: t("myAddresses"), icon: MapPin },
     ...(isAdmin ? [{ href: "/admin", label: t("admin"), icon: LayoutDashboard }] : []),
   ];
 

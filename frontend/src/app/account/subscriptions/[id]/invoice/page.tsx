@@ -1,64 +1,58 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Printer } from "lucide-react";
-import {
-  ApiError,
-  getSubscriptionInvoice,
-  type SubscriptionForInvoice,
-  type SubscriptionInvoice,
-} from "@/lib/api/subscriptions";
-import { fetchPublicConfig, type PublicConfig } from "@/lib/api/settings-client";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, FileText, Printer } from "lucide-react";
+import { ApiError, getSubscriptionInvoice } from "@/lib/api/subscriptions";
+import { fetchPublicConfig } from "@/lib/api/settings-client";
+import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { InvoiceSkeleton } from "@/components/invoice/InvoiceSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export default function SubscriptionInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const [invoice, setInvoice] = useState<SubscriptionInvoice | null>(null);
-  const [subscription, setSubscription] = useState<SubscriptionForInvoice | null>(null);
-  const [config, setConfig] = useState<PublicConfig | null>(null);
-  const [notFound, setNotFound] = useState(false);
+
+  const { data, error } = useQuery({
+    queryKey: qk.subscriptions.invoice(id),
+    queryFn: () => getSubscriptionInvoice(id),
+    staleTime: STALE.list,
+  });
+  // Branding rarely changes and fetchPublicConfig falls back on failure.
+  const { data: config } = useQuery({
+    queryKey: qk.config.public,
+    queryFn: fetchPublicConfig,
+    staleTime: STALE.long,
+  });
+  const unauthorized = error instanceof ApiError && error.status === 401;
 
   useEffect(() => {
-    Promise.all([getSubscriptionInvoice(id), fetchPublicConfig()])
-      .then(([data, c]) => {
-        setInvoice(data.invoice);
-        setSubscription(data.subscription);
-        setConfig(c);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) {
-          router.push(`/login?redirect=/account/subscriptions/${id}/invoice`);
-          return;
-        }
-        setNotFound(true);
-      });
-  }, [id, router]);
+    if (unauthorized) router.push(`/login?redirect=/account/subscriptions/${id}/invoice`);
+  }, [unauthorized, id, router]);
 
-  if (notFound) {
-    return (
-      <main className="container-app flex flex-1 flex-col items-center justify-center gap-4 py-24 text-center">
-        <p className="text-zinc-600 dark:text-zinc-400">Invoice not found.</p>
-        <Link href="/account/subscriptions" className="btn-primary">
-          Back
-        </Link>
-      </main>
-    );
+  if (!data || !config) {
+    if (error && !unauthorized) {
+      return (
+        <main className="container-app flex-1 py-10">
+          <EmptyState
+            icon={FileText}
+            title="Invoice not found."
+            action={
+              <Link href="/account/subscriptions" className="btn-primary">
+                Back
+              </Link>
+            }
+          />
+        </main>
+      );
+    }
+    return <InvoiceSkeleton itemRows={1} summaryRows={1} wideTable={false} />;
   }
 
-  if (!invoice || !subscription || !config) {
-    return (
-      <main className="container-app flex-1 py-10">
-        <div className="card mx-auto max-w-2xl p-8">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="mt-6 h-32 w-full" />
-        </div>
-      </main>
-    );
-  }
+  const { invoice, subscription } = data;
 
   return (
     <main className="container-app flex-1 py-10 print:py-0">

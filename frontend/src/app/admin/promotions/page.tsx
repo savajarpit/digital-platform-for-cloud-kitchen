@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Tag, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -25,7 +26,9 @@ import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { PromotionsListSkeleton } from "@/components/admin/PromotionsListSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { qk, STALE } from "@/lib/query/keys";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { TimeInput12h } from "@/components/ui/TimeInput12h";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
@@ -53,34 +56,61 @@ export default function PromotionsPage() {
   const canEdit = usePermission(PERMISSIONS.PROMOTIONS_MANAGE);
   const { has: hasFeature, loading: featuresLoading } = useFeatures();
   const hasPromotionsFeature = hasFeature("promotions");
-  const [coupons, setCoupons] = useState<Coupon[] | null>(null);
-  const [promotions, setPromotions] = useState<Promotion[] | null>(null);
-  const [meals, setMeals] = useState<Meal[] | null>(null);
-  const [categories, setCategories] = useState<Category[] | null>(null);
-  const [plans, setPlans] = useState<Plan[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const enabled = !featuresLoading && hasPromotionsFeature;
+  const couponsKey = qk.admin("promotions", "coupons");
+  const promotionsKey = qk.admin("promotions", "list");
 
-  useEffect(() => {
-    if (featuresLoading || !hasPromotionsFeature) return;
-    // limit: 100 — these pickers need every meal/plan (including
-    // unavailable/unpublished ones), not a browsable page; the admin
-    // Meals/Plans lists are the ones that paginate for real.
-    Promise.all([
-      listCoupons(),
-      listPromotions(),
-      listMeals({ limit: 100 }),
-      listCategories(),
-      listPlansAdmin({ limit: 100 }),
-    ])
-      .then(([c, p, m, cats, pl]) => {
-        setCoupons(c);
-        setPromotions(p);
-        setMeals(m.data);
-        setCategories(cats);
-        setPlans(pl.data);
-      })
-      .catch(() => setError("Couldn't load promotions."));
-  }, [featuresLoading, hasPromotionsFeature]);
+  const couponsQ = useQuery({ queryKey: couponsKey, queryFn: listCoupons, enabled, staleTime: STALE.short });
+  const promotionsQ = useQuery({
+    queryKey: promotionsKey,
+    queryFn: listPromotions,
+    enabled,
+    staleTime: STALE.short,
+  });
+  // limit: 100 — these pickers need every meal/plan (including
+  // unavailable/unpublished ones), not a browsable page; the admin
+  // Meals/Plans lists are the ones that paginate for real. Shared with the
+  // manual-order form / menu page, so they are usually already cached.
+  const mealsQ = useQuery({
+    queryKey: qk.admin("menu", "meals", "known", 100),
+    queryFn: () => listMeals({ limit: 100 }),
+    enabled,
+    staleTime: STALE.list,
+  });
+  const categoriesQ = useQuery({
+    queryKey: qk.admin("menu", "categories"),
+    queryFn: listCategories,
+    enabled,
+    staleTime: STALE.short,
+  });
+  const plansQ = useQuery({
+    queryKey: qk.admin("subscriptions", "plans", "picker", 100),
+    queryFn: () => listPlansAdmin({ limit: 100 }),
+    enabled,
+    staleTime: STALE.list,
+  });
+
+  const coupons = couponsQ.data;
+  const promotions = promotionsQ.data;
+  const meals = mealsQ.data?.data;
+  const categories = categoriesQ.data;
+  const plans = plansQ.data?.data;
+  const hasError =
+    couponsQ.isError || promotionsQ.isError || mealsQ.isError || categoriesQ.isError || plansQ.isError;
+
+  // Cards call these only after a successful write: show the new list at once,
+  // then invalidate the whole area so the server's version wins.
+  function handleCouponsChange(next: Coupon[]) {
+    queryClient.setQueryData(couponsKey, next);
+    void queryClient.invalidateQueries({ queryKey: qk.admin("promotions") });
+  }
+  function handlePromotionsChange(next: Promotion[]) {
+    queryClient.setQueryData(promotionsKey, next);
+    void queryClient.invalidateQueries({ queryKey: qk.admin("promotions") });
+    // Storefront prices/badges can depend on active promotions.
+    void queryClient.invalidateQueries({ queryKey: qk.meals.all });
+  }
 
   if (!featuresLoading && !hasPromotionsFeature) {
     return (
@@ -108,29 +138,28 @@ export default function PromotionsPage() {
         </h2>
       </div>
       {!canEdit && <ViewOnlyNotice />}
-      {error && (
+      {hasError && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
-          {error}
+          Couldn&apos;t load promotions.
         </p>
       )}
 
-      {!coupons || !promotions || !meals || !categories || !plans ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-40 w-full" />
-        </div>
+      {coupons ? (
+        <CouponsCard coupons={coupons} canEdit={canEdit} onChange={handleCouponsChange} />
       ) : (
-        <>
-          <CouponsCard coupons={coupons} canEdit={canEdit} onChange={setCoupons} />
-          <PromotionsCard
-            promotions={promotions}
-            meals={meals}
-            categories={categories}
-            plans={plans}
-            canEdit={canEdit}
-            onChange={setPromotions}
-          />
-        </>
+        !hasError && <PromotionsListSkeleton rows={3} />
+      )}
+      {promotions && meals && categories && plans ? (
+        <PromotionsCard
+          promotions={promotions}
+          meals={meals}
+          categories={categories}
+          plans={plans}
+          canEdit={canEdit}
+          onChange={handlePromotionsChange}
+        />
+      ) : (
+        !hasError && <PromotionsListSkeleton rows={3} twoLine />
       )}
     </div>
   );
@@ -223,7 +252,7 @@ function CouponsCard({
       )}
 
       {coupons.length === 0 && editingId !== "new" && (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No coupons yet.</p>
+        <EmptyState compact title="No coupons yet." />
       )}
 
       <div className="flex flex-col gap-2">
@@ -550,7 +579,7 @@ function PromotionsCard({
       )}
 
       {promotions.length === 0 && editingId !== "new" && (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No promotions yet.</p>
+        <EmptyState compact title="No promotions yet." />
       )}
 
       <div className="flex flex-col gap-2">

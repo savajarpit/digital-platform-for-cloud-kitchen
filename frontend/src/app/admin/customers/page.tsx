@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Search, Users } from "lucide-react";
-import { listCustomers, type Customer } from "@/lib/api/admin-customers";
-import type { PaginationMeta } from "@/lib/api/response";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { listCustomers } from "@/lib/api/admin-customers";
+import { qk, STALE } from "@/lib/query/keys";
+import { TableSkeleton } from "@/components/ui/skeletons/TableSkeleton";
 
 export default function CustomersPage() {
   const [search, setSearch] = useState("");
@@ -41,9 +42,7 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Keyed by page+search so switching either remounts fresh instead of a
-          synchronous setState-to-null in an effect. */}
-      <CustomersTable key={`${page}-${debouncedSearch}`} page={page} search={debouncedSearch} onPageChange={setPage} />
+      <CustomersTable page={page} search={debouncedSearch} onPageChange={setPage} />
     </div>
   );
 }
@@ -57,44 +56,27 @@ function CustomersTable({
   search: string;
   onPageChange: (page: number) => void;
 }) {
-  const [customers, setCustomers] = useState<Customer[] | null>(null);
-  const [meta, setMeta] = useState<PaginationMeta | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Keyed on every request input; the previous page/search stays on screen
+  // (no remount, no skeleton) until the next result arrives.
+  const { data, isPending, isError, isPlaceholderData } = useQuery({
+    queryKey: qk.admin("customers", page, search),
+    queryFn: () => listCustomers({ page, search: search || undefined }),
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
 
-  useEffect(() => {
-    listCustomers({ page, search: search || undefined })
-      .then(({ data, meta }) => {
-        setCustomers(data);
-        setMeta(meta ?? null);
-      })
-      .catch(() => setError("Couldn't load customers."));
-  }, [page, search]);
-
-  if (error) {
+  if (isError) {
     return (
       <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
-        {error}
+        Couldn&apos;t load customers.
       </p>
     );
   }
 
-  if (!customers) {
-    return (
-      <div className="card overflow-hidden">
-        <div className="border-b border-zinc-100 px-5 py-3 dark:border-zinc-800">
-          <Skeleton className="h-3 w-32" />
-        </div>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-4 border-b border-zinc-50 px-5 py-3 last:border-none dark:border-zinc-900">
-            <Skeleton className="h-4 w-40" />
-            <Skeleton className="h-4 w-48" />
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-4 w-16" />
-          </div>
-        ))}
-      </div>
-    );
-  }
+  if (isPending) return <TableSkeleton cols={5} rows={6} />;
+
+  const customers = data.data;
+  const meta = data.meta ?? null;
 
   return (
     <div className="card overflow-x-auto">
@@ -108,7 +90,7 @@ function CustomersTable({
             <th className="px-5 py-3">Status</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className={isPlaceholderData ? "opacity-60" : undefined}>
           {customers.map((customer) => (
             <tr key={customer.id} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
               <td className="px-5 py-3 font-medium">

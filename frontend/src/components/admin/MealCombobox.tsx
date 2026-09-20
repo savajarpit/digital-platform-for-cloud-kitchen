@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ImageOff, Search } from "lucide-react";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { listMeals, type Meal } from "@/lib/api/admin-menu";
+import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
 const PAGE_SIZE = 15;
@@ -32,10 +34,7 @@ export function MealCombobox({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [results, setResults] = useState<Meal[]>([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -59,36 +58,29 @@ export function MealCombobox({
     };
   }, [open]);
 
-  // Fresh page 1 whenever the popover opens or the search term changes.
   useEffect(() => {
-    if (!open) return;
-    const handle = setTimeout(() => {
-      setLoading(true);
-      listMeals({ page: 1, limit: PAGE_SIZE, search: search || undefined })
-        .then(({ data, meta }) => {
-          setResults(data);
-          setPage(1);
-          setHasMore(meta?.hasNext ?? false);
-        })
-        .catch(() => setResults([]))
-        .finally(() => setLoading(false));
-    }, 250);
+    const handle = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(handle);
-  }, [open, search]);
+  }, [search]);
+
+  // Cached per search term (under the "menu" area, so meal edits refresh it);
+  // reopening the popover shows the last results instantly.
+  const { data, hasNextPage, isFetching, fetchNextPage } = useInfiniteQuery({
+    queryKey: qk.admin("menu", "meal-combobox", debouncedSearch),
+    queryFn: ({ pageParam }) =>
+      listMeals({ page: pageParam, limit: PAGE_SIZE, search: debouncedSearch || undefined }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.meta?.hasNext ? last.meta.page + 1 : undefined),
+    enabled: open,
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
+  const results: Meal[] = data ? data.pages.flatMap((pg) => pg.data) : [];
+  const hasMore = Boolean(hasNextPage);
+  const loading = isFetching;
 
   function loadMore() {
-    setLoading((wasLoading) => {
-      if (wasLoading) return wasLoading;
-      const nextPage = page + 1;
-      listMeals({ page: nextPage, limit: PAGE_SIZE, search: search || undefined })
-        .then(({ data, meta }) => {
-          setResults((prev) => [...prev, ...data]);
-          setPage(nextPage);
-          setHasMore(meta?.hasNext ?? false);
-        })
-        .finally(() => setLoading(false));
-      return true;
-    });
+    if (!isFetching) void fetchNextPage();
   }
 
   // Infinite scroll — load the next page once the sentinel at the list's

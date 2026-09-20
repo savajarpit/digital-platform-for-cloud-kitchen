@@ -2,36 +2,31 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, Clock, MapPin, Plus, Zap } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
 import { useCartAvailability } from "@/lib/hooks/useCartAvailability";
-import { formatPriceFromPaise } from "@/lib/format/currency";
-import { ApiError, listAddresses, checkServiceability, type Address, type ServiceabilityResult } from "@/lib/api/addresses";
-import { createOrder, previewOrder } from "@/lib/api/orders";
+import { useCheckoutData } from "@/lib/hooks/useCheckoutData";
+import { ApiError, checkServiceability } from "@/lib/api/addresses";
+import { createOrder } from "@/lib/api/orders";
 import { verifyPayment } from "@/lib/api/payments";
-import { getOrderWindowStatus } from "@/lib/api/order-window";
-import {
-  getDeliverySlots,
-  getInstantDeliveryStatus,
-  getPickupInfo,
-  type DeliverySlot,
-  type InstantDeliveryStatus,
-  type PickupInfo,
-} from "@/lib/api/delivery-slots";
+import { qk, STALE } from "@/lib/query/keys";
+import { useAddresses, useAddressCacheSync } from "@/lib/query/addresses";
 import { buildGoogleMapsLink } from "@/lib/format/maps-link";
-import { formatTime12h, hhmmToMinutes } from "@/lib/format/time";
+import { hhmmToMinutes } from "@/lib/format/time";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
-import { AddressForm } from "@/components/addresses/AddressForm";
 import { PaymentConfirmingScreen } from "@/components/checkout/PaymentConfirmingScreen";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { CheckoutSkeleton } from "@/components/checkout/CheckoutSkeleton";
+import { CheckoutAddressSection } from "@/components/checkout/CheckoutAddressSection";
+import { CheckoutSlotSection } from "@/components/checkout/CheckoutSlotSection";
+import { CheckoutSummaryCard, type AppliedCoupon } from "@/components/checkout/CheckoutSummaryCard";
 import { useToast } from "@/context/ToastContext";
 
 export default function CheckoutPage() {
   const t = useTranslations("checkout");
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { showToast } = useToast();
 
   const items = useCartStore((s) => s.items);
@@ -40,111 +35,48 @@ export default function CheckoutPage() {
   const { unavailableMealIds, loading: checkingAvailability } = useCartAvailability(items);
   const hasUnavailableItems = unavailableMealIds.size > 0;
 
-  const [addresses, setAddresses] = useState<Address[] | null>(null);
-  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
-  const [showAddressForm, setShowAddressForm] = useState(false);
-  const [serviceability, setServiceability] = useState<ServiceabilityResult | null>(null);
-  const [pickupInfo, setPickupInfo] = useState<PickupInfo | null>(null);
+  // Public settings (order window, pickup, instant delivery, slots) — cached,
+  // so a return visit paints instantly and refreshes quietly behind it.
+  const { windowClosed, pickupInfo, instantStatus, slots, dayOptions, todayStr, nowMinutes } =
+    useCheckoutData({ today: t("today"), tomorrow: t("tomorrow") });
+
+  const { data: addressList, isPending: addressesPending, error: addressesError } = useAddresses();
+  const { afterSave: cacheSavedAddress } = useAddressCacheSync();
+  const addressesUnauthorized = addressesError instanceof ApiError && addressesError.status === 401;
+  // null = still loading (or redirecting to login); a failed load shows the
+  // empty state + add-address form, like before.
+  const addresses = addressList ?? (addressesPending || addressesUnauthorized ? null : []);
+
+  // User choices. Anything with a sensible default (address, pickup zone,
+  // instant delivery, day, slot) is stored as an optional override and
+  // resolved during render — no setState-in-effect syncing.
+  const [addressChoice, setAddressChoice] = useState<string | null>(null);
+  const [addressFormOpen, setAddressFormOpen] = useState(false);
   const [fulfillmentType, setFulfillmentType] = useState<"DELIVERY" | "PICKUP">("DELIVERY");
-  const [selectedZoneId, setSelectedZoneId] = useState("");
-  const [windowClosed, setWindowClosed] = useState<string | null>(null);
+  const [zoneChoice, setZoneChoice] = useState<string | null>(null);
+  const [instantChoice, setInstantChoice] = useState<boolean | null>(null);
+  const [dayChoice, setDayChoice] = useState("");
+  const [slotChoice, setSlotChoice] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   // True from the moment Razorpay reports success until the order-page
   // redirect commits — keeps the page from flashing blank in that gap
-  // (clearCart() empties the cart, so the normal render path bails to null).
+  // (clearCart() empties the cart, so the normal render path would bail).
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
-  const [slots, setSlots] = useState<DeliverySlot[] | null>(null);
-  const [dayOptions, setDayOptions] = useState<{ value: string; label: string }[]>([]);
-  const [selectedDay, setSelectedDay] = useState("");
-  const [selectedSlotId, setSelectedSlotId] = useState("");
-  const [instantStatus, setInstantStatus] = useState<InstantDeliveryStatus | null>(null);
-  const [isInstant, setIsInstant] = useState(false);
-  const [todayStr, setTodayStr] = useState("");
-  const [nowMinutes, setNowMinutes] = useState(0);
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [prepNotes, setPrepNotes] = useState("");
-  const [couponInput, setCouponInput] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountInPaise: number } | null>(null);
-  const [couponError, setCouponError] = useState<string | null>(null);
-  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
 
+  // Empty cart on arrival: nothing to check out. Mount-only on purpose — a
+  // successful payment clears the cart and navigates to the order itself.
   useEffect(() => {
-    if (items.length === 0) {
-      router.replace("/cart");
-      return;
-    }
-
-    getOrderWindowStatus().then((status) => {
-      if (!status.isAcceptingOrders) setWindowClosed(status.reason ?? "Not currently accepting orders");
-    });
-
-    getPickupInfo()
-      .then((info) => {
-        setPickupInfo(info);
-        if (info.zones[0]) setSelectedZoneId(info.zones[0].id);
-      })
-      .catch(() => setPickupInfo({ available: false, zones: [] }));
-
-    // Auto-selected by default whenever it's actually available — the
-    // customer can still switch to scheduling a later day/slot instead.
-    getInstantDeliveryStatus()
-      .then((status) => {
-        setInstantStatus(status);
-        setIsInstant(status.available);
-      })
-      .catch(() => setInstantStatus({ available: false, etaMinMinutes: 30, etaMaxMinutes: 45 }));
-
-    getDeliverySlots().then((config) => {
-      // Anchor to the tenant's "today", not the browser's — see
-      // DeliverySlotsConfig. UTC-parse the YYYY-MM-DD so day-stepping can't
-      // be shifted by the local timezone.
-      setTodayStr(config.todayStr);
-      setNowMinutes(config.nowMinutes);
-      setSlots(config.slots);
-
-      const [ty, tm, td] = config.todayStr.split("-").map(Number);
-      const days = Array.from({ length: config.maxAdvanceOrderDays + 1 }, (_, i) => {
-        const date = new Date(Date.UTC(ty, tm - 1, td + i));
-        const value = date.toISOString().slice(0, 10);
-        const label =
-          i === 0
-            ? t("today")
-            : i === 1
-              ? t("tomorrow")
-              : date.toLocaleDateString(undefined, {
-                  weekday: "short",
-                  month: "short",
-                  day: "numeric",
-                  timeZone: "UTC",
-                });
-        return { value, label };
-      });
-      setDayOptions(days);
-      setSelectedDay(days[0]?.value ?? "");
-    });
-
-    listAddresses()
-      .then((list) => {
-        setAddresses(list);
-        // Never auto-select an address the tenant no longer delivers to —
-        // prefer the default/first one that's still serviceable, matching
-        // what the picker itself allows the customer to click.
-        const serviceableList = list.filter((a) => a.serviceable);
-        const defaultAddress =
-          serviceableList.find((a) => a.isDefault) ?? serviceableList[0];
-        if (defaultAddress) setSelectedAddressId(defaultAddress.id);
-        if (list.length === 0) setShowAddressForm(true);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) {
-          router.push("/login?redirect=/checkout");
-          return;
-        }
-        setAddresses([]);
-      });
+    if (items.length === 0) router.replace("/cart");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (addressesUnauthorized) router.push("/login?redirect=/checkout");
+  }, [addressesUnauthorized, router]);
 
   // A meal already in the cart can go unavailable (admin disables/deletes
   // it) between add-to-cart time and checkout — send the customer back to
@@ -157,19 +89,42 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkingAvailability, hasUnavailableItems]);
 
-  useEffect(() => {
-    // No address selected yet — nothing to fetch. Leaves any prior
-    // serviceability result as-is, which is harmless: selection only ever
-    // comes from a rendered address in the list, so this branch is really
-    // just the pre-load state, not a case that needs an explicit reset.
-    const address = addresses?.find((a) => a.id === selectedAddressId);
-    if (!address) return;
-    checkServiceability({
-      pincode: address.pincode,
-      lat: address.lat ?? undefined,
-      lng: address.lng ?? undefined,
-    }).then(setServiceability);
-  }, [addresses, selectedAddressId]);
+  // Never auto-select an address the tenant no longer delivers to — prefer
+  // the customer's pick, else the default/first one that's still serviceable,
+  // matching what the picker itself allows them to click.
+  const serviceableAddresses = (addresses ?? []).filter((a) => a.serviceable);
+  const selectedAddressId =
+    (serviceableAddresses.some((a) => a.id === addressChoice)
+      ? addressChoice
+      : (serviceableAddresses.find((a) => a.isDefault) ?? serviceableAddresses[0])?.id) ?? null;
+  const showAddressForm = addressFormOpen || addresses?.length === 0;
+
+  const isPickup = fulfillmentType === "PICKUP";
+  const zones = pickupInfo?.zones;
+  const selectedZoneId = zones?.some((z) => z.id === zoneChoice) ? (zoneChoice ?? "") : (zones?.[0]?.id ?? "");
+  // Instant delivery is the default whenever it's actually available — the
+  // customer can still switch to scheduling a later day/slot instead.
+  const isInstant = !isPickup && Boolean(instantStatus?.available) && (instantChoice ?? true);
+  const selectedDay = dayOptions.some((d) => d.value === dayChoice) ? dayChoice : (dayOptions[0]?.value ?? "");
+
+  const selectedAddress = addresses?.find((a) => a.id === selectedAddressId);
+  const { data: serviceability = null } = useQuery({
+    queryKey: qk.addresses.serviceability(
+      selectedAddress?.pincode ?? "",
+      selectedAddress?.lat ?? null,
+      selectedAddress?.lng ?? null,
+    ),
+    queryFn: () =>
+      checkServiceability({
+        pincode: selectedAddress!.pincode,
+        lat: selectedAddress!.lat ?? undefined,
+        lng: selectedAddress!.lng ?? undefined,
+      }),
+    enabled: Boolean(selectedAddress),
+    staleTime: STALE.list,
+    // Switching address keeps showing the last result instead of blanking.
+    placeholderData: keepPreviousData,
+  });
 
   // Hide slots that have already started when "today" is selected — the
   // slot dropdown should never offer something the backend will reject.
@@ -181,13 +136,11 @@ export default function CheckoutPage() {
 
   // Derived, not stored: falls back to the first visible slot whenever the
   // user's last explicit pick isn't valid for the current day (e.g. they
-  // picked Dinner, then switched back to a day where Dinner already
-  // passed). Deriving during render avoids a setState-in-effect sync loop.
-  const effectiveSlotId = visibleSlots.some((slot) => slot.id === selectedSlotId)
-    ? selectedSlotId
+  // picked Dinner, then switched back to a day where Dinner already passed).
+  const effectiveSlotId = visibleSlots.some((slot) => slot.id === slotChoice)
+    ? slotChoice
     : (visibleSlots[0]?.id ?? "");
 
-  const isPickup = fulfillmentType === "PICKUP";
   const couponDiscountInPaise = appliedCoupon?.discountInPaise ?? 0;
   const effectiveSubtotal = Math.max(0, subtotal - couponDiscountInPaise);
   const qualifiesForFreeDelivery = Boolean(
@@ -203,41 +156,6 @@ export default function CheckoutPage() {
   const belowMinOrder = Boolean(
     !isPickup && serviceability?.minOrderAmountInPaise && subtotal < serviceability.minOrderAmountInPaise,
   );
-
-  async function handleApplyCoupon() {
-    const code = couponInput.trim();
-    if (!code) return;
-    setIsApplyingCoupon(true);
-    setCouponError(null);
-    try {
-      const preview = await previewOrder({
-        items: items.map((i) => ({
-          mealId: i.mealId,
-          quantity: i.quantity,
-          addons: i.addons?.map((a) => ({ addonItemId: a.addonItemId, quantity: a.quantity })),
-        })),
-        couponCode: code,
-      });
-      if (!preview.couponApplied) {
-        setCouponError("Invalid coupon code");
-        return;
-      }
-      setAppliedCoupon({ code: code.toUpperCase(), discountInPaise: preview.discountInPaise });
-      setCouponInput("");
-      showToast(t("couponApplied", { code: code.toUpperCase() }), "success");
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : "Could not apply this coupon.";
-      setCouponError(message);
-      showToast(message, "error");
-    } finally {
-      setIsApplyingCoupon(false);
-    }
-  }
-
-  function handleRemoveCoupon() {
-    setAppliedCoupon(null);
-    setCouponError(null);
-  }
 
   async function handlePlaceOrder() {
     if (isPickup ? !selectedZoneId : !selectedAddressId) return;
@@ -259,6 +177,8 @@ export default function CheckoutPage() {
         notes: deliveryNotes.trim() || undefined,
         prepNotes: prepNotes.trim() || undefined,
       });
+      // The order now exists (pending payment) — any cached list is stale.
+      void queryClient.invalidateQueries({ queryKey: qk.orders.all });
 
       await loadRazorpayScript();
       // Local flag (not React state) so `ondismiss`'s closure reads the
@@ -282,6 +202,9 @@ export default function CheckoutPage() {
             razorpaySignature: response.razorpay_signature,
           })
             .then(() => {
+              // Payment flips the order to CONFIRMED; the order page and the
+              // orders list must not show the pending copy.
+              void queryClient.invalidateQueries({ queryKey: qk.orders.all });
               clearCart();
               router.replace(`/orders/${order.id}`);
             })
@@ -305,11 +228,13 @@ export default function CheckoutPage() {
   }
 
   // Payment done — hold this screen until the order-page navigation takes
-  // over. Checked before the empty-cart bail below, since clearCart() runs
-  // first and would otherwise render null here for a beat.
+  // over. Checked before the empty-cart shell below, since clearCart() runs
+  // first and would otherwise flash the skeleton for a beat.
   if (isConfirmingPayment) return <PaymentConfirmingScreen />;
 
-  if (items.length === 0) return null;
+  // Empty cart: the mount effect is already redirecting to /cart. Hold the
+  // page's own shape meanwhile instead of rendering nothing.
+  if (items.length === 0) return <CheckoutSkeleton />;
 
   return (
     <main className="container-app flex-1 py-10">
@@ -357,7 +282,7 @@ export default function CheckoutPage() {
                     checked={isPickup}
                     onChange={() => {
                       setFulfillmentType("PICKUP");
-                      setIsInstant(false);
+                      setInstantChoice(false);
                     }}
                     className="h-4 w-4 accent-primary-600"
                   />
@@ -385,7 +310,7 @@ export default function CheckoutPage() {
                       type="radio"
                       name="pickupZone"
                       checked={selectedZoneId === zone.id}
-                      onChange={() => setSelectedZoneId(zone.id)}
+                      onChange={() => setZoneChoice(zone.id)}
                       className="mt-1 h-4 w-4 accent-primary-600"
                     />
                     <div className="min-w-0 flex-1">
@@ -406,203 +331,35 @@ export default function CheckoutPage() {
               </div>
             </section>
           ) : (
-          <section className="card p-6">
-            <h2 className="mb-4 font-semibold text-zinc-900 dark:text-zinc-100">
-              {t("selectAddress")}
-            </h2>
-
-            {addresses === null ? (
-              <div className="flex flex-col gap-3">
-                {Array.from({ length: 2 }).map((_, i) => (
-                  <div key={i} className="flex items-start gap-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
-                    <Skeleton className="mt-1 h-4 w-4 rounded-full" />
-                    <div className="flex-1">
-                      <Skeleton className="h-4 w-24" />
-                      <Skeleton className="mt-2 h-3.5 w-full" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : addresses.length === 0 && !showAddressForm ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">{t("noAddresses")}</p>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {addresses.map((address) => (
-                  <label
-                    key={address.id}
-                    className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${
-                      !address.serviceable
-                        ? "cursor-not-allowed border-zinc-200 opacity-60 dark:border-zinc-700"
-                        : selectedAddressId === address.id
-                          ? "cursor-pointer border-primary-600 bg-primary-50 dark:bg-primary-950"
-                          : "cursor-pointer border-zinc-200 hover:border-zinc-300 dark:border-zinc-700"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="address"
-                      checked={selectedAddressId === address.id}
-                      disabled={!address.serviceable}
-                      onChange={() => setSelectedAddressId(address.id)}
-                      className="mt-1 h-4 w-4 accent-primary-600 disabled:cursor-not-allowed"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <MapPin className="h-4 w-4 shrink-0 text-primary-600" />
-                        <span className="min-w-0 truncate font-medium text-zinc-900 dark:text-zinc-100">
-                          {address.label || address.city}
-                        </span>
-                        {!address.serviceable && (
-                          <span className="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-400">
-                            {t("addressNotDeliverable")}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 wrap-break-word text-sm text-zinc-600 dark:text-zinc-400">
-                        {address.line1}, {address.city}, {address.state} — {address.pincode}
-                      </p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-
-            {showAddressForm ? (
-              <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                <AddressForm
-                  onSaved={(address) => {
-                    setAddresses((prev) => [...(prev ?? []), address]);
-                    setSelectedAddressId(address.id);
-                    setShowAddressForm(false);
-                  }}
-                  onCancel={addresses && addresses.length > 0 ? () => setShowAddressForm(false) : undefined}
-                />
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowAddressForm(true)}
-                className="btn-ghost mt-4 text-sm"
-              >
-                <Plus className="h-4 w-4" />
-                {t("addAddress")}
-              </button>
-            )}
-
-            {serviceability?.serviceable === false && (
-              <p className="mt-3 text-sm text-red-600 dark:text-red-400">{t("notServiceable")}</p>
-            )}
-          </section>
+            <CheckoutAddressSection
+              addresses={addresses}
+              selectedAddressId={selectedAddressId}
+              onSelect={setAddressChoice}
+              showForm={showAddressForm}
+              onShowForm={() => setAddressFormOpen(true)}
+              onHideForm={() => setAddressFormOpen(false)}
+              onSaved={(address) => {
+                cacheSavedAddress(address);
+                setAddressChoice(address.id);
+                setAddressFormOpen(false);
+              }}
+              serviceability={serviceability}
+            />
           )}
 
-          <section className="card p-6">
-            <h2 className="mb-3 flex items-center gap-2 font-semibold text-zinc-900 dark:text-zinc-100">
-              <Clock className="h-4 w-4 text-primary-600" />
-              {isPickup ? "Pickup time" : t("deliverySlot")}
-            </h2>
-
-            {!isPickup && instantStatus?.available && (
-              <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label
-                  className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 transition-colors ${
-                    isInstant
-                      ? "border-primary-600 bg-primary-50 dark:bg-primary-950"
-                      : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-700"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="deliveryMode"
-                    checked={isInstant}
-                    onChange={() => setIsInstant(true)}
-                    className="h-4 w-4 accent-primary-600"
-                  />
-                  <Zap className="h-4 w-4 text-primary-600" />
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      {t("instantDelivery")}
-                    </p>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {t("instantDeliveryEta", {
-                        min: instantStatus.etaMinMinutes,
-                        max: instantStatus.etaMaxMinutes,
-                      })}
-                    </p>
-                  </div>
-                </label>
-                <label
-                  className={`flex cursor-pointer items-center gap-2 rounded-xl border p-3 transition-colors ${
-                    !isInstant
-                      ? "border-primary-600 bg-primary-50 dark:bg-primary-950"
-                      : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-700"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="deliveryMode"
-                    checked={!isInstant}
-                    onChange={() => setIsInstant(false)}
-                    className="h-4 w-4 accent-primary-600"
-                  />
-                  <Clock className="h-4 w-4 text-zinc-500" />
-                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    {t("scheduleForLater")}
-                  </p>
-                </label>
-              </div>
-            )}
-
-            {isInstant ? null : slots === null ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ) : slots.length === 0 ? (
-              <p className="text-sm text-amber-700 dark:text-amber-400">{t("noSlots")}</p>
-            ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1">
-                  <label htmlFor="deliveryDay" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    {t("deliveryDay")}
-                  </label>
-                  <Select value={selectedDay} onValueChange={setSelectedDay}>
-                    <SelectTrigger id="deliveryDay">
-                      <SelectValue placeholder={t("selectDay")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {dayOptions.length === 0 && <SelectItem value="">{t("selectDay")}</SelectItem>}
-                      {dayOptions.map((day) => (
-                        <SelectItem key={day.value} value={day.value}>
-                          {day.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label htmlFor="deliverySlot" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    {t("deliverySlot")}
-                  </label>
-                  <Select value={effectiveSlotId} onValueChange={setSelectedSlotId}>
-                    <SelectTrigger id="deliverySlot">
-                      <SelectValue placeholder={t("selectSlot")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {!effectiveSlotId && <SelectItem value="">{t("selectSlot")}</SelectItem>}
-                      {visibleSlots.map((slot) => (
-                        <SelectItem key={slot.id} value={slot.id}>
-                          {slot.name} ({formatTime12h(slot.startTime)}–{formatTime12h(slot.endTime)})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {visibleSlots.length === 0 && (
-                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">{t("noSlotsToday")}</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
+          <CheckoutSlotSection
+            isPickup={isPickup}
+            instantStatus={instantStatus}
+            isInstant={isInstant}
+            onInstantChange={setInstantChoice}
+            slots={slots}
+            visibleSlots={visibleSlots}
+            dayOptions={dayOptions}
+            selectedDay={selectedDay}
+            onDayChange={setDayChoice}
+            effectiveSlotId={effectiveSlotId}
+            onSlotChange={setSlotChoice}
+          />
 
           <section className="card flex flex-col gap-4 p-6">
             <div>
@@ -648,145 +405,31 @@ export default function CheckoutPage() {
           </section>
         </div>
 
-        <div className="card h-fit p-6">
-          <h2 className="mb-4 font-semibold text-zinc-900 dark:text-zinc-100">{t("orderSummary")}</h2>
-          <ul className="flex flex-col gap-2 text-sm">
-            {items.map((item) => (
-              <li key={item.lineKey} className="flex flex-col gap-1 text-zinc-600 dark:text-zinc-400">
-                <div className="flex justify-between gap-3">
-                  <span className="min-w-0 wrap-break-word">
-                    {item.name} × {item.quantity}
-                  </span>
-                  <span className="shrink-0">
-                    {formatPriceFromPaise(item.priceInPaise * item.quantity)}
-                  </span>
-                </div>
-                {item.addons && item.addons.length > 0 && (
-                  <ul className="flex flex-col gap-0.5 pl-3 text-xs text-zinc-400">
-                    {item.addons.map((a) => (
-                      <li key={a.addonItemId} className="flex justify-between gap-2">
-                        <span>
-                          + {a.name} × {a.quantity}
-                        </span>
-                        <span>{formatPriceFromPaise(a.priceInPaise * a.quantity * item.quantity)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-            {appliedCoupon ? (
-              <div className="flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2 text-sm dark:bg-primary-950">
-                <span className="font-medium text-primary-700 dark:text-primary-400">
-                  {t("couponApplied", { code: appliedCoupon.code })}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleRemoveCoupon}
-                  className="cursor-pointer text-xs text-zinc-500 hover:text-red-600 dark:text-zinc-400"
-                >
-                  {t("remove")}
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="couponCode" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  {t("haveCoupon")}
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    id="couponCode"
-                    type="text"
-                    value={couponInput}
-                    onChange={(e) => setCouponInput(e.target.value)}
-                    placeholder={t("couponPlaceholder")}
-                    className="input flex-1 uppercase"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleApplyCoupon}
-                    disabled={isApplyingCoupon || !couponInput.trim()}
-                    className="btn-outline shrink-0 cursor-pointer text-sm"
-                  >
-                    {isApplyingCoupon ? t("applying") : t("apply")}
-                  </button>
-                </div>
-                {couponError && <p className="text-xs text-red-600 dark:text-red-400">{couponError}</p>}
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 flex flex-col gap-1 border-t border-zinc-200 pt-4 text-sm dark:border-zinc-800">
-            <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
-              <span>Subtotal</span>
-              <span>{formatPriceFromPaise(subtotal)}</span>
-            </div>
-            {appliedCoupon && (
-              <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
-                <span>
-                  {t("discount")} ({appliedCoupon.code})
-                </span>
-                <span>-{formatPriceFromPaise(couponDiscountInPaise)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
-              <span>Delivery fee</span>
-              {isPickup || qualifiesForFreeDelivery ? (
-                <span className="font-medium text-primary-600">
-                  {isPickup ? "—" : t("freeDelivery")}
-                </span>
-              ) : (
-                <span>{formatPriceFromPaise(deliveryFeeInPaise)}</span>
-              )}
-            </div>
-            <div className="mt-1 flex justify-between text-base font-bold text-zinc-900 dark:text-zinc-100">
-              <span>Total</span>
-              <span>{formatPriceFromPaise(totalInPaise)}</span>
-            </div>
-          </div>
-
-          {belowMinOrder && (
-            <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-              Minimum order ₹{((serviceability?.minOrderAmountInPaise ?? 0) / 100).toFixed(0)} for
-              this address.
-            </p>
-          )}
-
-          <button
-            type="button"
-            onClick={handlePlaceOrder}
-            disabled={
-              isPlacingOrder ||
-              (isPickup ? !selectedZoneId : !selectedAddressId) ||
-              (!isInstant && (!selectedDay || !effectiveSlotId)) ||
-              !agreedToTerms ||
-              Boolean(windowClosed) ||
-              belowMinOrder ||
-              (!isPickup && serviceability?.serviceable === false) ||
-              checkingAvailability ||
-              hasUnavailableItems
-            }
-            className="btn-primary mt-6 w-full"
-          >
-            {isPlacingOrder ? (
-              t("placingOrder")
-            ) : (
-              <>
-                <CheckCircle2 className="h-4 w-4" />
-                {t("payNow")}
-              </>
-            )}
-          </button>
-          <Link
-            href="/account/addresses"
-            className="mt-3 block text-center text-xs text-zinc-500 hover:text-primary-600"
-          >
-            {t("manageAddresses")}
-          </Link>
-        </div>
+        <CheckoutSummaryCard
+          items={items}
+          subtotal={subtotal}
+          appliedCoupon={appliedCoupon}
+          onCouponApplied={setAppliedCoupon}
+          onCouponRemoved={() => setAppliedCoupon(null)}
+          isPickup={isPickup}
+          qualifiesForFreeDelivery={qualifiesForFreeDelivery}
+          deliveryFeeInPaise={deliveryFeeInPaise}
+          totalInPaise={totalInPaise}
+          minOrderInPaise={belowMinOrder ? (serviceability?.minOrderAmountInPaise ?? 0) : null}
+          isPlacingOrder={isPlacingOrder}
+          onPlaceOrder={handlePlaceOrder}
+          placeDisabled={
+            isPlacingOrder ||
+            (isPickup ? !selectedZoneId : !selectedAddressId) ||
+            (!isInstant && (!selectedDay || !effectiveSlotId)) ||
+            !agreedToTerms ||
+            Boolean(windowClosed) ||
+            belowMinOrder ||
+            (!isPickup && serviceability?.serviceable === false) ||
+            checkingAvailability ||
+            hasUnavailableItems
+          }
+        />
       </div>
     </main>
   );

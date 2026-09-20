@@ -57,7 +57,7 @@ export function LocationPickerMap(props: LocationPickerMapProps) {
   if (!config) {
     return (
       <div
-        className="animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-800"
+        className="skeleton rounded-xl"
         style={{ height: props.height ?? 320 }}
       />
     );

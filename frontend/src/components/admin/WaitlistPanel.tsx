@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Plus, UserX } from "lucide-react";
 import {
@@ -10,8 +11,11 @@ import {
   listWaitlist,
   seatWaitlistEntry,
   type DiningTable,
-  type WaitlistEntry,
 } from "@/lib/api/dine-in";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateOrderAreas } from "@/lib/query/admin-invalidation";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
 
@@ -29,7 +33,12 @@ export function WaitlistPanel({
 }) {
   const router = useRouter();
   const { showToast } = useToast();
-  const [entries, setEntries] = useState<WaitlistEntry[] | null>(null);
+  const queryClient = useQueryClient();
+  const { data: entries, isError } = useQuery({
+    queryKey: qk.admin("dine-in", "waitlist", kitchenZoneId),
+    queryFn: () => listWaitlist(kitchenZoneId),
+    staleTime: STALE.short,
+  });
   const [adding, setAdding] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
@@ -38,13 +47,8 @@ export function WaitlistPanel({
   const [seatTableId, setSeatTableId] = useState("");
 
   function refresh() {
-    listWaitlist(kitchenZoneId).then(setEntries).catch(() => setEntries([]));
+    void queryClient.invalidateQueries({ queryKey: qk.admin("dine-in") });
   }
-
-  useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kitchenZoneId]);
 
   async function handleAdd() {
     setAdding(true);
@@ -84,6 +88,7 @@ export function WaitlistPanel({
       showToast("Guest seated", "success");
       setSeatingId(null);
       setSeatTableId("");
+      void invalidateOrderAreas(queryClient);
       onSeated();
       router.push(`/admin/orders/${order.id}`);
     } catch (err) {
@@ -128,9 +133,23 @@ export function WaitlistPanel({
       </div>
 
       {!entries ? (
-        <p className="text-sm text-zinc-400">Loading…</p>
+        isError ? (
+          <EmptyState compact title="Couldn't load the waitlist." />
+        ) : (
+          <div className="flex flex-col gap-2" aria-busy="true">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800"
+              >
+                <Skeleton className="h-5 w-56" />
+                <Skeleton className="h-8 w-24 rounded-xl" />
+              </div>
+            ))}
+          </div>
+        )
       ) : entries.length === 0 ? (
-        <p className="text-sm text-zinc-400">No one is waiting right now.</p>
+        <EmptyState compact title="No one is waiting right now." />
       ) : (
         <div className="flex flex-col gap-2">
           {entries.map((entry) => (

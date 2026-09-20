@@ -2,7 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ImageOff, Search } from "lucide-react";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { listMeals, type Meal } from "@/lib/api/admin-menu";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
 const PAGE_SIZE = 12;
@@ -19,43 +23,32 @@ export function MealPickerGrid({
   selectedIds: string[];
   onToggle: (meal: Meal, checked: boolean) => void;
 }) {
-  const [meals, setMeals] = useState<Meal[] | null>(null);
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
-  // Fresh page 1 whenever the search term changes.
   useEffect(() => {
-    const handle = setTimeout(() => {
-      setLoading(true);
-      listMeals({ page: 1, limit: PAGE_SIZE, search: search || undefined })
-        .then(({ data, meta }) => {
-          setMeals(data);
-          setPage(1);
-          setHasMore(meta?.hasNext ?? false);
-        })
-        .catch(() => setMeals([]))
-        .finally(() => setLoading(false));
-    }, 250);
+    const handle = setTimeout(() => setDebouncedSearch(search), 250);
     return () => clearTimeout(handle);
   }, [search]);
 
+  // Cached per search term (under the "menu" area, so any menu change
+  // refreshes it); keeps the previous results visible while a new search loads.
+  const { data, isError, hasNextPage, isFetching, isFetchingNextPage, fetchNextPage } = useInfiniteQuery({
+    queryKey: qk.admin("menu", "meal-picker-grid", debouncedSearch),
+    queryFn: ({ pageParam }) =>
+      listMeals({ page: pageParam, limit: PAGE_SIZE, search: debouncedSearch || undefined }),
+    initialPageParam: 1,
+    getNextPageParam: (last) => (last.meta?.hasNext ? last.meta.page + 1 : undefined),
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
+  const meals: Meal[] | null = data ? data.pages.flatMap((pg) => pg.data) : isError ? [] : null;
+  const hasMore = Boolean(hasNextPage);
+
   function loadMore() {
-    setLoading((wasLoading) => {
-      if (wasLoading) return wasLoading;
-      const nextPage = page + 1;
-      listMeals({ page: nextPage, limit: PAGE_SIZE, search: search || undefined })
-        .then(({ data, meta }) => {
-          setMeals((prev) => [...(prev ?? []), ...data]);
-          setPage(nextPage);
-          setHasMore(meta?.hasNext ?? false);
-        })
-        .finally(() => setLoading(false));
-      return true;
-    });
+    if (!isFetching) void fetchNextPage();
   }
 
   useEffect(() => {
@@ -89,11 +82,11 @@ export function MealPickerGrid({
         {!meals ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-24 animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800" />
+              <Skeleton key={i} className="h-24" />
             ))}
           </div>
         ) : meals.length === 0 ? (
-          <p className="py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">No products match.</p>
+          <EmptyState compact title="No products match." />
         ) : (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {meals.map((meal) => {
@@ -135,7 +128,7 @@ export function MealPickerGrid({
           </div>
         )}
         <div ref={sentinelRef} className="h-px" />
-        {loading && meals && meals.length > 0 && (
+        {isFetchingNextPage && meals && meals.length > 0 && (
           <p className="py-2 text-center text-xs text-zinc-400">Loading…</p>
         )}
       </div>

@@ -1,59 +1,59 @@
 "use client";
 
-import { Fragment, use, useEffect, useState } from "react";
+import { Fragment, use, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { ArrowLeft, Printer } from "lucide-react";
-import { ApiError, getOrder, type Order } from "@/lib/api/orders";
-import { fetchPublicConfig, type PublicConfig } from "@/lib/api/settings-client";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, FileText, Printer } from "lucide-react";
+import { ApiError, getOrder } from "@/lib/api/orders";
+import { fetchPublicConfig } from "@/lib/api/settings-client";
+import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { InvoiceSkeleton } from "@/components/invoice/InvoiceSkeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 export default function OrderInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const t = useTranslations("invoice");
   const router = useRouter();
-  const [order, setOrder] = useState<Order | null>(null);
-  const [config, setConfig] = useState<PublicConfig | null>(null);
-  const [notFound, setNotFound] = useState(false);
+
+  // Same key as the order detail page, so an order just viewed prints
+  // instantly from cache.
+  const { data: order, error } = useQuery({
+    queryKey: qk.orders.detail(id),
+    queryFn: () => getOrder(id),
+    staleTime: STALE.short,
+  });
+  // Branding rarely changes and fetchPublicConfig falls back on failure.
+  const { data: config } = useQuery({
+    queryKey: qk.config.public,
+    queryFn: fetchPublicConfig,
+    staleTime: STALE.long,
+  });
+  const unauthorized = error instanceof ApiError && error.status === 401;
 
   useEffect(() => {
-    Promise.all([getOrder(id), fetchPublicConfig()])
-      .then(([o, c]) => {
-        setOrder(o);
-        setConfig(c);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) {
-          router.push(`/login?redirect=/orders/${id}/invoice`);
-          return;
-        }
-        setNotFound(true);
-      });
-  }, [id, router]);
-
-  if (notFound) {
-    return (
-      <main className="container-app flex flex-1 flex-col items-center justify-center gap-4 py-24 text-center">
-        <p className="text-zinc-600 dark:text-zinc-400">Order not found.</p>
-        <Link href="/orders" className="btn-primary">
-          {t("back")}
-        </Link>
-      </main>
-    );
-  }
+    if (unauthorized) router.push(`/login?redirect=/orders/${id}/invoice`);
+  }, [unauthorized, id, router]);
 
   if (!order || !config) {
-    return (
-      <main className="container-app flex-1 py-10">
-        <div className="card mx-auto max-w-2xl p-8">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="mt-6 h-32 w-full" />
-          <Skeleton className="mt-4 h-48 w-full" />
-        </div>
-      </main>
-    );
+    if (error && !unauthorized) {
+      return (
+        <main className="container-app flex-1 py-10">
+          <EmptyState
+            icon={FileText}
+            title="Order not found."
+            action={
+              <Link href="/orders" className="btn-primary">
+                {t("back")}
+              </Link>
+            }
+          />
+        </main>
+      );
+    }
+    return <InvoiceSkeleton itemRows={2} summaryRows={3} wideTable />;
   }
 
   return (

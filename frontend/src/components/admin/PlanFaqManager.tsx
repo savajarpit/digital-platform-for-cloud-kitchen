@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { HelpCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -14,27 +15,26 @@ import {
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { RowListCardSkeleton } from "@/components/admin/skeletons/RowListCardSkeleton";
 
 const emptyForm: PlanFaqInput = { question: "", answer: "", isPublished: true };
 
 export function PlanFaqManager({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
   const confirm = useConfirm();
-  const [faqs, setFaqs] = useState<PlanFaq[] | null>(null);
+  const queryClient = useQueryClient();
+  const { data: faqs, isError } = useQuery({
+    queryKey: qk.admin("plan", "faqs"),
+    queryFn: listPlanFaqsAdmin,
+    staleTime: STALE.list,
+  });
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
 
-  useEffect(() => {
-    listPlanFaqsAdmin()
-      .then(setFaqs)
-      .catch(() => showToast("Couldn't load FAQs.", "error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // Every write refreshes the cached FAQ list.
   function refetch() {
-    listPlanFaqsAdmin()
-      .then(setFaqs)
-      .catch(() => showToast("Couldn't refresh FAQs. Try reloading the page.", "error"));
+    queryClient.invalidateQueries({ queryKey: qk.admin("plan", "faqs") });
   }
 
   async function handleTogglePublished(faq: PlanFaq) {
@@ -66,11 +66,12 @@ export function PlanFaqManager({ canEdit }: { canEdit: boolean }) {
   }
 
   if (!faqs) {
-    return (
+    return isError ? (
       <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-32 w-full" />
+        <EmptyState compact title="Couldn't load FAQs." />
       </div>
+    ) : (
+      <RowListCardSkeleton rows={3} rowLines={2} description headerAction />
     );
   }
 
@@ -105,7 +106,7 @@ export function PlanFaqManager({ canEdit }: { canEdit: boolean }) {
       )}
 
       {faqs.length === 0 && editingId !== "new" && (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No FAQs yet.</p>
+        <EmptyState compact title="No FAQs yet." />
       )}
 
       <div className="flex flex-col gap-2">

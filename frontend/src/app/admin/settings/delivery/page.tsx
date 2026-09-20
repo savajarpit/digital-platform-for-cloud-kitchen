@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapPin, Plus, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -17,7 +18,6 @@ import {
   updateServiceablePincode,
   type BusinessProfile,
   type DeliverySlot,
-  type KitchenZone,
   type ServiceablePincode,
   type UpdateDeliveryZonesInput,
 } from "@/lib/api/admin-settings";
@@ -26,7 +26,9 @@ import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { DeliveryZonesSkeleton } from "@/components/admin/skeletons/DeliveryZonesSkeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { KitchenZonesCard } from "@/components/admin/KitchenZonesCard";
 import { TimeInput12h } from "@/components/ui/TimeInput12h";
@@ -38,36 +40,44 @@ const rupeesToPaise = (rupees: string): number | undefined =>
 export default function DeliveryZonesPage() {
   const canEdit = usePermission(PERMISSIONS.DELIVERY_ZONES_EDIT);
 
-  const [profile, setProfile] = useState<BusinessProfile | null>(null);
-  const [zones, setZones] = useState<KitchenZone[] | null>(null);
-  const [pincodes, setPincodes] = useState<ServiceablePincode[] | null>(null);
-  const [slots, setSlots] = useState<DeliverySlot[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  // The business profile is shared with Settings > Business, so a save on
+  // either page shows up on the other without a refetch.
+  const profileKey = qk.admin("settings", "business");
+  const zonesKey = qk.admin("settings", "delivery", "zones");
+  const pincodesKey = qk.admin("settings", "delivery", "pincodes");
+  const slotsKey = qk.admin("settings", "delivery", "slots");
 
-  useEffect(() => {
-    Promise.all([
-      getBusinessProfile(),
-      listKitchenZones(),
-      listServiceablePincodes(),
-      listAllDeliverySlots(),
-    ])
-      .then(([p, kz, pc, sl]) => {
-        setProfile(p);
-        setZones(kz);
-        setPincodes(pc);
-        setSlots(sl.sort((a, b) => a.sortOrder - b.sortOrder));
-      })
-      .catch(() => setLoadError("Couldn't load delivery zone settings."));
-  }, []);
+  const profileQ = useQuery({ queryKey: profileKey, queryFn: getBusinessProfile, staleTime: STALE.list });
+  const zonesQ = useQuery({ queryKey: zonesKey, queryFn: listKitchenZones, staleTime: STALE.list });
+  const pincodesQ = useQuery({
+    queryKey: pincodesKey,
+    queryFn: listServiceablePincodes,
+    staleTime: STALE.list,
+  });
+  const slotsQ = useQuery({
+    queryKey: slotsKey,
+    queryFn: async () => (await listAllDeliverySlots()).sort((x, y) => x.sortOrder - y.sortOrder),
+    staleTime: STALE.list,
+  });
+
+  // Writes hand the new list to the cache (instant UI) and then invalidate so
+  // the server's version wins.
+  function commit<T>(key: readonly unknown[], next: T) {
+    queryClient.setQueryData(key, next);
+    queryClient.invalidateQueries({ queryKey: key });
+  }
+
+  const profile = profileQ.data;
+  const zones = zonesQ.data;
+  const pincodes = pincodesQ.data;
+  const slots = slotsQ.data;
 
   if (!profile || !zones || !pincodes || !slots) {
-    return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-40 w-full" />
-        {loadError && <p className="mt-4 text-sm text-red-600">{loadError}</p>}
-      </div>
-    );
+    if (profileQ.isError || zonesQ.isError || pincodesQ.isError || slotsQ.isError) {
+      return <EmptyState compact icon={MapPin} title="Couldn't load delivery zone settings." />;
+    }
+    return <DeliveryZonesSkeleton />;
   }
 
   return (
@@ -80,10 +90,14 @@ export default function DeliveryZonesPage() {
       </div>
       {!canEdit && <ViewOnlyNotice />}
 
-      <KitchenZonesCard zones={zones} canEdit={canEdit} onChange={setZones} />
-      <PincodesCard pincodes={pincodes} canEdit={canEdit} onChange={setPincodes} />
-      <AdvanceOrderWindowForm profile={profile} canEdit={canEdit} onSaved={setProfile} />
-      <SlotsCard slots={slots} canEdit={canEdit} onChange={setSlots} />
+      <KitchenZonesCard zones={zones} canEdit={canEdit} onChange={(z) => commit(zonesKey, z)} />
+      <PincodesCard pincodes={pincodes} canEdit={canEdit} onChange={(p) => commit(pincodesKey, p)} />
+      <AdvanceOrderWindowForm
+        profile={profile}
+        canEdit={canEdit}
+        onSaved={(p) => commit(profileKey, p)}
+      />
+      <SlotsCard slots={slots} canEdit={canEdit} onChange={(sl) => commit(slotsKey, sl)} />
     </div>
   );
 }
@@ -98,9 +112,10 @@ function AdvanceOrderWindowForm({
   onSaved: (p: BusinessProfile) => void;
 }) {
   const { showToast } = useToast();
-  const [maxAdvanceOrderDays, setMaxAdvanceOrderDays] = useState(
-    String(profile.maxAdvanceOrderDays),
-  );
+  // Unsaved edit lives in `draft`; otherwise the input follows the cached profile.
+  const [draft, setDraft] = useState<string | null>(null);
+  const maxAdvanceOrderDays = draft ?? String(profile.maxAdvanceOrderDays);
+  const setMaxAdvanceOrderDays = setDraft;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -114,6 +129,7 @@ function AdvanceOrderWindowForm({
       };
       const updated = await updateDeliveryZones(input);
       onSaved(updated);
+      setDraft(null);
       showToast("Delivery window saved", "success");
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Couldn't save changes.";
@@ -254,7 +270,7 @@ function PincodesCard({
           </div>
         ))}
         {pincodes.length === 0 && (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">No pincodes added yet.</p>
+          <EmptyState compact title="No pincodes added yet." />
         )}
       </div>
 
@@ -381,7 +397,7 @@ function SlotsCard({
           </div>
         ))}
         {slots.length === 0 && (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">No delivery slots configured yet.</p>
+          <EmptyState compact title="No delivery slots configured yet." />
         )}
       </div>
 

@@ -1,26 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeft } from "lucide-react";
-import { listDisruptions, type SubscriptionDisruption } from "@/lib/api/admin-subscriptions";
+import { listDisruptions } from "@/lib/api/admin-subscriptions";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import type { PaginationMeta } from "@/lib/api/response";
 
 export default function DisruptionsAdminPage() {
-  const [disruptions, setDisruptions] = useState<SubscriptionDisruption[] | null>(null);
-  const [meta, setMeta] = useState<PaginationMeta | undefined>(undefined);
   const [page, setPage] = useState(1);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listDisruptions({ page, limit: 20 })
-      .then((res) => {
-        setDisruptions(res.data);
-        setMeta(res.meta);
-      })
-      .catch(() => setError("Couldn't load disruptions."));
-  }, [page]);
+  const { data, isError } = useQuery({
+    queryKey: qk.admin("subscriptions", "disruptions", page),
+    queryFn: () => listDisruptions({ page, limit: 20 }),
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
+  const disruptions = data?.data;
+  const meta = data?.meta;
+  const error = isError ? "Couldn't load disruptions." : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -50,12 +49,27 @@ export default function DisruptionsAdminPage() {
       )}
 
       {!disruptions ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-40 w-full" />
-        </div>
+        isError ? null : (
+          <div className="card flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800" aria-busy="true">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-5 w-20 rounded-full" />
+                  </div>
+                  <Skeleton className="mt-1.5 h-4 w-56" />
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )
       ) : disruptions.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No disruptions declared yet.</p>
+        <EmptyState compact title="No disruptions declared yet." />
       ) : (
         <div className="card flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800">
           {disruptions.map((d) => (

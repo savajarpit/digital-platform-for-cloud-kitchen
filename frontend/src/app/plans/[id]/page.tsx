@@ -3,7 +3,8 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarClock, Clock, ImageOff, Tag } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock, Clock, Tag } from "lucide-react";
 import {
   ApiError,
   getPlan,
@@ -11,66 +12,81 @@ import {
   listMySubscriptions,
   subscribe,
   verifySubscriptionPayment,
-  type PlanDetail,
 } from "@/lib/api/subscriptions";
-import { listAddresses, type Address } from "@/lib/api/addresses";
-import { getDeliverySlots, type DeliverySlot } from "@/lib/api/delivery-slots";
+import type { Address } from "@/lib/api/addresses";
+import { getDeliverySlots } from "@/lib/api/delivery-slots";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
+import { qk, STALE } from "@/lib/query/keys";
+import { useAddresses } from "@/lib/query/addresses";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PlanDaysPreview } from "@/components/subscriptions/PlanDaysPreview";
+import {
+  PlanDetailSkeleton,
+  PlanPurchaseFieldsSkeleton,
+} from "@/components/subscriptions/PlanDetailSkeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 
-const SLOT_LABELS: Record<string, string> = {
-  BREAKFAST: "Breakfast",
-  LUNCH: "Lunch",
-  DINNER: "Dinner",
-};
-
 export default function PlanDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { showToast } = useToast();
   const confirm = useConfirm();
 
-  const [plan, setPlan] = useState<PlanDetail | null>(null);
-  const [notFound, setNotFound] = useState(false);
-  const [addresses, setAddresses] = useState<Address[] | null | undefined>(undefined);
-  const [selectedAddressId, setSelectedAddressId] = useState("");
-  const [deliverySlots, setDeliverySlots] = useState<DeliverySlot[]>([]);
+  const { data: plan, isPending } = useQuery({
+    queryKey: qk.plans.detail(id),
+    queryFn: () => getPlan(id),
+    staleTime: STALE.list,
+  });
+  // Bounce a direct visit while the tenant has subscriptions switched off.
+  // A failed check is ignored (the page just stays).
+  const { data: subscriptionsEnabled } = useQuery({
+    queryKey: qk.plans.subscriptionsEnabled,
+    queryFn: getSubscriptionsEnabled,
+    staleTime: STALE.list,
+  });
+  const addressesQuery = useAddresses();
+  const { data: slotsConfig } = useQuery({
+    queryKey: qk.checkout.slots,
+    queryFn: getDeliverySlots,
+    staleTime: STALE.short,
+  });
+  const { data: mySubscriptions } = useQuery({
+    queryKey: qk.subscriptions.list,
+    queryFn: listMySubscriptions,
+    staleTime: STALE.list,
+  });
+
+  const [addressChoice, setAddressChoice] = useState("");
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [isSubscribing, setIsSubscribing] = useState(false);
-  const [hasActiveForThisPlan, setHasActiveForThisPlan] = useState(false);
 
   useEffect(() => {
-    getSubscriptionsEnabled()
-      .then((enabled) => {
-        if (!enabled) router.replace("/");
-      })
-      .catch(() => {});
-    getPlan(id)
-      .then(setPlan)
-      .catch(() => setNotFound(true));
-    listAddresses()
-      .then((list) => {
-        setAddresses(list);
-        const serviceableList = list.filter((a) => a.serviceable);
-        const def = serviceableList.find((a) => a.isDefault) ?? serviceableList[0];
-        if (def) setSelectedAddressId(def.id);
-      })
-      .catch((err: unknown) => {
-        setAddresses(err instanceof ApiError && err.status === 401 ? null : []);
-      });
-    getDeliverySlots()
-      .then((config) => setDeliverySlots(config.slots))
-      .catch(() => setDeliverySlots([]));
-    listMySubscriptions()
-      .then((subs) => setHasActiveForThisPlan(subs.some((s) => s.planId === id && s.status === "ACTIVE")))
-      .catch(() => setHasActiveForThisPlan(false));
-  }, [id, router]);
+    if (subscriptionsEnabled === false) router.replace("/");
+  }, [subscriptionsEnabled, router]);
+
+  // undefined = loading, null = logged out, [] = none saved.
+  const addressesUnauthorized =
+    addressesQuery.error instanceof ApiError && addressesQuery.error.status === 401;
+  const addresses: Address[] | null | undefined =
+    addressesQuery.data ??
+    (addressesQuery.isPending ? undefined : addressesUnauthorized ? null : []);
+  // Derived, not stored: the customer's pick if it's still valid, otherwise
+  // the default (or first) serviceable address.
+  const serviceableAddresses = (addresses ?? []).filter((a) => a.serviceable);
+  const selectedAddressId = serviceableAddresses.some((a) => a.id === addressChoice)
+    ? addressChoice
+    : (serviceableAddresses.find((a) => a.isDefault) ?? serviceableAddresses[0])?.id ?? "";
+
+  const deliverySlots = slotsConfig?.slots ?? [];
+  const hasActiveForThisPlan = Boolean(
+    mySubscriptions?.some((s) => s.planId === id && s.status === "ACTIVE"),
+  );
 
   function handleSubscribeClick() {
     if (hasActiveForThisPlan) {
@@ -96,6 +112,8 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
         couponCode: couponCode || undefined,
         deliverySlotId: selectedSlotId || undefined,
       });
+      // A pending subscription now exists.
+      void queryClient.invalidateQueries({ queryKey: qk.subscriptions.all });
 
       await loadRazorpayScript();
       const razorpay = new window.Razorpay({
@@ -112,6 +130,9 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
             razorpaySignature: response.razorpay_signature,
           })
             .then(() => {
+              // Activation flips the subscription to ACTIVE and can schedule orders.
+              void queryClient.invalidateQueries({ queryKey: qk.subscriptions.all });
+              void queryClient.invalidateQueries({ queryKey: qk.orders.all });
               router.push(`/account/subscriptions/${subscriptionId}`);
             })
             .catch(() => showToast("Payment succeeded but activation failed — contact support.", "error"));
@@ -128,26 +149,28 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  if (notFound) {
+  if (!plan) {
+    if (isPending) return <PlanDetailSkeleton />;
     return (
-      <main className="container-app flex-1 py-16 text-center">
-        <h1 className="section-title text-zinc-900 dark:text-zinc-100">Plan not found</h1>
-        <Link href="/plans" className="btn-primary mt-6">
-          Back to plans
-        </Link>
+      <main className="container-app flex-1 py-12">
+        <EmptyState
+          icon={CalendarClock}
+          title="Plan not found"
+          action={
+            <Link href="/plans" className="btn-primary">
+              Back to plans
+            </Link>
+          }
+        />
       </main>
     );
   }
 
-  if (!plan) {
-    return (
-      <main className="container-app flex-1 py-12">
-        <Skeleton className="h-9 w-64" />
-        <Skeleton className="mt-4 h-24 w-full max-w-2xl" />
-        <Skeleton className="mt-6 h-64 w-full" />
-      </main>
-    );
-  }
+  const discountPercentage = plan.activePromotion?.discountPercentage ?? 0;
+  const discountedPriceInPaise =
+    discountPercentage > 0
+      ? plan.priceInPaise - Math.floor((plan.priceInPaise * discountPercentage) / 100)
+      : plan.priceInPaise;
 
   return (
     <main className="container-app flex-1 py-12">
@@ -170,152 +193,29 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
             </span>
           </div>
 
-          <div className="mt-8 flex flex-col gap-3">
-            {plan.schedulingMode === "WEEKLY_FIXED" ? (
-              (plan.previewWindow ?? []).map((day) => (
-                <div
-                  key={day.date}
-                  className={`card p-4 ${
-                    day.meals.length === 0
-                      ? "border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20"
-                      : ""
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                      {new Date(day.date).toLocaleDateString(undefined, {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                      })}
-                    </h3>
-                    {day.meals.length === 0 && (
-                      <span className="badge bg-amber-50 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-                        Holiday
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-3 flex flex-col gap-3">
-                    {day.meals.length === 0 ? (
-                      // Zero slots for this real weekday (not zero meals within a
-                      // decided slot — that case renders per-slot below with
-                      // "Meal to be announced" instead) means no delivery happens
-                      // this day at all, so this is never "still being decided."
-                      <p className="text-xs text-zinc-400 italic">No deliveries on this day.</p>
-                    ) : (
-                      day.meals.map((meal, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                            {meal.imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={meal.imageUrl}
-                                alt={meal.name ?? ""}
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <ImageOff className="h-5 w-5 text-zinc-300 dark:text-zinc-600" strokeWidth={1.5} />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs text-zinc-400">
-                              {SLOT_LABELS[meal.slotType] ?? meal.slotType}
-                            </p>
-                            <p
-                              className={
-                                meal.name
-                                  ? "truncate pr-1 text-sm font-medium text-zinc-900 dark:text-zinc-100"
-                                  : "truncate pr-1 text-sm text-zinc-400 italic dark:text-zinc-500"
-                              }
-                            >
-                              {meal.name ?? "Meal to be announced"}
-                            </p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              ))
-            ) : (
-              plan.days.map((day) => (
-                <div key={day.id} className="card p-4">
-                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                    Day {day.dayNumber}
-                  </h3>
-                  <div className="mt-3 flex flex-col gap-3">
-                    {day.slots.length === 0 ? (
-                      <p className="text-xs text-zinc-400 italic">Meals for this day to be decided.</p>
-                    ) : (
-                      day.slots.map((slot) => (
-                        <div key={slot.id} className="flex items-center gap-3">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                            {slot.meal?.imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={slot.meal.imageUrl}
-                                alt={slot.meal.name}
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <ImageOff className="h-5 w-5 text-zinc-300 dark:text-zinc-600" strokeWidth={1.5} />
-                            )}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs text-zinc-400">
-                              {SLOT_LABELS[slot.slotType] ?? slot.slotType}
-                            </p>
-                            <p
-                              className={
-                                slot.meal
-                                  ? "truncate pr-1 text-sm font-medium text-zinc-900 dark:text-zinc-100"
-                                  : "truncate pr-1 text-sm text-zinc-400 italic dark:text-zinc-500"
-                              }
-                            >
-                              {slot.meal?.name ?? "Meal to be announced"}
-                            </p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <PlanDaysPreview plan={plan} />
         </div>
 
         <div className="card sticky top-24 flex h-fit flex-col gap-4 p-6">
-          {(() => {
-            const discountPercentage = plan.activePromotion?.discountPercentage ?? 0;
-            const discountedPriceInPaise =
-              discountPercentage > 0
-                ? plan.priceInPaise - Math.floor((plan.priceInPaise * discountPercentage) / 100)
-                : plan.priceInPaise;
-            return (
-              <div className="flex items-baseline gap-2">
-                {discountPercentage > 0 && (
-                  <span className="text-lg text-zinc-400 line-through dark:text-zinc-500">
-                    {formatPriceFromPaise(plan.priceInPaise)}
-                  </span>
-                )}
-                <p className="font-display text-3xl font-bold text-primary-600">
-                  {formatPriceFromPaise(discountedPriceInPaise)}
-                </p>
-                {discountPercentage > 0 && (
-                  <span className="badge bg-red-600 text-white">{discountPercentage}% off</span>
-                )}
-              </div>
-            );
-          })()}
+          <div className="flex items-baseline gap-2">
+            {discountPercentage > 0 && (
+              <span className="text-lg text-zinc-400 line-through dark:text-zinc-500">
+                {formatPriceFromPaise(plan.priceInPaise)}
+              </span>
+            )}
+            <p className="font-display text-3xl font-bold text-primary-600">
+              {formatPriceFromPaise(discountedPriceInPaise)}
+            </p>
+            {discountPercentage > 0 && (
+              <span className="badge bg-red-600 text-white">{discountPercentage}% off</span>
+            )}
+          </div>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             One-time payment for the full {plan.durationDays}-day plan.
           </p>
 
           {addresses === undefined ? (
-            <Skeleton className="h-10 w-full" />
+            <PlanPurchaseFieldsSkeleton />
           ) : addresses === null ? (
             <Link href={`/login?redirect=/plans/${plan.id}`} className="btn-primary w-full text-center">
               Log in to subscribe
@@ -330,7 +230,7 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
                 <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
                   Deliver to
                 </label>
-                <Select value={selectedAddressId} onValueChange={setSelectedAddressId}>
+                <Select value={selectedAddressId} onValueChange={setAddressChoice}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>

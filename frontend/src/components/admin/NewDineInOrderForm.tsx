@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { ApiError, createDineInOrder, type DiningTable } from "@/lib/api/dine-in";
 import type { AdminOrderDetail } from "@/lib/api/admin-orders";
 import { CustomerCombobox } from "@/components/admin/CustomerCombobox";
 import { MealCombobox } from "@/components/admin/MealCombobox";
 import type { Customer } from "@/lib/api/admin-customers";
-import { listMeals, type Meal } from "@/lib/api/admin-menu";
+import { listMeals } from "@/lib/api/admin-menu";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateOrderAreas } from "@/lib/query/admin-invalidation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
 import { formatPriceFromPaise } from "@/lib/format/currency";
@@ -48,23 +51,22 @@ export function NewDineInOrderForm({
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
-  const [meals, setMeals] = useState<Meal[]>([]);
-  const [mealsLoaded, setMealsLoaded] = useState(false);
+  const queryClient = useQueryClient();
   const [cart, setCart] = useState<CartRow[]>([]);
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function ensureMealsLoaded() {
-    if (mealsLoaded) return;
-    setMealsLoaded(true);
-    listMeals({ limit: 100 })
-      .then(({ data }) => setMeals(data))
-      .catch(() => setMeals([]));
-  }
+  // Only needed once the first item row exists (names/prices for the subtotal).
+  const { data: mealsPage } = useQuery({
+    queryKey: qk.admin("menu", "meals", "known", 100),
+    queryFn: () => listMeals({ limit: 100 }),
+    enabled: cart.length > 0,
+    staleTime: STALE.list,
+  });
+  const meals = mealsPage?.data ?? [];
 
   function addRow() {
-    ensureMealsLoaded();
     setCart((prev) => [...prev, { mealId: "", quantity: 1 }]);
   }
 
@@ -97,6 +99,7 @@ export function NewDineInOrderForm({
         notes: notes.trim() || undefined,
       });
       showToast("Order opened", "success");
+      void invalidateOrderAreas(queryClient);
       onCreated(order);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't open this order.");

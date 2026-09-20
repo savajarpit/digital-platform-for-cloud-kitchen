@@ -70,7 +70,7 @@ export function Hero({
         </div>
 
         {hasImages && (
-          <div className="relative hidden animate-scale-in lg:block">
+          <div className="relative hidden lg:block">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-4">
                 {images[0] && (

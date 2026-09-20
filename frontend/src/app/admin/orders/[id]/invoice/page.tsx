@@ -1,29 +1,32 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowLeft, Printer } from "lucide-react";
-import { getAdminOrder, type AdminOrderDetail } from "@/lib/api/admin-orders";
-import { fetchPublicConfig, type PublicConfig } from "@/lib/api/settings-client";
+import { getAdminOrder } from "@/lib/api/admin-orders";
+import { fetchPublicConfig } from "@/lib/api/settings-client";
+import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { InvoiceSkeleton } from "@/components/admin/InvoiceSkeleton";
 
 export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const [order, setOrder] = useState<AdminOrderDetail | null>(null);
-  const [config, setConfig] = useState<PublicConfig | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  // Same key as the order detail page, so opening the invoice from there is instant.
+  const orderQuery = useQuery({
+    queryKey: qk.admin("orders", "detail", id),
+    queryFn: () => getAdminOrder(id),
+    staleTime: STALE.short,
+  });
+  const configQuery = useQuery({
+    queryKey: qk.admin("settings", "public-config"),
+    queryFn: fetchPublicConfig,
+    staleTime: STALE.long,
+  });
+  const order = orderQuery.data;
+  const config = configQuery.data;
 
-  useEffect(() => {
-    Promise.all([getAdminOrder(id), fetchPublicConfig()])
-      .then(([o, c]) => {
-        setOrder(o);
-        setConfig(c);
-      })
-      .catch(() => setNotFound(true));
-  }, [id]);
-
-  if (notFound) {
+  if (orderQuery.isError || configQuery.isError) {
     return (
       <div className="flex flex-col items-center gap-4 py-24 text-center">
         <p className="text-zinc-600 dark:text-zinc-400">Order not found.</p>
@@ -34,14 +37,7 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
     );
   }
 
-  if (!order || !config) {
-    return (
-      <div className="card p-8">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="mt-6 h-32 w-full" />
-      </div>
-    );
-  }
+  if (!order || !config) return <InvoiceSkeleton />;
 
   return (
     <div className="print:py-0">

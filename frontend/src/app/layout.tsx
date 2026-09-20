@@ -15,6 +15,7 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/session-cookies";
 import { decodeJwtRole } from "@/lib/auth/decode-role";
+import { QueryProvider } from "@/lib/query/QueryProvider";
 import { ToastProvider } from "@/context/ToastContext";
 import { ConfirmProvider } from "@/context/ConfirmContext";
 import { THEME_INIT_SCRIPT } from "@/lib/theme/theme-mode";
@@ -149,6 +150,7 @@ export default async function RootLayout({
       </head>
       <body className="min-h-dvh flex flex-col">
         <NextIntlClientProvider>
+          <QueryProvider>
           <ToastProvider>
             <ConfirmProvider>
               <Header
@@ -171,6 +173,7 @@ export default async function RootLayout({
               />
             </ConfirmProvider>
           </ToastProvider>
+          </QueryProvider>
         </NextIntlClientProvider>
       </body>
     </html>

@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/admin-menu";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Toggle } from "@/components/ui/Toggle";
 
 export function CategoriesCard({
@@ -102,7 +103,7 @@ export function CategoriesCard({
           </div>
         ))}
         {categories.length === 0 && (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">No categories yet.</p>
+          <EmptyState compact title="No categories yet." />
         )}
       </div>
 

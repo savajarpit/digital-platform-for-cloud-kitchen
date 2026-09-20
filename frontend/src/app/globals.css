@@ -159,6 +159,10 @@
    header/footer positioning down the tree. */
 html {
   overflow-x: clip;
+  /* Reserve the scrollbar's width always, so a page that gets shorter (an
+     empty search result, a skeleton swapping to content) never shifts the
+     layout sideways by dropping its scrollbar. */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -236,8 +240,51 @@ button:not(:disabled) {
   .section-title {
     @apply text-2xl font-bold tracking-tight sm:text-3xl;
   }
+  /* w-full matters: the app's root wrapper is a flex column, where `mx-auto`
+     turns off stretching — without an explicit width, a page whose content
+     is short (an empty state) would shrink to fit it instead of keeping
+     the full max-w-6xl column. */
   .container-app {
-    @apply mx-auto max-w-6xl px-4 sm:px-6 lg:px-8;
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Shimmer-only loading placeholder: a highlight sweeps across a static
+     block. No opacity/scale/translate motion, so the layout it stands in for
+     never appears to move. */
+  .skeleton {
+    background-color: var(--color-zinc-200);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(255 255 255 / 0.6) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    animation: skeleton-shimmer 1.6s ease-in-out infinite;
+  }
+  .dark .skeleton {
+    background-color: var(--color-zinc-800);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgb(255 255 255 / 0.07) 50%,
+      transparent 100%
+    );
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton {
+      animation: none;
+    }
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }
 

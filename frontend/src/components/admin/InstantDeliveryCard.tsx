@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
   getInstantDeliverySettings,
@@ -10,17 +11,28 @@ import {
 import { useToast } from "@/context/ToastContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+
+const FALLBACK_SETTINGS: InstantDeliverySettings = {
+  isEnabled: false,
+  etaMinMinutes: 30,
+  etaMaxMinutes: 45,
+};
 
 export function InstantDeliveryCard({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
-  const [settings, setSettings] = useState<InstantDeliverySettings | null>(null);
+  const queryClient = useQueryClient();
+  const queryKey = qk.admin("settings", "instant-delivery");
+  const { data, isError } = useQuery({
+    queryKey,
+    queryFn: getInstantDeliverySettings,
+    staleTime: STALE.list,
+  });
+  // Unsaved edits live in `draft`; a background refetch never overwrites them.
+  const [draft, setDraft] = useState<InstantDeliverySettings | null>(null);
+  const settings = draft ?? data ?? (isError ? FALLBACK_SETTINGS : null);
+  const setSettings = setDraft;
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    getInstantDeliverySettings()
-      .then(setSettings)
-      .catch(() => setSettings({ isEnabled: false, etaMinMinutes: 30, etaMaxMinutes: 45 }));
-  }, []);
 
   async function handleSave() {
     if (!settings) return;
@@ -33,7 +45,9 @@ export function InstantDeliveryCard({ canEdit }: { canEdit: boolean }) {
         etaMinMinutes: settings.etaMinMinutes,
         etaMaxMinutes: settings.etaMaxMinutes,
       });
-      setSettings(updated);
+      queryClient.setQueryData(queryKey, updated);
+      queryClient.invalidateQueries({ queryKey });
+      setDraft(null);
       showToast("Instant delivery settings saved", "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't save changes.", "error");
@@ -44,8 +58,15 @@ export function InstantDeliveryCard({ canEdit }: { canEdit: boolean }) {
 
   if (!settings) {
     return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
+      <div className="card flex flex-col gap-3 p-6" aria-busy="true">
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-4 w-80 max-w-full" />
+          </div>
+          <Skeleton className="h-6 w-11 rounded-full" />
+        </div>
+        <Skeleton className="h-10 w-36 rounded-xl" />
       </div>
     );
   }

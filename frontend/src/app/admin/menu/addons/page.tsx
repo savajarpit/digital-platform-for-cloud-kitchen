@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Layers } from "lucide-react";
 import { listAddonGroups, type AddonGroup } from "@/lib/api/addons";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateMenuAreas } from "@/lib/query/admin-invalidation";
 import { usePermission } from "@/context/PermissionsContext";
 import { useFeatures } from "@/context/FeaturesContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { AddonGroupsCard } from "@/components/admin/AddonGroupsCard";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { AddonGroupsSkeleton } from "@/components/admin/AddonGroupsSkeleton";
 import { useToast } from "@/context/ToastContext";
 
 export default function AdminAddonsPage() {
@@ -16,17 +19,26 @@ export default function AdminAddonsPage() {
   const { has: hasFeature, loading: featuresLoading } = useFeatures();
   const hasAddonsFeature = hasFeature("menu-addons");
   const { showToast } = useToast();
-  const [groups, setGroups] = useState<AddonGroup[] | null>(null);
+  const queryClient = useQueryClient();
+  const groupsKey = qk.admin("menu", "addon-groups");
+  const { data, isError } = useQuery({
+    queryKey: groupsKey,
+    queryFn: listAddonGroups,
+    enabled: !featuresLoading && hasAddonsFeature,
+    staleTime: STALE.short,
+  });
+  const groups = data ?? (isError ? [] : null);
 
   useEffect(() => {
-    if (featuresLoading || !hasAddonsFeature) return;
-    listAddonGroups()
-      .then(setGroups)
-      .catch(() => {
-        setGroups([]);
-        showToast("Couldn't load add-on groups. Try reloading the page.", "error");
-      });
-  }, [featuresLoading, hasAddonsFeature, showToast]);
+    if (isError) showToast("Couldn't load add-on groups. Try reloading the page.", "error");
+  }, [isError, showToast]);
+
+  // Called by AddonGroupsCard only after a successful write: show the new
+  // list immediately, then refetch every menu-dependent view (meal forms).
+  function handleGroupsChange(next: AddonGroup[]) {
+    queryClient.setQueryData(groupsKey, next);
+    void invalidateMenuAreas(queryClient);
+  }
 
   // Belt-and-braces alongside the sidebar hiding this link when the
   // feature is off — a direct URL gets a plain "not enabled" message
@@ -64,12 +76,9 @@ export default function AdminAddonsPage() {
       {!canEdit && <ViewOnlyNotice />}
 
       {!groups ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-32 w-full" />
-        </div>
+        <AddonGroupsSkeleton />
       ) : (
-        <AddonGroupsCard groups={groups} canEdit={canEdit} onChange={setGroups} />
+        <AddonGroupsCard groups={groups} canEdit={canEdit} onChange={handleGroupsChange} />
       )}
     </div>
   );

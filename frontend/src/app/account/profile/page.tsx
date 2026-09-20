@@ -4,52 +4,79 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapPin, Package, User as UserIcon } from "lucide-react";
 import { ApiError, getMyProfile, updateMyProfile, type Profile } from "@/lib/api/users";
+import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { PageHeader } from "@/components/account/PageHeader";
+import { ProfileSkeleton } from "@/components/account/ProfileSkeleton";
 import { ChangePasswordCard } from "@/components/account/ChangePasswordCard";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { PhoneInput } from "@/components/ui/PhoneInput";
+
+interface ProfileForm {
+  firstName: string;
+  lastName: string;
+  phone: string;
+}
+
+function toForm(profile: Profile): ProfileForm {
+  return {
+    firstName: profile.firstName,
+    lastName: profile.lastName ?? "",
+    phone: profile.phone ?? "",
+  };
+}
 
 export default function ProfilePage() {
   const t = useTranslations("profile");
   const router = useRouter();
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
 
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
+  // Only changes when this customer saves it (which updates the cache), so
+  // it stays fresh for a long time and revisits render instantly.
+  const {
+    data: profile,
+    isPending,
+    error: loadError,
+  } = useQuery({
+    queryKey: qk.profile.all,
+    queryFn: getMyProfile,
+    staleTime: STALE.long,
+  });
+  const unauthorized = loadError instanceof ApiError && loadError.status === 401;
+
+  // Draft pattern: `draft` holds the user's unsaved edits (null = untouched),
+  // so a background refetch can never overwrite what they're typing.
+  const [draft, setDraft] = useState<ProfileForm | null>(null);
+  const form = draft ?? (profile ? toForm(profile) : null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getMyProfile()
-      .then((p) => {
-        setProfile(p);
-        setFirstName(p.firstName);
-        setLastName(p.lastName ?? "");
-        setPhone(p.phone ?? "");
-      })
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) {
-          router.push("/login?redirect=/account/profile");
-        }
-      });
-  }, [router]);
+    if (unauthorized) router.push("/login?redirect=/account/profile");
+  }, [unauthorized, router]);
+
+  function update(patch: Partial<ProfileForm>) {
+    if (form) setDraft({ ...form, ...patch });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!form) return;
     setError(null);
     setSaving(true);
     try {
       const updated = await updateMyProfile({
-        firstName: firstName.trim(),
-        lastName: lastName.trim() || undefined,
-        phone: phone.trim() || undefined,
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim() || undefined,
+        phone: form.phone.trim() || undefined,
       });
-      setProfile(updated);
+      queryClient.setQueryData(qk.profile.all, updated);
+      void queryClient.invalidateQueries({ queryKey: qk.profile.all });
+      setDraft(null);
       showToast(t("saved"), "success");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("saveError"));
@@ -58,34 +85,20 @@ export default function ProfilePage() {
     }
   }
 
-  if (!profile) {
+  function renderBody() {
+    // A failed background refetch keeps showing the cached profile; the error
+    // state is only for "nothing to show at all".
+    if (!profile || !form) {
+      if (isPending || unauthorized) return <ProfileSkeleton />;
+      return (
+        <EmptyState
+          icon={UserIcon}
+          title="Couldn't load your profile"
+          description="Please try again in a moment."
+        />
+      );
+    }
     return (
-      <main className="container-app flex-1 py-10">
-        <Skeleton className="h-7 w-40" />
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="card flex flex-col gap-4 p-6 lg:col-span-2">
-            <Skeleton className="h-5 w-40" />
-            <Skeleton className="h-10 w-full" />
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-32 rounded-xl" />
-          </div>
-          <div className="flex flex-col gap-4">
-            <Skeleton className="h-[70px] w-full" />
-            <Skeleton className="h-[70px] w-full" />
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="container-app flex-1 py-10">
-      <PageHeader icon={UserIcon} title={t("title")} />
-
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="flex flex-col gap-6 lg:col-span-2">
           <form onSubmit={handleSubmit} className="card flex flex-col gap-4 p-6">
@@ -120,8 +133,8 @@ export default function ProfilePage() {
                 </label>
                 <input
                   type="text"
-                  value={firstName}
-                  onChange={(e) => setFirstName(e.target.value)}
+                  value={form.firstName}
+                  onChange={(e) => update({ firstName: e.target.value })}
                   required
                   minLength={2}
                   maxLength={50}
@@ -134,8 +147,8 @@ export default function ProfilePage() {
                 </label>
                 <input
                   type="text"
-                  value={lastName}
-                  onChange={(e) => setLastName(e.target.value)}
+                  value={form.lastName}
+                  onChange={(e) => update({ lastName: e.target.value })}
                   maxLength={50}
                   className="input w-full"
                 />
@@ -146,7 +159,11 @@ export default function ProfilePage() {
               <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 {t("phone")}
               </label>
-              <PhoneInput value={phone} onChange={setPhone} autoComplete="tel" />
+              <PhoneInput
+                value={form.phone}
+                onChange={(phone) => update({ phone })}
+                autoComplete="tel"
+              />
             </div>
 
             <button type="submit" disabled={saving} className="btn-primary mt-2 w-fit">
@@ -180,6 +197,13 @@ export default function ProfilePage() {
           </Link>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <main className="container-app flex-1 py-10">
+      <PageHeader icon={UserIcon} title={t("title")} />
+      {renderBody()}
     </main>
   );
 }

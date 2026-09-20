@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import {
   ApiError,
@@ -8,18 +9,28 @@ import {
   updateSubscriptionSettings,
   type SubscriptionSettings,
 } from "@/lib/api/admin-subscriptions";
+import { qk, STALE } from "@/lib/query/keys";
+import { invalidateSubscriptionAreas } from "@/lib/query/subscription-invalidation";
 import { useToast } from "@/context/ToastContext";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 export function PlansPageSettingsCard({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
-  const [settings, setSettings] = useState<SubscriptionSettings | null>(null);
+  const queryClient = useQueryClient();
+  // Same endpoint (and cache entry) as SubscriptionSettingsTab, so opening
+  // either tab first makes the other instant.
+  const settingsKey = qk.admin("subscriptions", "settings");
+  const { data, isError } = useQuery({
+    queryKey: settingsKey,
+    queryFn: getSubscriptionSettings,
+    staleTime: STALE.short,
+  });
+  // Unsaved edits live in `draft`; a background refetch never overwrites them.
+  const [draft, setSettings] = useState<SubscriptionSettings | null>(null);
+  const settings = draft ?? data ?? null;
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    getSubscriptionSettings().then(setSettings).catch(() => setSettings(null));
-  }, []);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -38,7 +49,9 @@ export function PlansPageSettingsCard({ canEdit }: { canEdit: boolean }) {
         contactCtaDescription: settings.contactCtaDescription || undefined,
         contactEmail: settings.contactEmail || undefined,
       });
-      setSettings(updated);
+      queryClient.setQueryData(settingsKey, updated);
+      setSettings(null);
+      void invalidateSubscriptionAreas(queryClient);
       showToast("Plans page settings saved", "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't save changes.", "error");
@@ -48,10 +61,29 @@ export function PlansPageSettingsCard({ canEdit }: { canEdit: boolean }) {
   }
 
   if (!settings) {
+    if (isError) return <EmptyState compact title="Couldn't load plans page settings." />;
+    // Same card shell and section rhythm as the form below: heading, three
+    // bordered sections of inputs/toggles, then the save button.
     return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-24 w-full" />
+      <div className="card flex flex-col gap-4 p-6" aria-busy="true">
+        <Skeleton className="h-5 w-64" />
+        <div className="flex flex-col gap-3 border-b border-zinc-100 pb-4 dark:border-zinc-800">
+          <Skeleton className="h-4 w-48" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Skeleton className="h-10.5 w-full rounded-xl" />
+            <Skeleton className="h-10.5 w-full rounded-xl" />
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 border-b border-zinc-100 pb-4 dark:border-zinc-800">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-10.5 w-full rounded-xl" />
+          <Skeleton className="h-18 w-full rounded-xl" />
+        </div>
+        <div className="flex flex-col gap-3 border-b border-zinc-100 pb-4 dark:border-zinc-800">
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-6 w-full" />
+        </div>
+        <Skeleton className="h-8 w-16 rounded-xl" />
       </div>
     );
   }

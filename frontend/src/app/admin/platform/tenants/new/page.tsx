@@ -1,14 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowLeft, Building2, CheckCircle2 } from "lucide-react";
 import { ApiError, createTenant } from "@/lib/api/platform";
 import { CreateInviteForm } from "@/components/admin/CreateInviteForm";
+import { qk } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
 
 export default function NewTenantPage() {
   const { showToast } = useToast();
+  const queryClient = useQueryClient();
   const [businessName, setBusinessName] = useState("");
   const [customDomain, setCustomDomain] = useState("");
   const [ownerEmail, setOwnerEmail] = useState("");
@@ -33,6 +36,7 @@ export default function NewTenantPage() {
         ownerFirstName,
         ownerLastName: ownerLastName || undefined,
       });
+      void queryClient.invalidateQueries({ queryKey: qk.admin("platform", "tenants") });
       setCreatedTenant({ id: tenant.id, name: tenant.name });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Couldn't create tenant.");

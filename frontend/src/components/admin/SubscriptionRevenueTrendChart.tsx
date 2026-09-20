@@ -100,7 +100,14 @@ export function SubscriptionRevenueTrendChart({
       )}
 
       {!trend ? (
-        <Skeleton className="h-40 w-full" />
+        <div className="pt-14 pb-1" aria-busy="true">
+          <div className="flex h-36 items-end gap-1">
+            {["h-[40%]", "h-[65%]", "h-[30%]", "h-[80%]", "h-[55%]", "h-[25%]", "h-[70%]", "h-[45%]", "h-[90%]", "h-[35%]", "h-[60%]", "h-[50%]", "h-[75%]", "h-[20%]"].map((h) => (
+              <Skeleton key={h} className={`w-6 shrink-0 rounded-t-sm ${h}`} />
+            ))}
+          </div>
+          <div className="mt-1 h-[15px]" />
+        </div>
       ) : !hasData ? (
         <div className="flex h-40 flex-col items-center justify-center gap-1 text-center">
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">

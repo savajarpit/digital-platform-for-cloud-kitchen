@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient, type Updater } from "@tanstack/react-query";
 import { SlidersHorizontal, MapPin } from "lucide-react";
 import {
   ApiError,
@@ -8,6 +9,8 @@ import {
   updatePlatformSettings,
   type PlatformSettings,
 } from "@/lib/api/platform-settings";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useToast } from "@/context/ToastContext";
 import { Toggle } from "@/components/ui/Toggle";
 import { PasswordInput } from "@/components/ui/PasswordInput";
@@ -15,16 +18,19 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 export function PlatformSettingsCard() {
   const { showToast } = useToast();
-  const [settings, setSettings] = useState<PlatformSettings | null>(null);
+  const queryClient = useQueryClient();
+  const settingsKey = qk.admin("platform", "settings");
+  const { data: settings, isError } = useQuery({
+    queryKey: settingsKey,
+    queryFn: getPlatformSettings,
+    staleTime: STALE.short,
+  });
+  // Toggles are optimistic: write straight to the cache, roll back on failure.
+  const setSettings = (next: Updater<PlatformSettings | undefined, PlatformSettings | undefined>) =>
+    queryClient.setQueryData<PlatformSettings>(settingsKey, next);
   const [saving, setSaving] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [savingKey, setSavingKey] = useState(false);
-
-  useEffect(() => {
-    getPlatformSettings()
-      .then(setSettings)
-      .catch(() => showToast("Couldn't load platform settings.", "error"));
-  }, [showToast]);
 
   async function toggleWhatsappOtp(next: boolean) {
     if (!settings) return;
@@ -33,6 +39,7 @@ export function PlatformSettingsCard() {
     try {
       const updated = await updatePlatformSettings({ whatsappOtpEnabled: next });
       setSettings(updated);
+      void queryClient.invalidateQueries({ queryKey: settingsKey });
       showToast(next ? "WhatsApp OTP enabled platform-wide" : "WhatsApp OTP disabled platform-wide", "success");
     } catch (err) {
       setSettings((prev) => (prev ? { ...prev, whatsappOtpEnabled: !next } : prev));
@@ -51,6 +58,7 @@ export function PlatformSettingsCard() {
     try {
       const updated = await updatePlatformSettings({ mapsProvider: next });
       setSettings(updated);
+      void queryClient.invalidateQueries({ queryKey: settingsKey });
       showToast(
         useGoogle ? "Switched every storefront to Google Maps" : "Switched every storefront to the free OpenStreetMap",
         "success",
@@ -70,6 +78,7 @@ export function PlatformSettingsCard() {
     try {
       const updated = await updatePlatformSettings({ googleMapsApiKey: key });
       setSettings(updated);
+      void queryClient.invalidateQueries({ queryKey: settingsKey });
       setApiKeyInput("");
       showToast("Google Maps API key saved", "success");
     } catch (err) {
@@ -80,10 +89,31 @@ export function PlatformSettingsCard() {
   }
 
   if (!settings) {
+    if (isError) {
+      return <EmptyState compact icon={SlidersHorizontal} title="Couldn't load platform settings." />;
+    }
     return (
-      <div className="card p-6">
-        <Skeleton className="h-6 w-48" />
-        <Skeleton className="mt-4 h-16 w-full" />
+      <div className="card p-6" aria-busy="true">
+        <div className="mb-4 flex items-center gap-2">
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-5 w-44" />
+        </div>
+        <div className="flex flex-col gap-4">
+          {[0, 1].map((i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-4 rounded-lg border border-zinc-200 px-4 py-3.5 dark:border-zinc-800"
+            >
+              <div className="flex flex-1 flex-col gap-1.5">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-3/4" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+              <Skeleton className="h-6 w-11 shrink-0 rounded-full" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

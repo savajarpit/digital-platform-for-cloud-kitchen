@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -16,24 +17,31 @@ import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { RowListCardSkeleton } from "@/components/admin/skeletons/RowListCardSkeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 
 const emptyForm: StaticPageInput = { slug: "", title: "", content: "", isPublished: false };
 
 export default function ContentPagesPage() {
   const canEdit = usePermission(PERMISSIONS.CONTENT_EDIT);
-  const [pages, setPages] = useState<StaticPage[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const queryKey = qk.admin("settings", "content");
+  const { data: pages, isError } = useQuery({
+    queryKey,
+    queryFn: listPagesAdmin,
+    staleTime: STALE.list,
+  });
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const { showToast } = useToast();
   const confirm = useConfirm();
 
-  useEffect(() => {
-    listPagesAdmin()
-      .then(setPages)
-      .catch(() => setError("Couldn't load pages."));
-  }, []);
+  // Writes update the cached list right away, then invalidate so the server wins.
+  function setPages(update: (prev: StaticPage[]) => StaticPage[]) {
+    queryClient.setQueryData<StaticPage[]>(queryKey, (prev) => (prev ? update(prev) : prev));
+    queryClient.invalidateQueries({ queryKey });
+  }
 
   function handleDelete(page: StaticPage) {
     confirm({
@@ -44,7 +52,7 @@ export default function ContentPagesPage() {
       onConfirm: async () => {
         try {
           await deletePage(page.id);
-          setPages((prev) => prev?.filter((p) => p.id !== page.id) ?? null);
+          setPages((prev) => prev.filter((p) => p.id !== page.id));
           showToast("Page deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete page.", "error");
@@ -56,7 +64,7 @@ export default function ContentPagesPage() {
   async function handleTogglePublished(page: StaticPage) {
     try {
       const updated = await updatePage(page.id, { isPublished: !page.isPublished });
-      setPages((prev) => prev?.map((p) => (p.id === page.id ? updated : p)) ?? null);
+      setPages((prev) => prev.map((p) => (p.id === page.id ? updated : p)));
       showToast(`Page ${updated.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update page.", "error");
@@ -84,17 +92,14 @@ export default function ContentPagesPage() {
         <code>privacy-policy</code> must stay published — new customer signups require both.
       </p>
       {!canEdit && <ViewOnlyNotice />}
-      {error && (
+      {isError && (
         <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
-          {error}
+          Couldn&apos;t load pages.
         </p>
       )}
 
       {!pages ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-40 w-full" />
-        </div>
+        isError ? null : <RowListCardSkeleton rows={4} title={false} />
       ) : (
         <div className="card flex flex-col gap-4 p-6">
           {editingId === "new" && (
@@ -103,14 +108,14 @@ export default function ContentPagesPage() {
               onCancel={() => setEditingId(null)}
               onSave={async (input) => {
                 const created = await createPage(input);
-                setPages((prev) => [created, ...(prev ?? [])]);
+                setPages((prev) => [created, ...prev]);
                 setEditingId(null);
               }}
             />
           )}
 
           {pages.length === 0 && editingId !== "new" && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">No pages yet.</p>
+            <EmptyState compact title="No pages yet." />
           )}
 
           <div className="flex flex-col gap-2">
@@ -127,7 +132,7 @@ export default function ContentPagesPage() {
                   onCancel={() => setEditingId(null)}
                   onSave={async (input) => {
                     const updated = await updatePage(page.id, input);
-                    setPages((prev) => prev?.map((p) => (p.id === page.id ? updated : p)) ?? null);
+                    setPages((prev) => prev.map((p) => (p.id === page.id ? updated : p)));
                     setEditingId(null);
                   }}
                 />

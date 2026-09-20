@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -14,27 +15,26 @@ import {
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { RowListCardSkeleton } from "@/components/admin/skeletons/RowListCardSkeleton";
 
 const emptyForm: PlanFeatureInput = { icon: "💰", title: "", description: "", isEnabled: true };
 
 export function PlanFeaturesManager({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
   const confirm = useConfirm();
-  const [features, setFeatures] = useState<PlanFeature[] | null>(null);
+  const queryClient = useQueryClient();
+  const { data: features, isError } = useQuery({
+    queryKey: qk.admin("plan", "features"),
+    queryFn: listPlanFeaturesAdmin,
+    staleTime: STALE.list,
+  });
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
 
-  useEffect(() => {
-    listPlanFeaturesAdmin()
-      .then(setFeatures)
-      .catch(() => showToast("Couldn't load plan features.", "error"));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // Every write refreshes the cached feature-card list.
   function refetch() {
-    listPlanFeaturesAdmin()
-      .then(setFeatures)
-      .catch(() => showToast("Couldn't refresh plan features. Try reloading the page.", "error"));
+    queryClient.invalidateQueries({ queryKey: qk.admin("plan", "features") });
   }
 
   async function handleToggleEnabled(feature: PlanFeature) {
@@ -66,11 +66,12 @@ export function PlanFeaturesManager({ canEdit }: { canEdit: boolean }) {
   }
 
   if (!features) {
-    return (
+    return isError ? (
       <div className="card p-6">
-        <Skeleton className="h-6 w-40" />
-        <Skeleton className="mt-4 h-32 w-full" />
+        <EmptyState compact title="Couldn't load plan features." />
       </div>
+    ) : (
+      <RowListCardSkeleton rows={3} rowLines={2} description headerAction />
     );
   }
 
@@ -107,7 +108,7 @@ export function PlanFeaturesManager({ canEdit }: { canEdit: boolean }) {
       )}
 
       {features.length === 0 && editingId !== "new" && (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No cards yet.</p>
+        <EmptyState compact title="No cards yet." />
       )}
 
       <div className="flex flex-col gap-2">

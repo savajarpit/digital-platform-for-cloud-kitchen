@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import {
   ApiError,
@@ -8,31 +9,36 @@ import {
   publishPlatformTerms,
   type PlatformTerms,
 } from "@/lib/api/platform-terms";
+import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function PlatformTermsAdminPage() {
   const { showToast } = useToast();
-  const [history, setHistory] = useState<PlatformTerms[] | null>(null);
-  const [draft, setDraft] = useState("");
+  const queryClient = useQueryClient();
+  const historyKey = qk.admin("platform", "terms");
+  const { data: history, isError } = useQuery({
+    queryKey: historyKey,
+    queryFn: listPlatformTermsHistory,
+    staleTime: STALE.short,
+  });
+  // The textarea is a draft over the latest published text, so a background
+  // refetch never overwrites what is being typed.
+  const [draftText, setDraftText] = useState<string | null>(null);
+  const draft = draftText ?? history?.[0]?.content ?? "";
+  const setDraft = setDraftText;
   const [publishing, setPublishing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    listPlatformTermsHistory()
-      .then((rows) => {
-        setHistory(rows);
-        setDraft(rows[0]?.content ?? "");
-      })
-      .catch(() => setError("Couldn't load platform terms."));
-  }, []);
+  const error = isError ? "Couldn't load platform terms." : null;
 
   async function handlePublish(e: React.FormEvent) {
     e.preventDefault();
     setPublishing(true);
     try {
       const created = await publishPlatformTerms(draft);
-      setHistory((prev) => [created, ...(prev ?? [])]);
+      queryClient.setQueryData<PlatformTerms[]>(historyKey, (prev) => [created, ...(prev ?? [])]);
+      setDraftText(null);
+      void queryClient.invalidateQueries({ queryKey: historyKey });
       showToast(`Published version ${created.version}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't publish terms.", "error");
@@ -63,10 +69,23 @@ export default function PlatformTermsAdminPage() {
       )}
 
       {!history ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-40 w-full" />
-        </div>
+        isError ? null : (
+          <>
+            <div className="card flex flex-col gap-3 p-6" aria-busy="true">
+              <Skeleton className="h-5 w-64" />
+              <Skeleton className="h-[240px] w-full rounded-xl" />
+              <Skeleton className="h-8 w-40 rounded-xl" />
+            </div>
+            <div className="card flex flex-col gap-3 p-6" aria-busy="true">
+              <Skeleton className="h-5 w-20" />
+              <div className="flex flex-col gap-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-[42px] w-full" />
+                ))}
+              </div>
+            </div>
+          </>
+        )
       ) : (
         <>
           <form onSubmit={handlePublish} className="card flex flex-col gap-3 p-6">
@@ -91,7 +110,7 @@ export default function PlatformTermsAdminPage() {
           <div className="card flex flex-col gap-3 p-6">
             <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">History</h3>
             {history.length === 0 ? (
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">Nothing published yet.</p>
+              <EmptyState compact title="Nothing published yet." />
             ) : (
               <div className="flex flex-col gap-2">
                 {history.map((terms) => (

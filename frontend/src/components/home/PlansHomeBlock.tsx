@@ -33,8 +33,8 @@ export function PlansHomeBlock({
         </Link>
       </div>
       <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {featured.map((plan, i) => (
-          <PlanCard key={plan.id} plan={plan} index={i} />
+        {featured.map((plan) => (
+          <PlanCard key={plan.id} plan={plan} />
         ))}
       </div>
     </section>

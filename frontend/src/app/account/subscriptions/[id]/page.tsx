@@ -3,16 +3,8 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  CalendarClock,
-  ChevronDown,
-  ChevronLeft,
-  FileText,
-  ImageOff,
-  Lock,
-  MapPin,
-  SkipForward,
-} from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock, ChevronLeft, FileText } from "lucide-react";
 import {
   ApiError,
   cancelSubscription,
@@ -20,56 +12,57 @@ import {
   pauseSubscription,
   setDayOverride,
   skipDay,
-  type SubscriptionDetail,
-  type UpcomingPreviewDay,
 } from "@/lib/api/subscriptions";
+import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
-import { Skeleton } from "@/components/ui/Skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SubscriptionDayCard } from "@/components/subscriptions/SubscriptionDayCard";
+import { SubscriptionDetailSkeleton } from "@/components/subscriptions/SubscriptionDetailSkeleton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
-import { formatTime12h } from "@/lib/format/time";
 import { SUBSCRIPTION_STATUS_STYLES } from "@/lib/format/status-styles";
-
-const SLOT_LABELS: Record<string, string> = {
-  BREAKFAST: "Breakfast",
-  LUNCH: "Lunch",
-  DINNER: "Dinner",
-};
 
 export default function SubscriptionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { showToast } = useToast();
   const confirm = useConfirm();
 
-  const [subscription, setSubscription] = useState<SubscriptionDetail | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  // Status and upcoming days change while a customer manages the plan, so it
+  // is only fresh briefly; the cached copy still renders instantly.
+  const {
+    data: subscription,
+    isPending,
+    error,
+  } = useQuery({
+    queryKey: qk.subscriptions.detail(id),
+    queryFn: () => getMySubscription(id),
+    staleTime: STALE.short,
+  });
+  const unauthorized = error instanceof ApiError && error.status === 401;
+
   const [pauseFrom, setPauseFrom] = useState("");
   const [pauseTo, setPauseTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
 
-  function reload() {
-    getMySubscription(id)
-      .then(setSubscription)
-      .catch((err: unknown) => {
-        if (err instanceof ApiError && err.status === 401) {
-          router.push(`/login?redirect=/account/subscriptions/${id}`);
-          return;
-        }
-        setNotFound(true);
-      });
-  }
+  useEffect(() => {
+    if (unauthorized) router.push(`/login?redirect=/account/subscriptions/${id}`);
+  }, [unauthorized, id, router]);
 
-  useEffect(reload, [id, router]);
+  // Every mutation below changes this subscription, so refresh the whole
+  // subscriptions domain (this detail + the list) once it succeeds.
+  function refresh() {
+    return queryClient.invalidateQueries({ queryKey: qk.subscriptions.all });
+  }
 
   async function handleSkip(date: string) {
     setBusy(true);
     try {
       await skipDay(id, date);
       showToast("Day skipped — pushed to the end of your plan.", "success");
-      reload();
+      await refresh();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't skip this day.", "error");
     } finally {
@@ -86,7 +79,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
       showToast("Paused for the selected range.", "success");
       setPauseFrom("");
       setPauseTo("");
-      reload();
+      await refresh();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't pause.", "error");
     } finally {
@@ -109,7 +102,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
         note,
       });
       showToast("Delivery updated for that day.", "success");
-      reload();
+      await refresh();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update that day.", "error");
     } finally {
@@ -127,7 +120,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
         try {
           await cancelSubscription(id);
           showToast("Subscription cancelled.", "success");
-          reload();
+          await refresh();
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't cancel.", "error");
         }
@@ -135,22 +128,19 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     });
   }
 
-  if (notFound) {
-    return (
-      <main className="container-app flex-1 py-16 text-center">
-        <h1 className="section-title text-zinc-900 dark:text-zinc-100">Subscription not found</h1>
-        <Link href="/account/subscriptions" className="btn-primary mt-6">
-          Back to my subscriptions
-        </Link>
-      </main>
-    );
-  }
-
   if (!subscription) {
+    if (isPending || unauthorized) return <SubscriptionDetailSkeleton />;
     return (
       <main className="container-app flex-1 py-10">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="mt-6 h-40 w-full" />
+        <EmptyState
+          icon={CalendarClock}
+          title="Subscription not found"
+          action={
+            <Link href="/account/subscriptions" className="btn-primary">
+              Back to my subscriptions
+            </Link>
+          }
+        />
       </main>
     );
   }
@@ -203,7 +193,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">Nothing scheduled.</p>
               ) : (
                 subscription.upcoming.map((day) => (
-                  <DayCard
+                  <SubscriptionDayCard
                     key={day.date}
                     day={day}
                     subscription={subscription}
@@ -284,234 +274,5 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
         </div>
       )}
     </main>
-  );
-}
-
-function DayCard({
-  day,
-  subscription,
-  expanded,
-  busy,
-  onToggle,
-  onSkip,
-  onSaveOverride,
-}: {
-  day: UpcomingPreviewDay;
-  subscription: SubscriptionDetail;
-  expanded: boolean;
-  busy: boolean;
-  onToggle: () => void;
-  onSkip: () => void;
-  onSaveOverride: (addressId: string, deliverySlotId: string, note: string) => void;
-}) {
-  const [addressId, setAddressId] = useState(day.addressId);
-  const [slotId, setSlotId] = useState(day.deliverySlotId ?? "");
-  const [note, setNote] = useState(day.note ?? "");
-
-  const address = subscription.addresses.find((a) => a.id === day.addressId);
-  const slot = subscription.deliverySlots.find((s) => s.id === day.deliverySlotId);
-  // A single delivery window can't realistically cover breakfast AND dinner —
-  // only offer a time change when the day has at most one meal, and only if
-  // the tenant hasn't had time-selection locked platform-side.
-  const canChangeTime = subscription.canOverrideTime && day.meals.length <= 1;
-
-  return (
-    <div className="rounded-lg border border-zinc-100 dark:border-zinc-800">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onToggle}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onToggle();
-          }
-        }}
-        className="flex w-full cursor-pointer items-center justify-between gap-3 px-3.5 py-2.5 text-left"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-              {new Date(day.date).toLocaleDateString(undefined, {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-              })}
-            </span>
-            {day.skipped && !day.disruptionReason && (
-              <span className="badge bg-zinc-100 text-zinc-500 dark:bg-zinc-800">Skipped</span>
-            )}
-            {day.skipped && day.disruptionReason && (
-              <span className="badge bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-                Paused by the business
-              </span>
-            )}
-            {day.isOverridden && (
-              <span className="badge bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400">
-                Changed
-              </span>
-            )}
-            {day.locked && (
-              <span className="badge inline-flex items-center gap-1 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                <Lock className="h-3 w-3" />
-                Locked
-              </span>
-            )}
-            {!day.skipped && day.meals.length > 0 && (
-              <span className="text-xs text-zinc-400">
-                {day.meals.length} meal{day.meals.length === 1 ? "" : "s"}
-              </span>
-            )}
-          </div>
-          {!day.skipped && day.meals.length === 0 && (
-            <p className="text-xs text-zinc-400 italic">Meal to be announced</p>
-          )}
-          {day.skipped && day.disruptionReason && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">{day.disruptionReason}</p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {!day.skipped && !day.locked && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onSkip();
-              }}
-              disabled={busy}
-              className="btn-outline btn-sm"
-            >
-              <SkipForward className="h-3.5 w-3.5" />
-              Skip
-            </button>
-          )}
-          <ChevronDown
-            className={`h-4 w-4 text-zinc-400 transition-transform ${expanded ? "rotate-180" : ""}`}
-          />
-        </div>
-      </div>
-
-      {expanded && (
-        <div className="flex flex-col gap-4 border-t border-zinc-100 px-3.5 py-3.5 dark:border-zinc-800">
-          {!day.skipped && day.meals.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {day.meals.map((meal, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                    {meal.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={meal.imageUrl}
-                        alt={meal.name ?? ""}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <ImageOff className="h-5 w-5 text-zinc-300 dark:text-zinc-600" strokeWidth={1.5} />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs text-zinc-400">{SLOT_LABELS[meal.slotType] ?? meal.slotType}</p>
-                    <p className="truncate pr-1 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                      {meal.name ?? "Meal to be announced"}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex items-start gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-            <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>
-              {address ? `${address.line1}, ${address.city}` : "Address unavailable"}
-              {slot && ` · ${slot.name} (${formatTime12h(slot.startTime)}–${formatTime12h(slot.endTime)})`}
-            </span>
-          </div>
-
-          {day.locked ? (
-            <>
-              <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
-                Too close to delivery to change — this day is locked.
-              </p>
-              {day.note && (
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  <span className="font-medium text-zinc-700 dark:text-zinc-300">Note: </span>
-                  {day.note}
-                </p>
-              )}
-            </>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <div
-                className={`grid grid-cols-1 gap-2 sm:items-end ${
-                  canChangeTime ? "sm:grid-cols-[1fr_1fr]" : "sm:grid-cols-1"
-                }`}
-              >
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                    Change address for this day
-                  </label>
-                  <Select value={addressId} onValueChange={setAddressId}>
-                    <SelectTrigger className="py-1.5 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {subscription.addresses.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.label ? `${a.label} — ` : ""}
-                          {a.line1}, {a.city}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {canChangeTime && (
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                      Change time for this day
-                    </label>
-                    <Select value={slotId} onValueChange={setSlotId}>
-                      <SelectTrigger className="py-1.5 text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">No preference</SelectItem>
-                        {subscription.deliverySlots.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name} ({formatTime12h(s.startTime)}–{formatTime12h(s.endTime)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  Note for this delivery (optional)
-                </label>
-                <textarea
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  maxLength={500}
-                  rows={2}
-                  placeholder="No onions, leave at gate…"
-                  className="input w-full resize-none text-sm"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => onSaveOverride(addressId, canChangeTime ? slotId : "", note)}
-                disabled={busy}
-                className="btn-primary btn-sm self-start"
-              >
-                Save
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
   );
 }

@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   getPrepPlan,
   listPlansAdmin,
   type MealSlotType,
-  type Plan,
-  type PrepPlan,
 } from "@/lib/api/admin-subscriptions";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { qk, STALE } from "@/lib/query/keys";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PrepPlanSkeleton } from "@/components/admin/PrepPlanSkeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
 
@@ -20,37 +21,35 @@ const SLOT_LABELS: Record<MealSlotType, string> = {
 
 export function PrepPlannerView() {
   const { showToast } = useToast();
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [planId, setPlanId] = useState("");
+  const [planOverride, setPlanOverride] = useState<string | null>(null);
   const [dayNumber, setDayNumber] = useState(1);
-  const [result, setResult] = useState<PrepPlan | null>(null);
 
-  useEffect(() => {
-    listPlansAdmin({ limit: 100 })
-      .then(({ data }) => {
-        setPlans(data);
-        if (data[0]) setPlanId(data[0].id);
-      })
-      .catch(() => {
-        setPlans([]);
-        showToast("Couldn't load plans.", "error");
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { data: plansPage, isPending: plansPending, isError: plansError } = useQuery({
+    queryKey: qk.admin("subscriptions", "plans", "picker", 100),
+    queryFn: () => listPlansAdmin({ limit: 100 }),
+    staleTime: STALE.list,
+  });
+  const plans = plansPage?.data ?? [];
+  const planId = planOverride ?? plans[0]?.id ?? "";
 
   const selectedPlan = plans.find((p) => p.id === planId);
   const isWeeklyFixed = selectedPlan?.schedulingMode === "WEEKLY_FIXED";
 
+  // Changing plan/day keeps the previous plan on screen until the new one arrives.
+  const { data: result = null, isError: planError } = useQuery({
+    queryKey: qk.admin("subscriptions", "prep-planner", "plan", planId, isWeeklyFixed ? "today" : dayNumber),
+    queryFn: () => getPrepPlan(planId, isWeeklyFixed ? undefined : dayNumber),
+    enabled: Boolean(planId),
+    staleTime: STALE.short,
+    placeholderData: keepPreviousData,
+  });
+
   useEffect(() => {
-    if (!planId) return;
-    getPrepPlan(planId, isWeeklyFixed ? undefined : dayNumber)
-      .then(setResult)
-      .catch(() => {
-        setResult(null);
-        showToast("Couldn't load the prep plan.", "error");
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planId, dayNumber, isWeeklyFixed]);
+    if (plansError) showToast("Couldn't load plans.", "error");
+  }, [plansError, showToast]);
+  useEffect(() => {
+    if (planError) showToast("Couldn't load the prep plan.", "error");
+  }, [planError, showToast]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -62,7 +61,7 @@ export function PrepPlannerView() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Plan</label>
-          <Select value={planId} onValueChange={setPlanId}>
+          <Select value={planId} onValueChange={setPlanOverride}>
             <SelectTrigger className="py-1.5 text-sm">
               <SelectValue />
             </SelectTrigger>
@@ -105,10 +104,12 @@ export function PrepPlannerView() {
         )}
       </div>
 
-      {plans.length === 0 ? (
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">No plans yet — create one first.</p>
+      {plansPending ? (
+        <PrepPlanSkeleton />
+      ) : plans.length === 0 ? (
+        <EmptyState compact title="No plans yet — create one first." />
       ) : !result ? (
-        <Skeleton className="h-24 w-full" />
+        planError ? null : <PrepPlanSkeleton />
       ) : (
         <div className="card flex flex-col gap-2 p-6">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Gauge, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   ApiError,
@@ -11,10 +12,12 @@ import {
   type PlatformPlan,
   type PlatformPlanInput,
 } from "@/lib/api/admin-platform-plans";
+import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { Toggle } from "@/components/ui/Toggle";
-import { Skeleton } from "@/components/ui/Skeleton";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { PlatformItemListSkeleton } from "@/components/admin/PlatformItemListSkeleton";
 import { PlatformPlanForm } from "@/components/admin/PlatformPlanForm";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
@@ -29,19 +32,29 @@ const emptyForm: PlatformPlanInput = {
 };
 
 export default function PlatformPlansAdminPage() {
-  const [plans, setPlans] = useState<PlatformPlan[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  // Same key CreateInviteForm reads, so editing a plan here refreshes it too.
+  const listKey = qk.admin("platform", "plans");
+  const { data: plans, error: queryError } = useQuery({
+    queryKey: listKey,
+    queryFn: listPlatformPlansAdmin,
+    staleTime: STALE.short,
+  });
+  const error = queryError
+    ? queryError instanceof ApiError
+      ? queryError.message
+      : "Couldn't load plans."
+    : null;
   const [editingId, setEditingId] = useState<string | "new" | null>(null);
   const { showToast } = useToast();
   const confirm = useConfirm();
 
-  useEffect(() => {
-    listPlatformPlansAdmin()
-      .then(setPlans)
-      .catch((err: unknown) =>
-        setError(err instanceof ApiError ? err.message : "Couldn't load plans."),
-      );
-  }, []);
+  // Patch the cached list immediately, then refetch so it settles on the
+  // server's truth.
+  function patchPlans(fn: (prev: PlatformPlan[]) => PlatformPlan[]) {
+    queryClient.setQueryData<PlatformPlan[]>(listKey, (prev) => (prev ? fn(prev) : prev));
+    void queryClient.invalidateQueries({ queryKey: listKey });
+  }
 
   function handleDelete(plan: PlatformPlan) {
     confirm({
@@ -52,7 +65,7 @@ export default function PlatformPlansAdminPage() {
       onConfirm: async () => {
         try {
           await deletePlatformPlan(plan.id);
-          setPlans((prev) => prev?.filter((p) => p.id !== plan.id) ?? null);
+          patchPlans((prev) => prev.filter((p) => p.id !== plan.id));
           showToast("Plan deleted", "success");
         } catch (err) {
           showToast(err instanceof ApiError ? err.message : "Couldn't delete plan.", "error");
@@ -64,7 +77,7 @@ export default function PlatformPlansAdminPage() {
   async function handleTogglePublished(plan: PlatformPlan) {
     try {
       const updated = await updatePlatformPlan(plan.id, { ...plan, isPublished: !plan.isPublished });
-      setPlans((prev) => prev?.map((p) => (p.id === plan.id ? updated : p)) ?? null);
+      patchPlans((prev) => prev.map((p) => (p.id === plan.id ? updated : p)));
       showToast(`Plan ${updated.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update plan.", "error");
@@ -98,10 +111,7 @@ export default function PlatformPlansAdminPage() {
       )}
 
       {!plans ? (
-        <div className="card p-6">
-          <Skeleton className="h-6 w-40" />
-          <Skeleton className="mt-4 h-40 w-full" />
-        </div>
+        error ? null : <PlatformItemListSkeleton />
       ) : (
         <div className="card flex flex-col gap-4 p-6">
           {editingId === "new" && (
@@ -110,14 +120,14 @@ export default function PlatformPlansAdminPage() {
               onCancel={() => setEditingId(null)}
               onSave={async (input) => {
                 const created = await createPlatformPlan(input);
-                setPlans((prev) => [...(prev ?? []), created]);
+                patchPlans((prev) => [...prev, created]);
                 setEditingId(null);
               }}
             />
           )}
 
           {plans.length === 0 && editingId !== "new" && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">No plans yet.</p>
+            <EmptyState compact title="No plans yet." />
           )}
 
           <div className="flex flex-col gap-2">
@@ -129,7 +139,7 @@ export default function PlatformPlansAdminPage() {
                   onCancel={() => setEditingId(null)}
                   onSave={async (input) => {
                     const updated = await updatePlatformPlan(plan.id, input);
-                    setPlans((prev) => prev?.map((p) => (p.id === plan.id ? updated : p)) ?? null);
+                    patchPlans((prev) => prev.map((p) => (p.id === plan.id ? updated : p)));
                     setEditingId(null);
                   }}
                 />

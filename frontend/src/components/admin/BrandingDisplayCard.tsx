@@ -60,6 +60,9 @@ export function BrandingDisplayCard({
           onHeightChange={(v) => field("headerLogoHeightPx", v)}
           widthPx={form.headerLogoWidthPx ?? undefined}
           onWidthChange={(v) => field("headerLogoWidthPx", v)}
+          nameColor={form.headerNameColor ?? null}
+          onNameColorChange={(v) => field("headerNameColor", v)}
+          defaultColor="#18181b"
           disabled={!canEdit}
         />
         <BrandPlacementFields
@@ -70,6 +73,9 @@ export function BrandingDisplayCard({
           onHeightChange={(v) => field("footerLogoHeightPx", v)}
           widthPx={form.footerLogoWidthPx ?? undefined}
           onWidthChange={(v) => field("footerLogoWidthPx", v)}
+          nameColor={form.footerNameColor ?? null}
+          onNameColorChange={(v) => field("footerNameColor", v)}
+          defaultColor="#ffffff"
           disabled={!canEdit}
         />
       </div>
@@ -84,16 +90,30 @@ export function BrandingDisplayCard({
               displayName={form.displayName || "Your Kitchen"}
               heightPx={form.headerLogoHeightPx ?? 36}
               widthPx={form.headerLogoWidthPx ?? undefined}
+              nameColor={form.headerNameColor}
               variant="header"
             />
           </div>
-          <div className="flex min-w-0 items-center gap-2 overflow-x-auto bg-zinc-900 px-4 py-3">
+          <div
+            className="flex min-w-0 items-center gap-2 overflow-x-auto bg-zinc-900 px-4 py-3"
+            style={
+              {
+                ...(form.themeConfig?.footerBgColor
+                  ? { backgroundColor: form.themeConfig.footerBgColor }
+                  : {}),
+                ...(form.themeConfig?.footerTextColor
+                  ? { "--footer-fg": form.themeConfig.footerTextColor }
+                  : {}),
+              } as React.CSSProperties
+            }
+          >
             <BrandLockup
               mode={form.footerDisplayMode ?? "BOTH"}
               logoUrl={form.logoUrl ?? undefined}
               displayName={form.displayName || "Your Kitchen"}
               heightPx={form.footerLogoHeightPx ?? 36}
               widthPx={form.footerLogoWidthPx ?? undefined}
+              nameColor={form.footerNameColor}
               variant="footer"
             />
           </div>
@@ -149,6 +169,9 @@ function BrandPlacementFields({
   onHeightChange,
   widthPx,
   onWidthChange,
+  nameColor,
+  onNameColorChange,
+  defaultColor,
   disabled,
 }: {
   title: string;
@@ -158,6 +181,11 @@ function BrandPlacementFields({
   onHeightChange: (px: number) => void;
   widthPx: number | undefined;
   onWidthChange: (px: number) => void;
+  nameColor: string | null;
+  onNameColorChange: (color: string | null) => void;
+  /** What the name looks like today with no custom color — shown in the
+   * picker so "unset" doesn't read as black. */
+  defaultColor: string;
   disabled: boolean;
 }) {
   return (
@@ -216,6 +244,41 @@ function BrandPlacementFields({
         </div>
       </div>
       <p className="text-xs text-zinc-400">Leave width blank for auto (never crops the logo).</p>
+      {mode !== "LOGO" && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Name color
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={nameColor ?? defaultColor}
+              onChange={(e) => onNameColorChange(e.target.value)}
+              disabled={disabled}
+              className="h-10 w-12 shrink-0 cursor-pointer rounded-lg border border-zinc-200 dark:border-zinc-700"
+            />
+            <input
+              type="text"
+              value={nameColor ?? ""}
+              onChange={(e) => onNameColorChange(e.target.value === "" ? null : e.target.value)}
+              placeholder="Default"
+              maxLength={7}
+              disabled={disabled}
+              className="input w-full"
+            />
+            {nameColor && (
+              <button
+                type="button"
+                onClick={() => onNameColorChange(null)}
+                disabled={disabled}
+                className="btn-ghost btn-sm shrink-0 cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

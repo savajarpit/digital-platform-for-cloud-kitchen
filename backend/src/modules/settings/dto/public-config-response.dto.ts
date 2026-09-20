@@ -14,6 +14,14 @@ export class ThemeConfigDto {
   @ApiPropertyOptional({ example: '#F59E0B' })
   @Expose()
   accentColor?: string;
+
+  @ApiPropertyOptional({ description: 'Absent means the default footer background' })
+  @Expose()
+  footerBgColor?: string;
+
+  @ApiPropertyOptional({ description: 'Absent means the default footer text color' })
+  @Expose()
+  footerTextColor?: string;
 }
 
 export class PublicConfigResponseDto {
@@ -60,6 +68,14 @@ export class PublicConfigResponseDto {
   @ApiPropertyOptional({ description: 'Absent means auto (no width cap)' })
   @Expose()
   footerLogoWidthPx?: number;
+
+  @ApiPropertyOptional({ description: 'Absent means theme default' })
+  @Expose()
+  headerNameColor?: string;
+
+  @ApiPropertyOptional({ description: 'Absent means theme default' })
+  @Expose()
+  footerNameColor?: string;
 
   @ApiPropertyOptional({ description: 'Dedicated social-share image, recommended 1200x630px' })
   @Expose()

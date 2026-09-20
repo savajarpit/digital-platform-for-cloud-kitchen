@@ -18,6 +18,7 @@ import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { ImageUploadInput } from "@/components/admin/ImageUploadInput";
 import { SocialLinksCard } from "@/components/admin/SocialLinksCard";
 import { BrandingDisplayCard } from "@/components/admin/BrandingDisplayCard";
+import { FooterColorFields } from "@/components/admin/FooterColorFields";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 
 type FormState = UpdateBusinessProfileInput;
@@ -47,6 +48,8 @@ export default function BusinessProfilePage() {
           headerLogoWidthPx: p.headerLogoWidthPx ?? undefined,
           footerLogoHeightPx: p.footerLogoHeightPx,
           footerLogoWidthPx: p.footerLogoWidthPx ?? undefined,
+          headerNameColor: p.headerNameColor,
+          footerNameColor: p.footerNameColor,
           ogImageUrl: p.ogImageUrl ?? undefined,
           ogImageAlt: p.ogImageAlt ?? undefined,
           ogImageWidth: p.ogImageWidth ?? undefined,
@@ -79,7 +82,7 @@ export default function BusinessProfilePage() {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
-  function themeField(key: keyof NonNullable<FormState["themeConfig"]>, value: string) {
+  function themeField(key: keyof NonNullable<FormState["themeConfig"]>, value: string | null) {
     setForm((prev) => (prev ? { ...prev, themeConfig: { ...prev.themeConfig, [key]: value } } : prev));
   }
 
@@ -406,6 +409,7 @@ export default function BusinessProfilePage() {
               </div>
             ))}
           </div>
+          <FooterColorFields values={form.themeConfig ?? {}} onChange={themeField} />
         </div>
 
         <div className="card flex flex-col gap-4 p-6">

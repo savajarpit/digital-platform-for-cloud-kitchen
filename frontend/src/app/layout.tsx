@@ -157,6 +157,7 @@ export default async function RootLayout({
                 headerDisplayMode={config.headerDisplayMode}
                 headerLogoHeightPx={config.headerLogoHeightPx}
                 headerLogoWidthPx={config.headerLogoWidthPx}
+                headerNameColor={config.headerNameColor}
                 isAuthenticated={isAuthenticated}
                 isAdmin={isAdmin}
                 subscriptionsEnabled={plansHomeSettings.isEnabled}

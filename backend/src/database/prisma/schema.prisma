@@ -358,6 +358,10 @@ model BusinessProfile {
   headerLogoWidthPx         Int?
   footerLogoHeightPx        Int              @default(36)
   footerLogoWidthPx         Int?
+  // Optional hex color for the name text when a placement is NAME-only;
+  // null keeps the theme default (dark/light-aware in header, white in footer).
+  headerNameColor           String?
+  footerNameColor           String?
   // Dedicated social-share image — kept separate from logoUrl/heroImageUrl
   // because a square logo is the wrong shape for OG/Twitter cards (which
   // want ~1200x630). Width/height are captured client-side at upload time

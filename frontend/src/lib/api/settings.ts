@@ -5,6 +5,9 @@ export interface ThemeConfig {
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;
+  /** Footer overrides — absent means the built-in default look. */
+  footerBgColor?: string;
+  footerTextColor?: string;
 }
 
 export type BrandDisplayMode = "LOGO" | "NAME" | "BOTH";
@@ -21,6 +24,9 @@ export interface PublicConfig {
   headerLogoWidthPx?: number;
   footerLogoHeightPx: number;
   footerLogoWidthPx?: number;
+  /** Hex color for the name text in NAME-only mode; absent = theme default. */
+  headerNameColor?: string;
+  footerNameColor?: string;
   /** Dedicated social-share image — recommended 1200x630px. Falls back to
    * logoUrl/heroImageUrl in generateMetadata() when not set. */
   ogImageUrl?: string;

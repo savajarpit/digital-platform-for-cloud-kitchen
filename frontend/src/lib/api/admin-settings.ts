@@ -8,6 +8,9 @@ export interface ThemeConfig {
   primaryColor?: string;
   secondaryColor?: string;
   accentColor?: string;
+  /** null resets to the built-in default footer look. */
+  footerBgColor?: string | null;
+  footerTextColor?: string | null;
 }
 
 export type BrandDisplayMode = "LOGO" | "NAME" | "BOTH";
@@ -25,6 +28,8 @@ export interface BusinessProfile {
   headerLogoWidthPx: number | null;
   footerLogoHeightPx: number;
   footerLogoWidthPx: number | null;
+  headerNameColor: string | null;
+  footerNameColor: string | null;
   ogImageUrl: string | null;
   ogImageAlt: string | null;
   ogImageWidth: number | null;
@@ -71,6 +76,8 @@ export type UpdateBusinessProfileInput = Partial<
     | "headerLogoWidthPx"
     | "footerLogoHeightPx"
     | "footerLogoWidthPx"
+    | "headerNameColor"
+    | "footerNameColor"
     | "ogImageUrl"
     | "ogImageAlt"
     | "ogImageWidth"

@@ -93,6 +93,8 @@ export class SettingsService {
       headerLogoWidthPx: profile.headerLogoWidthPx ?? undefined,
       footerLogoHeightPx: profile.footerLogoHeightPx,
       footerLogoWidthPx: profile.footerLogoWidthPx ?? undefined,
+      headerNameColor: profile.headerNameColor ?? undefined,
+      footerNameColor: profile.footerNameColor ?? undefined,
       ogImageUrl: profile.ogImageUrl ?? undefined,
       ogImageAlt: profile.ogImageAlt ?? undefined,
       ogImageWidth: profile.ogImageWidth ?? undefined,
@@ -531,6 +533,12 @@ export class SettingsService {
     }
     if (typeof record.accentColor === 'string') {
       config.accentColor = record.accentColor;
+    }
+    if (typeof record.footerBgColor === 'string') {
+      config.footerBgColor = record.footerBgColor;
+    }
+    if (typeof record.footerTextColor === 'string') {
+      config.footerTextColor = record.footerTextColor;
     }
     return config;
   }

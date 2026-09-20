@@ -20,6 +20,7 @@ export function Header({
   headerDisplayMode,
   headerLogoHeightPx,
   headerLogoWidthPx,
+  headerNameColor,
   isAuthenticated,
   isAdmin,
   subscriptionsEnabled,
@@ -29,6 +30,7 @@ export function Header({
   headerDisplayMode: BrandDisplayMode;
   headerLogoHeightPx: number;
   headerLogoWidthPx?: number;
+  headerNameColor?: string;
   isAuthenticated: boolean;
   isAdmin?: boolean;
   subscriptionsEnabled: boolean;
@@ -59,7 +61,7 @@ export function Header({
   }
 
   return (
-    <header className="sticky top-0 z-50 overflow-x-hidden border-b border-zinc-200 bg-white/90 backdrop-blur-lg print:hidden dark:border-zinc-800 dark:bg-zinc-950/90">
+    <header className="sticky top-0 z-50 overflow-x-clip border-b border-zinc-200 bg-white/90 backdrop-blur-lg print:hidden dark:border-zinc-800 dark:bg-zinc-950/90">
       <div className="container-app flex min-h-16 items-center justify-between py-2 sm:min-h-18">
         <Link
           href="/"
@@ -72,6 +74,7 @@ export function Header({
             displayName={displayName}
             heightPx={headerLogoHeightPx}
             widthPx={headerLogoWidthPx}
+            nameColor={headerNameColor}
             variant="header"
           />
         </Link>

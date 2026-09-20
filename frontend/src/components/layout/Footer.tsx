@@ -31,8 +31,20 @@ export async function Footer({
     4: "sm:grid-cols-4",
   };
 
+  const { footerBgColor, footerTextColor } = config.themeConfig;
+  // Unset = today's look (zinc-900 / black-in-dark bg, zinc text tiers); a
+  // custom text color flows through --footer-fg, which each text tier below
+  // falls back from, so the defaults are untouched.
+  const footerStyle = {
+    ...(footerBgColor ? { backgroundColor: footerBgColor } : {}),
+    ...(footerTextColor ? { color: footerTextColor, "--footer-fg": footerTextColor } : {}),
+  } as React.CSSProperties;
+
   return (
-    <footer className="bg-zinc-900 text-zinc-300 print:hidden dark:bg-black">
+    <footer
+      className="bg-zinc-900 text-zinc-300 print:hidden dark:bg-black"
+      style={footerStyle}
+    >
       <div className="container-app pt-20 pb-12 sm:pb-16">
         <div className={`grid grid-cols-1 gap-8 sm:gap-10 ${gridColsClass[columnCount]}`}>
           <div className="space-y-4">
@@ -43,10 +55,11 @@ export async function Footer({
                 displayName={config.displayName}
                 heightPx={config.footerLogoHeightPx}
                 widthPx={config.footerLogoWidthPx}
+                nameColor={config.footerNameColor}
                 variant="footer"
               />
             </div>
-            <p className="max-w-xs text-sm leading-relaxed text-zinc-400">
+            <p className="max-w-xs text-sm leading-relaxed text-(--footer-fg,var(--color-zinc-400))">
               {config.description || "Fresh, healthy meals delivered to your door."}
             </p>
             {socialLinks.length > 0 && (
@@ -58,7 +71,7 @@ export async function Footer({
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={link.platform}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-zinc-300 transition-colors hover:bg-primary-600 hover:text-white"
+                    className="flex h-9 w-9 items-center justify-center rounded-lg bg-[color-mix(in_srgb,currentColor_15%,transparent)] transition-colors hover:bg-primary-600 hover:text-white"
                   >
                     <SocialIcon platform={link.platform} className="h-4 w-4" />
                   </a>
@@ -68,7 +81,7 @@ export async function Footer({
           </div>
 
           <div>
-            <h4 className="mb-4 font-semibold text-white">Explore</h4>
+            <h4 className="mb-4 font-semibold text-(--footer-fg,#ffffff)">Explore</h4>
             <ul className="space-y-2.5 text-sm">
               <li>
                 <Link href="/menu" className="transition-colors hover:text-primary-400">
@@ -87,7 +100,7 @@ export async function Footer({
 
           {pages.length > 0 && (
             <div>
-              <h4 className="mb-4 font-semibold text-white">Legal</h4>
+              <h4 className="mb-4 font-semibold text-(--footer-fg,#ffffff)">Legal</h4>
               <ul className="space-y-2.5 text-sm">
                 {pages.map((page) => (
                   <li key={page.id}>
@@ -102,7 +115,7 @@ export async function Footer({
 
           {hasContact && (
             <div>
-              <h4 className="mb-4 font-semibold text-white">Contact</h4>
+              <h4 className="mb-4 font-semibold text-(--footer-fg,#ffffff)">Contact</h4>
               <ul className="space-y-3 text-sm">
                 {config.supportPhone && (
                   <li className="flex min-w-0 items-start gap-3">
@@ -137,12 +150,12 @@ export async function Footer({
           )}
         </div>
 
-        <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-zinc-800 pt-6 text-sm text-zinc-500 sm:flex-row">
-          <p>
+        <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-[color-mix(in_srgb,currentColor_20%,transparent)] pt-6 text-sm sm:flex-row">
+          <p className="opacity-70">
             &copy; {year} {config.displayName}. All rights reserved.
           </p>
           {config.fssaiLicenseNumber && (
-            <div className="flex items-center gap-2 text-xs text-zinc-400">
+            <div className="flex items-center gap-2 text-xs text-(--footer-fg,var(--color-zinc-400))">
               <span className="flex h-7 shrink-0 items-center rounded bg-white px-1.5">
                 <FssaiBadge className="h-4 w-auto" />
               </span>
@@ -150,7 +163,7 @@ export async function Footer({
             </div>
           )}
           {config.poweredByBrandingEnabled && (
-            <p className="text-xs text-zinc-600">
+            <p className="text-xs opacity-70">
               Powered by{" "}
               <a
                 href="https://okaysync.com"

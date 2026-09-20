@@ -36,6 +36,16 @@ export class ThemeConfigInputDto {
   @IsOptional()
   @IsHexColor()
   accentColor?: string;
+
+  @ApiPropertyOptional({ example: '#18181B', nullable: true })
+  @IsOptional()
+  @IsHexColor()
+  footerBgColor?: string | null;
+
+  @ApiPropertyOptional({ example: '#D4D4D8', nullable: true })
+  @IsOptional()
+  @IsHexColor()
+  footerTextColor?: string | null;
 }
 
 export class UpdateBusinessProfileDto {
@@ -109,6 +119,24 @@ export class UpdateBusinessProfileDto {
   @Min(0)
   @Max(320)
   footerLogoWidthPx?: number;
+
+  @ApiPropertyOptional({
+    example: '#16A34A',
+    nullable: true,
+    description: 'Header name text color (NAME-only mode); null resets to default',
+  })
+  @IsOptional()
+  @IsHexColor()
+  headerNameColor?: string | null;
+
+  @ApiPropertyOptional({
+    example: '#FFFFFF',
+    nullable: true,
+    description: 'Footer name text color (NAME-only mode); null resets to default',
+  })
+  @IsOptional()
+  @IsHexColor()
+  footerNameColor?: string | null;
 
   @ApiPropertyOptional({ description: 'Social share (OG) image — recommended 1200x630px' })
   @IsOptional()

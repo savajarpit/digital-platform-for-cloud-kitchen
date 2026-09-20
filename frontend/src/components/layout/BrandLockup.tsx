@@ -12,6 +12,7 @@ export function BrandLockup({
   displayName,
   heightPx,
   widthPx,
+  nameColor,
   variant,
 }: {
   mode: BrandDisplayMode;
@@ -19,21 +20,22 @@ export function BrandLockup({
   displayName: string;
   heightPx: number;
   widthPx?: number;
+  /** Custom hex color for the name, wherever the name is shown. */
+  nameColor?: string | null;
   variant: "header" | "footer";
 }) {
   // Logo-only but no logo uploaded — an empty brand slot is a worse failure
   // than showing the name, so fall back to NAME instead.
   const effectiveMode = mode === "LOGO" && !logoUrl ? "NAME" : mode;
 
+  const nameClass =
+    variant === "header"
+      ? "truncate font-display text-lg font-bold text-zinc-900 sm:text-xl dark:text-zinc-100"
+      : "font-display text-lg font-bold text-(--footer-fg,#ffffff)";
+
   if (effectiveMode === "NAME") {
     return (
-      <span
-        className={
-          variant === "header"
-            ? "truncate font-display text-lg font-bold text-zinc-900 sm:text-xl dark:text-zinc-100"
-            : "font-display text-lg font-bold text-white"
-        }
-      >
+      <span className={nameClass} style={nameColor ? { color: nameColor } : undefined}>
         {displayName}
       </span>
     );
@@ -65,13 +67,7 @@ export function BrandLockup({
   return (
     <>
       {logo}
-      <span
-        className={
-          variant === "header"
-            ? "truncate font-display text-lg font-bold text-zinc-900 sm:text-xl dark:text-zinc-100"
-            : "font-display text-lg font-bold text-white"
-        }
-      >
+      <span className={nameClass} style={nameColor ? { color: nameColor } : undefined}>
         {displayName}
       </span>
     </>

@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowRight, Clock, Leaf, ShieldCheck, Star, Truck } from "lucide-react";
+import { ArrowRight, Leaf, Star } from "lucide-react";
 import type { PublicConfig } from "@/lib/api/settings";
+import { DEFAULT_HERO_FEATURES, getHeroFeatureIcon } from "@/lib/icons/hero-feature-icons";
 
 export function Hero({
   config,
@@ -19,6 +20,7 @@ export function Hero({
 }) {
   const images = config.heroImageUrls.slice(0, 4);
   const hasImages = images.length > 0;
+  const features = config.heroFeatures ?? DEFAULT_HERO_FEATURES;
 
   return (
     <section className="relative overflow-hidden">
@@ -53,20 +55,19 @@ export function Hero({
             )}
           </div>
 
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-5 lg:justify-start">
-            <div className="flex items-center gap-2">
-              <Truck className="h-5 w-5 text-primary-600" />
-              <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Free delivery</span>
+          {features.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-5 lg:justify-start">
+              {features.map((feature, i) => {
+                const Icon = getHeroFeatureIcon(feature.icon);
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <Icon className="h-5 w-5 text-primary-600" />
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">{feature.label}</span>
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-primary-600" />
-              <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Fresh guarantee</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary-600" />
-              <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Cancel anytime</span>
-            </div>
-          </div>
+          )}
         </div>
 
         {hasImages && (

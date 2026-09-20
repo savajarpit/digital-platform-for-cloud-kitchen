@@ -2,12 +2,37 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsIn,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUrl,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  HERO_FEATURE_ICON_KEYS,
+  HERO_FEATURE_LABEL_MAX,
+  HERO_FEATURES_MAX,
+  type HeroFeatureIconKey,
+} from '../../../common/constants/hero-feature-icons.constant';
+
+export class HeroFeatureDto {
+  @ApiProperty({ enum: HERO_FEATURE_ICON_KEYS, example: 'truck' })
+  @IsIn(HERO_FEATURE_ICON_KEYS)
+  icon: HeroFeatureIconKey;
+
+  @ApiProperty({ example: 'Free delivery', maxLength: HERO_FEATURE_LABEL_MAX })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(HERO_FEATURE_LABEL_MAX)
+  label: string;
+}
 
 export class UpdateHomePageContentDto {
   @ApiPropertyOptional({ example: 'Fresh & healthy' })
@@ -37,6 +62,18 @@ export class UpdateHomePageContentDto {
   @ArrayMaxSize(4)
   @IsUrl({}, { each: true })
   heroImageUrls?: string[];
+
+  @ApiPropertyOptional({
+    type: [HeroFeatureDto],
+    description:
+      'Up to 4 highlights shown under the hero buttons; empty array hides the row',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(HERO_FEATURES_MAX)
+  @ValidateNested({ each: true })
+  @Type(() => HeroFeatureDto)
+  heroFeatures?: HeroFeatureDto[];
 
   @ApiPropertyOptional({ example: 'What our customers say' })
   @IsOptional()

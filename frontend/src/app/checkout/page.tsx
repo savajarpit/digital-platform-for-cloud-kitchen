@@ -11,10 +11,11 @@ import { useCheckoutData } from "@/lib/hooks/useCheckoutData";
 import { ApiError, checkServiceability } from "@/lib/api/addresses";
 import { createOrder } from "@/lib/api/orders";
 import { verifyPayment } from "@/lib/api/payments";
-import { qk, STALE } from "@/lib/query/keys";
+import { qk } from "@/lib/query/keys";
 import { useAddresses, useAddressCacheSync } from "@/lib/query/addresses";
 import { buildGoogleMapsLink } from "@/lib/format/maps-link";
 import { hhmmToMinutes } from "@/lib/format/time";
+import { runCheckoutPreflight } from "@/lib/checkout/preflight";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { PaymentConfirmingScreen } from "@/components/checkout/PaymentConfirmingScreen";
 import { CheckoutSkeleton } from "@/components/checkout/CheckoutSkeleton";
@@ -31,6 +32,7 @@ export default function CheckoutPage() {
 
   const items = useCartStore((s) => s.items);
   const clearCart = useCartStore((s) => s.clear);
+  const updateItemAddons = useCartStore((s) => s.updateItemAddons);
   const subtotal = useCartSubtotal();
   const { unavailableMealIds, loading: checkingAvailability } = useCartAvailability(items);
   const hasUnavailableItems = unavailableMealIds.size > 0;
@@ -121,7 +123,9 @@ export default function CheckoutPage() {
         lng: selectedAddress!.lng ?? undefined,
       }),
     enabled: Boolean(selectedAddress),
-    staleTime: STALE.list,
+    // Gate data: a tenant can shrink the delivery area while this page is open.
+    staleTime: 0,
+    refetchOnWindowFocus: true,
     // Switching address keeps showing the last result instead of blanking.
     placeholderData: keepPreviousData,
   });
@@ -162,6 +166,21 @@ export default function CheckoutPage() {
     if (!isInstant && (!selectedDay || !effectiveSlotId)) return;
     setIsPlacingOrder(true);
     try {
+      // Re-verify the gates against fresh data the moment the customer commits
+      // (store open, items + add-ons still offered, address still serviceable).
+      const check = await runCheckoutPreflight({
+        queryClient,
+        items,
+        isPickup,
+        address: selectedAddress,
+      });
+      if (!check.ok) {
+        for (const p of check.prune ?? []) updateItemAddons(p.lineKey, p.addons);
+        showToast(check.message, "error");
+        if (check.goToCart) router.replace("/cart");
+        return;
+      }
+
       const { order, razorpayOrderId, razorpayKeyId } = await createOrder({
         fulfillmentType,
         ...(isPickup ? { pickupKitchenZoneId: selectedZoneId } : { addressId: selectedAddressId! }),

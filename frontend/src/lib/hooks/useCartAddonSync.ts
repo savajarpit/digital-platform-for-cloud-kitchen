@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMealsClient } from "@/lib/api/menu-client";
 import type { Meal } from "@/lib/api/menu";
-import { qk, STALE } from "@/lib/query/keys";
+import { qk } from "@/lib/query/keys";
 import { useCartStore } from "@/lib/store/cart-store";
 import { useToast } from "@/context/ToastContext";
 
@@ -20,13 +20,22 @@ import { useToast } from "@/context/ToastContext";
  * add-on regardless of this running, so this is a UX improvement, not the
  * actual safety net.
  */
-export function useCartAddonSync(): { mealsById: Map<string, Meal>; loading: boolean } {
+export function useCartAddonSync({ enabled = true }: { enabled?: boolean } = {}): {
+  mealsById: Map<string, Meal>;
+  loading: boolean;
+} {
   const updateItemAddons = useCartStore((s) => s.updateItemAddons);
   const { showToast } = useToast();
   const { data: meals, isPending } = useQuery({
     queryKey: qk.meals.list({}),
     queryFn: () => fetchMealsClient(),
-    staleTime: STALE.list,
+    // Add-on availability (and the add-on feature itself) is gate data: never
+    // treated as fresh, so a tenant turning add-ons off is picked up on the
+    // next visit/focus instead of after a cache window.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    enabled,
   });
 
   const mealsById = useMemo(() => new Map((meals ?? []).map((m) => [m.id, m])), [meals]);
@@ -39,7 +48,7 @@ export function useCartAddonSync(): { mealsById: Map<string, Meal>; loading: boo
       const meal = mealsById.get(item.mealId);
       const availableAddonIds = new Set(
         (meal?.addonGroups ?? []).flatMap((g) =>
-          g.items.filter((i) => i.isAvailable).map((i) => i.id),
+          g.isActive ? g.items.filter((i) => i.isAvailable).map((i) => i.id) : [],
         ),
       );
       const stillValid = item.addons.filter((a) => availableAddonIds.has(a.addonItemId));

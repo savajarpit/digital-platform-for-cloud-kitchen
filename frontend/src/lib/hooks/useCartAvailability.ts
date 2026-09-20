@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMealsClient } from "@/lib/api/menu-client";
-import { qk, STALE } from "@/lib/query/keys";
+import { qk } from "@/lib/query/keys";
 import type { CartItem } from "@/lib/store/cart-store";
 
 /**
@@ -14,9 +14,10 @@ import type { CartItem } from "@/lib/store/cart-store";
  * changed. The public meal listing already excludes unavailable meals, so
  * "not in the list" (disabled or deleted) is exactly the signal needed.
  *
- * The meal list shares the menu's cache entry, so a customer who just
- * browsed the menu gets the answer instantly; it is only fresh for
- * STALE.short because availability is time-sensitive.
+ * The meal list shares the menu's cache entry (so cached results show
+ * instantly) but availability is GATE data: it is never treated as fresh
+ * here, so it refetches on mount and tab focus and a meal a tenant just
+ * disabled is flagged straight away.
  */
 export function useCartAvailability(items: CartItem[]): {
   unavailableMealIds: Set<string>;
@@ -25,7 +26,9 @@ export function useCartAvailability(items: CartItem[]): {
   const { data: meals, isPending } = useQuery({
     queryKey: qk.meals.list({}),
     queryFn: () => fetchMealsClient(),
-    staleTime: STALE.short,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const unavailableMealIds = useMemo(() => {

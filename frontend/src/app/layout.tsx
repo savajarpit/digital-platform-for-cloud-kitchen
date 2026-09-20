@@ -16,6 +16,7 @@ import { Footer } from "@/components/layout/Footer";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/session-cookies";
 import { decodeJwtRole } from "@/lib/auth/decode-role";
 import { QueryProvider } from "@/lib/query/QueryProvider";
+import { CartAddonSanitizer } from "@/components/cart/CartAddonSanitizer";
 import { ToastProvider } from "@/context/ToastContext";
 import { ConfirmProvider } from "@/context/ConfirmContext";
 import { THEME_INIT_SCRIPT } from "@/lib/theme/theme-mode";
@@ -153,6 +154,7 @@ export default async function RootLayout({
           <QueryProvider>
           <ToastProvider>
             <ConfirmProvider>
+              <CartAddonSanitizer />
               <Header
                 displayName={config.displayName}
                 logoUrl={config.logoUrl}

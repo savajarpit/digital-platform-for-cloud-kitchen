@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Search, SearchX, Star, TriangleAlert } from "lucide-react";
+import { SearchX, Star, TriangleAlert } from "lucide-react";
 import type { Meal, MenuCategory } from "@/lib/api/menu";
 import { fetchMealsOrThrow, type MealSortOption } from "@/lib/api/menu-client";
 import { qk, STALE } from "@/lib/query/keys";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { MealCard } from "./MealCard";
+import { MealGridSkeleton } from "./MealGridSkeleton";
 
 const PILL_BASE = "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors";
 const PILL_ACTIVE = "bg-primary-600 text-white";
@@ -59,9 +61,11 @@ export function MenuBrowser({
 
   // The server already rendered the first view, so it seeds the cache and no
   // request fires on mount. Later filters are cached per combination (going
-  // back to a filter you already used is instant) and the previous results
-  // stay on screen while the next set loads - the grid never blanks or dims.
-  const { data, isError, refetch } = useQuery({
+  // back to a filter you already used is instant). While a NEW combination
+  // is still loading, `isPlaceholderData` is true (the old results are only a
+  // placeholder) and the same grid shape is shown as skeleton cards instead,
+  // so stale results are never mistaken for the answer to the new search.
+  const { data, isError, isPlaceholderData, refetch } = useQuery({
     queryKey: qk.meals.list(filters),
     queryFn: () => fetchMealsOrThrow(filters),
     initialData: isInitialView ? initialMeals : undefined,
@@ -111,16 +115,17 @@ export function MenuBrowser({
       )}
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-56 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search dishes…"
-            className="input w-full pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={(v) => {
+            setSearch(v);
+            // Clearing should restore the full list right away, not after
+            // the typing debounce.
+            if (v === "") setDebouncedSearch("");
+          }}
+          placeholder="Search dishes…"
+          className="min-w-56 flex-1"
+        />
         <Select value={sort} onValueChange={(v) => setSort(v as MealSortOption | "default")}>
           <SelectTrigger className="w-auto">
             <SelectValue />
@@ -154,8 +159,9 @@ export function MenuBrowser({
         </button>
       </div>
 
-      {/* Results live in one stable container: empty / error states render
-          here, inside the same page column, never replacing the page shell. */}
+      {/* Results live in one stable container: skeleton / empty / error states
+          render here, inside the same page column, never replacing the page
+          shell. */}
       <div className="mt-8">
         {isError ? (
           <EmptyState
@@ -168,6 +174,8 @@ export function MenuBrowser({
               </button>
             }
           />
+        ) : isPlaceholderData ? (
+          <MealGridSkeleton />
         ) : meals.length === 0 ? (
           <EmptyState
             icon={SearchX}

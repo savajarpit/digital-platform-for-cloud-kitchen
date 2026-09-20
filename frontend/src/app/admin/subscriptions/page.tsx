@@ -8,7 +8,6 @@ import {
   CalendarClock,
   ClipboardList,
   Plus,
-  Search,
   Settings,
   Users,
 } from "lucide-react";
@@ -16,6 +15,7 @@ import { usePermission } from "@/context/PermissionsContext";
 import { useFeature } from "@/context/FeaturesContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { PlansPageSettingsCard } from "@/components/subscriptions-admin/PlansPageSettingsCard";
 import { PlanFeaturesManager } from "@/components/admin/PlanFeaturesManager";
 import { PlanFaqManager } from "@/components/admin/PlanFaqManager";
@@ -62,19 +62,15 @@ export default function AdminSubscriptionsPage() {
           </Link>
           {tab === "plans" && (
             <>
-              <div className="relative">
-                <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-                <input
-                  type="text"
-                  value={planSearch}
-                  onChange={(e) => {
-                    setPlanSearch(e.target.value);
-                    setPage(1);
-                  }}
-                  placeholder="Search plans…"
-                  className="input w-48 pl-8"
-                />
-              </div>
+              <SearchInput
+                value={planSearch}
+                onChange={(v) => {
+                  setPlanSearch(v);
+                  setPage(1);
+                }}
+                placeholder="Search plans…"
+                className="w-48"
+              />
               {canEdit && !creating && editingPlanId === null && (
                 <button type="button" onClick={() => setCreating(true)} className="btn-primary btn-sm">
                   <Plus className="h-4 w-4" />

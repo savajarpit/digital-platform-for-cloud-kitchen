@@ -25,7 +25,11 @@ import {
 } from './dto/public-config-response.dto';
 import { UpdateBusinessProfileDto } from './dto/update-business-profile.dto';
 import { UpdateHomePageContentDto } from './dto/update-home-page-content.dto';
-import { defaultHomePageContent } from '../../common/constants/tenant-default-content';
+import type { HeroFeature } from '../../common/constants/hero-feature-icons.constant';
+import {
+  defaultHomePageContent,
+  defaultHeroFeatures,
+} from '../../common/constants/tenant-default-content';
 import { UpdateOrderAcceptanceDto } from './dto/update-order-acceptance.dto';
 import { UpdateInstantDeliverySettingsDto } from './dto/update-instant-delivery-settings.dto';
 import { UpdateDeliveryZonesDto } from './dto/update-delivery-zones.dto';
@@ -128,6 +132,11 @@ export class SettingsService {
       heroTitle: homePageContent?.heroTitle ?? undefined,
       heroSubtitle: homePageContent?.heroSubtitle ?? heroDefaults.heroSubtitle,
       heroImageUrls: homePageContent?.heroImageUrls ?? [],
+      // Only a missing/malformed value falls back to the defaults — an empty
+      // array is a deliberate "hide the row" choice by the tenant.
+      heroFeatures: Array.isArray(homePageContent?.heroFeatures)
+        ? (homePageContent.heroFeatures as unknown as HeroFeature[])
+        : defaultHeroFeatures(),
       reviewsSectionTitle:
         homePageContent?.reviewsSectionTitle ??
         heroDefaults.reviewsSectionTitle,
@@ -262,7 +271,18 @@ export class SettingsService {
     tenantId: string,
     dto: UpdateHomePageContentDto,
   ): Promise<HomePageContent> {
-    return this.settingsRepo.upsertHomePageContent(tenantId, dto);
+    const { heroFeatures, ...rest } = dto;
+    return this.settingsRepo.upsertHomePageContent(tenantId, {
+      ...rest,
+      ...(heroFeatures
+        ? {
+            heroFeatures: heroFeatures.map(({ icon, label }) => ({
+              icon,
+              label,
+            })) as Prisma.InputJsonValue,
+          }
+        : {}),
+    });
   }
 
   // ── Order acceptance ──────────────────────────────────────

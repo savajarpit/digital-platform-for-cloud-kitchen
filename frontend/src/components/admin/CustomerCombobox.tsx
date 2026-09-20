@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Search, User } from "lucide-react";
+import { Check, ChevronDown, Search, User, X } from "lucide-react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { listCustomers, type Customer } from "@/lib/api/admin-customers";
 import { qk, STALE } from "@/lib/query/keys";
+import { ComboboxRowsSkeleton } from "@/components/ui/skeletons/ComboboxRowsSkeleton";
 
 const PAGE_SIZE = 15;
 
@@ -23,6 +24,7 @@ export function CustomerCombobox({
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -41,7 +43,7 @@ export function CustomerCombobox({
   }, [search]);
 
   // Cached per search term (under the "customers" area).
-  const { data, hasNextPage, isFetching, fetchNextPage } = useInfiniteQuery({
+  const { data, hasNextPage, isFetching, isPlaceholderData, fetchNextPage } = useInfiniteQuery({
     queryKey: qk.admin("customers", "picker", debouncedSearch),
     queryFn: ({ pageParam }) =>
       listCustomers({ page: pageParam, limit: PAGE_SIZE, search: debouncedSearch || undefined }),
@@ -54,6 +56,9 @@ export function CustomerCombobox({
   const results: Customer[] = data ? data.pages.flatMap((pg) => pg.data) : [];
   const hasMore = Boolean(hasNextPage);
   const loading = isFetching;
+  // A new, not-yet-cached search (or the very first load) shows skeleton rows
+  // instead of the previous term's results.
+  const showSkeleton = isPlaceholderData || (!data && isFetching);
 
   function loadMore() {
     if (!isFetching) void fetchNextPage();
@@ -84,15 +89,30 @@ export function CustomerCombobox({
           <div className="relative border-b border-zinc-100 p-2 dark:border-zinc-800">
             <Search className="pointer-events-none absolute top-1/2 left-4 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
             <input
+              ref={searchRef}
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search customers…"
-              className="input w-full py-1.5 pl-8 text-sm"
+              className="input w-full py-1.5 pr-8 pl-8 text-sm"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  searchRef.current?.focus();
+                }}
+                aria-label="Clear search"
+                className="absolute top-1/2 right-3.5 flex h-5 w-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
           <div className="max-h-64 overflow-y-auto p-1">
-            {results.map((customer) => (
+            {showSkeleton && <ComboboxRowsSkeleton />}
+            {!showSkeleton && results.map((customer) => (
               <button
                 key={customer.id}
                 type="button"
@@ -110,10 +130,10 @@ export function CustomerCombobox({
                 {value?.id === customer.id && <Check className="h-3.5 w-3.5 shrink-0 text-primary-600" />}
               </button>
             ))}
-            {results.length === 0 && !loading && (
+            {!showSkeleton && results.length === 0 && !loading && (
               <p className="px-2 py-4 text-center text-xs text-zinc-400">No customers match.</p>
             )}
-            {hasMore && (
+            {!showSkeleton && hasMore && (
               <button
                 type="button"
                 onClick={loadMore}

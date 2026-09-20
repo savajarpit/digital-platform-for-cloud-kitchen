@@ -53,8 +53,8 @@ export function PlansTab({
   const [disruptionPlanId, setDisruptionPlanId] = useState<string | null>(null);
   const search = useDebouncedValue(planSearch, 250);
 
-  // Paging/searching keeps the previous rows on screen until the next result
-  // arrives, so the list never blanks out or remounts.
+  // Paging/searching keeps the previous data as a placeholder (isPlaceholderData)
+  // so the shell and pagination stay mounted while the list shows skeletons.
   const plansQuery = useQuery({
     queryKey: qk.admin("subscriptions", "plans", { page, search }),
     queryFn: () => listPlansAdmin({ page, search: search || undefined }),
@@ -63,6 +63,9 @@ export function PlansTab({
   });
   const plans = plansQuery.data?.data;
   const meta = plansQuery.data?.meta ?? null;
+  // A new, not-yet-cached search/page shows skeletons instead of stale plans
+  // (unless a plan is mid-edit, so its editor is never unmounted).
+  const showSkeleton = plansQuery.isPlaceholderData && editingPlanId === null;
 
   // Cached under the menu area so a meal edit elsewhere refreshes this picker.
   const mealsQuery = useQuery({
@@ -143,6 +146,8 @@ export function PlansTab({
 
       {!plans ? (
         plansQuery.isError ? null : <PlanListSkeleton />
+      ) : showSkeleton ? (
+        <PlanListSkeleton />
       ) : plans.length === 0 && !creating ? (
         <EmptyState
           compact

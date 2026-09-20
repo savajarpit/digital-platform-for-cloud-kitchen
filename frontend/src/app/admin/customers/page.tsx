@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Search, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Users } from "lucide-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { listCustomers } from "@/lib/api/admin-customers";
 import { qk, STALE } from "@/lib/query/keys";
 import { TableSkeleton } from "@/components/ui/skeletons/TableSkeleton";
+import { TableRowsSkeleton } from "@/components/ui/skeletons/TableRowsSkeleton";
+import { SearchInput } from "@/components/ui/SearchInput";
 
 export default function CustomersPage() {
   const [search, setSearch] = useState("");
@@ -30,16 +32,12 @@ export default function CustomersPage() {
             Customers
           </h2>
         </div>
-        <div className="relative w-full sm:w-64">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name or email"
-            className="input pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search name or email"
+          className="w-full sm:w-64"
+        />
       </div>
 
       <CustomersTable page={page} search={debouncedSearch} onPageChange={setPage} />
@@ -56,8 +54,8 @@ function CustomersTable({
   search: string;
   onPageChange: (page: number) => void;
 }) {
-  // Keyed on every request input; the previous page/search stays on screen
-  // (no remount, no skeleton) until the next result arrives.
+  // Keyed on every request input. While a not-yet-cached page/search loads
+  // (isPlaceholderData) the table shell stays mounted and the rows are skeletons.
   const { data, isPending, isError, isPlaceholderData } = useQuery({
     queryKey: qk.admin("customers", page, search),
     queryFn: () => listCustomers({ page, search: search || undefined }),
@@ -90,8 +88,9 @@ function CustomersTable({
             <th className="px-5 py-3">Status</th>
           </tr>
         </thead>
-        <tbody className={isPlaceholderData ? "opacity-60" : undefined}>
-          {customers.map((customer) => (
+        <tbody>
+          {isPlaceholderData && <TableRowsSkeleton cols={5} rows={6} />}
+          {!isPlaceholderData && customers.map((customer) => (
             <tr key={customer.id} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
               <td className="px-5 py-3 font-medium">
                 <Link
@@ -122,7 +121,7 @@ function CustomersTable({
               </td>
             </tr>
           ))}
-          {customers.length === 0 && (
+          {!isPlaceholderData && customers.length === 0 && (
             <tr>
               <td colSpan={5} className="px-5 py-8 text-center text-zinc-500 dark:text-zinc-400">
                 No customers found.

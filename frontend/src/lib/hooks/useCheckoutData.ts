@@ -11,7 +11,7 @@ import {
   type InstantDeliveryStatus,
   type PickupInfo,
 } from "@/lib/api/delivery-slots";
-import { qk, STALE } from "@/lib/query/keys";
+import { qk } from "@/lib/query/keys";
 
 // Stable fallbacks used when a public lookup fails, so checkout degrades the
 // same way it always did (no pickup, no instant delivery) without new
@@ -37,30 +37,45 @@ export interface CheckoutData {
 
 /**
  * Everything the checkout page reads from the public settings endpoints.
- * Each lookup is cached (so returning to checkout paints instantly) but only
- * fresh briefly, because the order window, instant availability and "now"
- * are all time-sensitive.
+ *
+ * These are GATE data - whether the kitchen is taking orders, instant
+ * delivery, pickup, slots. A customer must never act on a stale answer (a
+ * tenant can close the store or change slots while this page is open), so
+ * unlike the rest of the app they are never served from cache as fresh:
+ * they refetch on every mount and tab focus, and the open/closed status
+ * polls while the page is open. Placing the order additionally re-checks
+ * everything (see lib/checkout/preflight.ts), and the backend enforces it
+ * again. This polling is the interim until realtime pushes replace it.
  */
+const GATE_QUERY = {
+  staleTime: 0,
+  refetchOnMount: "always",
+  refetchOnWindowFocus: true,
+} as const;
+const GATE_POLL_MS = 30_000;
+
 export function useCheckoutData(labels: { today: string; tomorrow: string }): CheckoutData {
   const windowQuery = useQuery({
     queryKey: qk.checkout.orderWindow,
     queryFn: getOrderWindowStatus,
-    staleTime: STALE.short,
+    ...GATE_QUERY,
+    refetchInterval: GATE_POLL_MS,
   });
   const pickupQuery = useQuery({
     queryKey: qk.checkout.pickup,
     queryFn: getPickupInfo,
-    staleTime: STALE.list,
+    ...GATE_QUERY,
   });
   const instantQuery = useQuery({
     queryKey: qk.checkout.instant,
     queryFn: getInstantDeliveryStatus,
-    staleTime: STALE.short,
+    ...GATE_QUERY,
+    refetchInterval: GATE_POLL_MS,
   });
   const slotsQuery = useQuery({
     queryKey: qk.checkout.slots,
     queryFn: getDeliverySlots,
-    staleTime: STALE.short,
+    ...GATE_QUERY,
   });
 
   const config = slotsQuery.data;

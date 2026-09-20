@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Search, SearchX, TriangleAlert } from "lucide-react";
+import { SearchX, TriangleAlert } from "lucide-react";
 import type { PublicPlan } from "@/lib/api/plans";
 import { fetchPlansClient } from "@/lib/api/plans-client";
 import { STALE } from "@/lib/query/keys";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { PlanCard } from "./PlanCard";
+import { PlanCardSkeleton } from "./PlanCardSkeleton";
 
 export function PlansBrowser({ initialPlans }: { initialPlans: PublicPlan[] }) {
   const [search, setSearch] = useState("");
@@ -19,9 +21,9 @@ export function PlansBrowser({ initialPlans }: { initialPlans: PublicPlan[] }) {
   }, [search]);
 
   // Server-rendered plans seed the unfiltered view (no request on mount);
-  // searches are cached per term and keep the previous cards on screen while
-  // loading, so the grid never blanks or dims.
-  const { data, isError, refetch } = useQuery({
+  // searches are cached per term; while a NEW term is loading the old cards
+  // are only a placeholder, so skeleton cards fill the same grid instead.
+  const { data, isError, isPlaceholderData, refetch } = useQuery({
     queryKey: ["plans", "list", debouncedSearch],
     queryFn: () => fetchPlansClient(debouncedSearch || undefined),
     initialData: debouncedSearch === "" ? initialPlans : undefined,
@@ -33,16 +35,15 @@ export function PlansBrowser({ initialPlans }: { initialPlans: PublicPlan[] }) {
   return (
     <div>
       {initialPlans.length > 3 && (
-        <div className="relative mx-auto mt-8 max-w-sm">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search plans…"
-            className="input w-full pl-9"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={(v) => {
+            setSearch(v);
+            if (v === "") setDebouncedSearch("");
+          }}
+          placeholder="Search plans…"
+          className="mx-auto mt-8 max-w-sm"
+        />
       )}
 
       <div className="mt-10">
@@ -58,6 +59,12 @@ export function PlansBrowser({ initialPlans }: { initialPlans: PublicPlan[] }) {
               </button>
             }
           />
+        ) : isPlaceholderData ? (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <PlanCardSkeleton key={i} />
+            ))}
+          </div>
         ) : plans.length === 0 ? (
           <EmptyState compact icon={SearchX} title="No plans match your search." />
         ) : (

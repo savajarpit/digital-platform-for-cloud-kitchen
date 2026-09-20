@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImageOff, Search } from "lucide-react";
+import { ImageOff } from "lucide-react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { listMeals, type Meal } from "@/lib/api/admin-menu";
 import { qk, STALE } from "@/lib/query/keys";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
 const PAGE_SIZE = 12;
@@ -34,8 +35,17 @@ export function MealPickerGrid({
   }, [search]);
 
   // Cached per search term (under the "menu" area, so any menu change
-  // refreshes it); keeps the previous results visible while a new search loads.
-  const { data, isError, hasNextPage, isFetching, isFetchingNextPage, fetchNextPage } = useInfiniteQuery({
+  // refreshes it); while a not-yet-cached search loads (isPlaceholderData) the
+  // grid shows skeleton tiles instead of the previous term's results.
+  const {
+    data,
+    isError,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    isPlaceholderData,
+    fetchNextPage,
+  } = useInfiniteQuery({
     queryKey: qk.admin("menu", "meal-picker-grid", debouncedSearch),
     queryFn: ({ pageParam }) =>
       listMeals({ page: pageParam, limit: PAGE_SIZE, search: debouncedSearch || undefined }),
@@ -68,18 +78,15 @@ export function MealPickerGrid({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="relative">
-        <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search products to add…"
-          className="input w-full pl-8"
-        />
-      </div>
+      <SearchInput
+        value={search}
+        onChange={setSearch}
+        placeholder="Search products to add…"
+        className="w-full"
+      />
 
       <div ref={scrollRef} className="max-h-80 overflow-y-auto pr-1">
-        {!meals ? (
+        {!meals || isPlaceholderData ? (
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-24" />

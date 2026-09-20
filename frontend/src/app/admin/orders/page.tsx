@@ -18,6 +18,7 @@ import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { TableSkeleton } from "@/components/ui/skeletons/TableSkeleton";
+import { TableRowsSkeleton } from "@/components/ui/skeletons/TableRowsSkeleton";
 import { qk, STALE } from "@/lib/query/keys";
 import { invalidateOrderAreas } from "@/lib/query/admin-invalidation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
@@ -145,8 +146,8 @@ function OrdersTable({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   // Every input the request depends on is in the key. Changing a filter or
-  // page keeps the current rows on screen (no remount, no skeleton) until the
-  // next result arrives.
+  // page keeps the table shell mounted and shows skeleton rows (isPlaceholderData)
+  // until the next, not-yet-cached result arrives.
   const listKey = qk.admin("orders", "list", page, status, fulfillmentType);
   const { data, isPending, isError, isPlaceholderData } = useQuery({
     queryKey: listKey,
@@ -205,8 +206,9 @@ function OrdersTable({
             <th className="px-5 py-3">Status</th>
           </tr>
         </thead>
-        <tbody className={isPlaceholderData ? "opacity-60" : undefined}>
-          {orders.map((order) => {
+        <tbody>
+          {isPlaceholderData && <TableRowsSkeleton cols={7} rows={6} />}
+          {!isPlaceholderData && orders.map((order) => {
             const isPaid = order.paymentStatus === "PAID";
             const isFinal = order.status === "DELIVERED" || order.status === "CANCELLED";
             return (
@@ -295,7 +297,7 @@ function OrdersTable({
               </tr>
             );
           })}
-          {orders.length === 0 && (
+          {!isPlaceholderData && orders.length === 0 && (
             <tr>
               <td colSpan={7} className="px-5 py-8 text-center text-zinc-500 dark:text-zinc-400">
                 No orders found.

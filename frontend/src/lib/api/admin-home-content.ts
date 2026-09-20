@@ -1,4 +1,5 @@
 import { ApiError, proxyFetch } from "@/lib/api/client";
+import type { HeroFeature } from "@/lib/icons/hero-feature-icons";
 
 export { ApiError };
 
@@ -8,6 +9,7 @@ export interface HomePageContent {
   heroTitle: string | null;
   heroSubtitle: string | null;
   heroImageUrls: string[];
+  heroFeatures: HeroFeature[];
   reviewsSectionTitle: string | null;
   reviewsSectionDescription: string | null;
   ctaEnabled: boolean;

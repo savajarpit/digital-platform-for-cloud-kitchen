@@ -1,11 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Minus, Plus, SlidersHorizontal } from "lucide-react";
 import type { Meal } from "@/lib/api/menu";
 import { useMealCustomization } from "@/lib/hooks/useMealCustomization";
 import { MealCustomizerFields } from "./MealCustomizerFields";
+import { MealCartLines } from "./MealCartLines";
+import { QuantityStepper } from "./QuantityStepper";
 import { useCartStore } from "@/lib/store/cart-store";
+import { totalQuantity, useMealCartLines } from "@/lib/store/cart-selectors";
 import { useToast } from "@/context/ToastContext";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
@@ -17,6 +21,12 @@ import { formatPriceFromPaise } from "@/lib/format/currency";
  * there's something to configure before adding to cart. A meal with
  * nothing to customize just gets a plain quantity stepper + Add to Cart,
  * no section at all.
+ *
+ * Whatever is already in the cart shows here too, so the page never offers a
+ * fresh "Add to Cart" for something you already added: a plain meal swaps to
+ * a live [ - n + ] stepper ("-" at 1 removes it), and a customizable meal
+ * lists each existing customization with its own stepper above the form for
+ * adding a different one.
  */
 export function MealPurchasePanel({
   meal,
@@ -27,6 +37,8 @@ export function MealPurchasePanel({
   priceInPaise: number;
 }) {
   const addItem = useCartStore((s) => s.addItem);
+  const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const cartLines = useMealCartLines(meal.id);
   const { showToast } = useToast();
   const {
     groups,
@@ -42,6 +54,7 @@ export function MealPurchasePanel({
 
   const hasCustomization = groups.some((g) => g.isActive && g.items.some((i) => i.isAvailable));
   const unitTotalInPaise = priceInPaise + addonTotalInPaise;
+  const plainLine = !hasCustomization ? cartLines.find((l) => l.lineKey === meal.id) : undefined;
 
   function handleAddToCart() {
     addItem(
@@ -60,6 +73,10 @@ export function MealPurchasePanel({
 
   return (
     <div className="flex flex-col gap-5">
+      {hasCustomization && cartLines.length > 0 && (
+        <MealCartLines mealName={meal.name} lines={cartLines} />
+      )}
+
       {hasCustomization && (
         <section className="rounded-2xl border-2 border-primary-200 bg-primary-50/40 p-4 dark:border-primary-900 dark:bg-primary-950/20">
           <div className="mb-3 flex items-center gap-2">
@@ -88,6 +105,20 @@ export function MealPurchasePanel({
         </section>
       )}
 
+      {plainLine ? (
+        <div className="flex items-center gap-3">
+          <QuantityStepper
+            size="md"
+            quantity={totalQuantity(cartLines)}
+            label={meal.name}
+            onDecrement={() => updateQuantity(plainLine.lineKey, plainLine.quantity - 1)}
+            onIncrement={() => updateQuantity(plainLine.lineKey, plainLine.quantity + 1)}
+          />
+          <Link href="/cart" className="btn-outline flex-1 justify-center">
+            View cart
+          </Link>
+        </div>
+      ) : (
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <button
@@ -114,9 +145,10 @@ export function MealPurchasePanel({
           disabled={!canAdd}
           className="btn-primary flex-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Add to Cart — {formatPriceFromPaise(unitTotalInPaise * quantity)}
+          {hasCustomization && cartLines.length > 0 ? "Add another" : "Add to Cart"} — {formatPriceFromPaise(unitTotalInPaise * quantity)}
         </button>
       </div>
+      )}
     </div>
   );
 }

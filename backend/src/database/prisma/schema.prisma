@@ -1027,6 +1027,8 @@ model HomePageContent {
   heroTitle                 String?
   heroSubtitle              String?
   heroImageUrls             String[] @default([])
+  // [{ icon: <HERO_FEATURE_ICON_KEYS>, label }], max 4, shown under hero buttons
+  heroFeatures              Json     @default("[{\"icon\": \"truck\", \"label\": \"Free delivery\"}, {\"icon\": \"shield-check\", \"label\": \"Fresh guarantee\"}, {\"icon\": \"clock\", \"label\": \"Cancel anytime\"}]")
   reviewsSectionTitle       String?
   reviewsSectionDescription String?
   ctaEnabled                Boolean  @default(true)

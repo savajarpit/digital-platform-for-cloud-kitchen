@@ -11,7 +11,8 @@ import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function DisruptionsAdminPage() {
   const [page, setPage] = useState(1);
-  const { data, isError } = useQuery({
+  // isPlaceholderData: a not-yet-cached page shows skeleton rows, not the old page.
+  const { data, isError, isPlaceholderData } = useQuery({
     queryKey: qk.admin("subscriptions", "disruptions", page),
     queryFn: () => listDisruptions({ page, limit: 20 }),
     staleTime: STALE.short,
@@ -48,7 +49,7 @@ export default function DisruptionsAdminPage() {
         </p>
       )}
 
-      {!disruptions ? (
+      {!disruptions || isPlaceholderData ? (
         isError ? null : (
           <div className="card flex flex-col divide-y divide-zinc-100 dark:divide-zinc-800" aria-busy="true">
             {Array.from({ length: 5 }).map((_, i) => (

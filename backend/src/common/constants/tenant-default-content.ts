@@ -8,10 +8,23 @@
  * and the dev bootstrap seed script so the copy only lives in one place.
  */
 
+import type { Prisma } from '../../generated/prisma';
+import type { HeroFeature } from './hero-feature-icons.constant';
+
+export function defaultHeroFeatures(): HeroFeature[] {
+  return [
+    { icon: 'truck', label: 'Free delivery' },
+    { icon: 'shield-check', label: 'Fresh guarantee' },
+    { icon: 'clock', label: 'Cancel anytime' },
+  ];
+}
+
 export function defaultHomePageContent() {
   return {
     heroTagline: 'Fresh & healthy',
     heroSubtitle: 'Fresh, healthy meals delivered to your door.',
+    // Prisma's Json input type doesn't accept a typed array directly.
+    heroFeatures: defaultHeroFeatures() as unknown as Prisma.InputJsonValue,
     reviewsSectionTitle: 'What our customers say',
     reviewsSectionDescription: "Don't just take our word for it",
     ctaEnabled: true,

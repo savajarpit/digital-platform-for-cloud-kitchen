@@ -1,5 +1,6 @@
 import { serverFetch } from "@/lib/api/server-fetch";
 import type { ApiResponse } from "@/lib/api/response";
+import { DEFAULT_HERO_FEATURES, type HeroFeature } from "@/lib/icons/hero-feature-icons";
 
 export interface ThemeConfig {
   primaryColor?: string;
@@ -59,6 +60,7 @@ export interface PublicConfig {
   heroTitle?: string;
   heroSubtitle?: string;
   heroImageUrls: string[];
+  heroFeatures: HeroFeature[];
   reviewsSectionTitle?: string;
   reviewsSectionDescription?: string;
   ctaEnabled: boolean;
@@ -96,6 +98,7 @@ export const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   heroTagline: "Fresh & healthy",
   heroSubtitle: "Fresh, healthy meals delivered to your door.",
   heroImageUrls: [],
+  heroFeatures: DEFAULT_HERO_FEATURES,
   reviewsSectionTitle: "What our customers say",
   ctaEnabled: true,
   ctaTitle: "Start eating better today",

@@ -1,6 +1,7 @@
 import { parseOrThrow } from "@/lib/api/client";
 import { PUBLIC_API_URL } from "@/lib/config/env";
 import type { PublicConfig } from "@/lib/api/settings";
+import { DEFAULT_HERO_FEATURES } from "@/lib/icons/hero-feature-icons";
 
 export type { PublicConfig };
 
@@ -25,6 +26,7 @@ const DEFAULT_PUBLIC_CONFIG: PublicConfig = {
   showReviewsOnHomepage: false,
   poweredByBrandingEnabled: true,
   heroImageUrls: [],
+  heroFeatures: DEFAULT_HERO_FEATURES,
   ctaEnabled: true,
   mapsProvider: "osm",
 };

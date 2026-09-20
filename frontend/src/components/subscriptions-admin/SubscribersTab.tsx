@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, ClipboardPlus, Search, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardPlus, Users } from "lucide-react";
 import {
   listPlansAdmin,
   listSubscriptionsAdmin,
@@ -15,6 +15,8 @@ import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { qk, STALE } from "@/lib/query/keys";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TableSkeleton } from "@/components/ui/skeletons/TableSkeleton";
+import { TableRowsSkeleton } from "@/components/ui/skeletons/TableRowsSkeleton";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
@@ -41,9 +43,9 @@ export function SubscribersTab() {
   });
   const plans = plansQuery.data?.data ?? [];
 
-  // Every input of the request is in the key; while the next page/filter loads
-  // the previous rows stay on screen (no skeleton flash, no remount).
-  const { data, isError } = useQuery({
+  // Every input of the request is in the key; while a not-yet-cached page/filter
+  // loads (isPlaceholderData) the table shell stays and the rows are skeletons.
+  const { data, isError, isPlaceholderData } = useQuery({
     queryKey: qk.admin("subscriptions", "list", { page, search: debouncedSearch, planId }),
     queryFn: () =>
       listSubscriptionsAdmin({
@@ -66,19 +68,15 @@ export function SubscribersTab() {
             New Subscription
           </Link>
         )}
-        <div className="relative min-w-48 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search subscribers…"
-            className="input w-full pl-8"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={(v) => {
+            setSearch(v);
+            setPage(1);
+          }}
+          placeholder="Search subscribers…"
+          className="min-w-48 flex-1"
+        />
         <Select
           value={planId}
           onValueChange={(v) => {
@@ -121,7 +119,8 @@ export function SubscribersTab() {
                 </tr>
               </thead>
               <tbody>
-                {subs.map((sub) => (
+                {isPlaceholderData && <TableRowsSkeleton cols={COLUMNS} rows={6} />}
+                {!isPlaceholderData && subs.map((sub) => (
                   <tr key={sub.id} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
                     <td className="px-4 py-3">
                       <Link
@@ -157,7 +156,7 @@ export function SubscribersTab() {
                   </tr>
                 ))}
 
-                {subs.length === 0 && (
+                {!isPlaceholderData && subs.length === 0 && (
                   <tr>
                     <td colSpan={COLUMNS}>
                       <EmptyState

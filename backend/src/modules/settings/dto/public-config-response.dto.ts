@@ -1,6 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 import { BrandDisplayMode } from '../../../generated/prisma';
+import { HERO_FEATURE_ICON_KEYS } from '../../../common/constants/hero-feature-icons.constant';
+import type { HeroFeature } from '../../../common/constants/hero-feature-icons.constant';
+
+export class HeroFeatureResponseDto {
+  @ApiProperty({ enum: HERO_FEATURE_ICON_KEYS, example: 'truck' })
+  @Expose()
+  icon: HeroFeature['icon'];
+
+  @ApiProperty({ example: 'Free delivery' })
+  @Expose()
+  label: string;
+}
 
 export class ThemeConfigDto {
   @ApiPropertyOptional({ example: '#16A34A' })
@@ -208,6 +220,10 @@ export class PublicConfigResponseDto {
   @ApiProperty({ type: [String] })
   @Expose()
   heroImageUrls: string[];
+
+  @ApiProperty({ type: [HeroFeatureResponseDto] })
+  @Expose()
+  heroFeatures: HeroFeatureResponseDto[];
 
   @ApiPropertyOptional({ example: 'What our customers say' })
   @Expose()

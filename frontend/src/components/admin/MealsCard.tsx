@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus, Search, Star } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Star } from "lucide-react";
 import {
   ApiError,
   createMeal,
@@ -20,6 +20,7 @@ import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { MealListSkeleton } from "@/components/admin/MealListSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { MealForm } from "@/components/admin/MealForm";
 import { MealListItem } from "@/components/admin/MealListItem";
@@ -53,8 +54,7 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
     return () => clearTimeout(handle);
   }, [search]);
 
-  // Every filter is in the key; paging/filtering keeps the previous grid on
-  // screen (no skeleton) until the next result arrives.
+  // Every filter is in the key.
   const {
     data: mealsPage,
     isPending,
@@ -75,6 +75,9 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
   const meals = mealsPage?.data ?? null;
   const meta = mealsPage?.meta ?? null;
   const loadError = isError ? "Couldn't load meals." : null;
+  // A new, not-yet-cached search/filter/page shows skeletons instead of stale
+  // cards (unless a card is mid-edit, so its form is never unmounted).
+  const showSkeleton = isPlaceholderData && (editingId === null || editingId === "new");
 
   function refetch() {
     void invalidateMenuAreas(queryClient);
@@ -121,19 +124,15 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-48 flex-1">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search meals…"
-            className="input w-full pl-8"
-          />
-        </div>
+        <SearchInput
+          value={search}
+          onChange={(v) => {
+            setSearch(v);
+            setPage(1);
+          }}
+          placeholder="Search meals…"
+          className="min-w-48 flex-1"
+        />
         <Select
           value={vegFilter}
           onValueChange={(v) => {
@@ -188,12 +187,10 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
         />
       )}
 
-      {isPending ? (
+      {isPending || showSkeleton ? (
         <MealListSkeleton />
       ) : !meals ? null : (
-        <div
-          className={`grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 ${isPlaceholderData ? "opacity-60" : ""}`}
-        >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {meals.map((meal) =>
             editingId === meal.id ? (
               <div key={meal.id} className="col-span-full">

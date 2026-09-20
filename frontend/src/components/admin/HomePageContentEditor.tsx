@@ -16,6 +16,8 @@ import { qk, STALE } from "@/lib/query/keys";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { HomeContentEditorSkeleton } from "@/components/admin/skeletons/HomeContentEditorSkeleton";
 import { HeroImagesInput } from "@/components/admin/HeroImagesInput";
+import { HeroFeaturesInput } from "@/components/admin/HeroFeaturesInput";
+import { DEFAULT_HERO_FEATURES, type HeroFeature } from "@/lib/icons/hero-feature-icons";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 
 type FormState = {
@@ -23,6 +25,7 @@ type FormState = {
   heroTitle: string;
   heroSubtitle: string;
   heroImageUrls: string[];
+  heroFeatures: HeroFeature[];
   reviewsSectionTitle: string;
   reviewsSectionDescription: string;
   ctaEnabled: boolean;
@@ -40,6 +43,7 @@ function toForm(content: HomePageContent | null): FormState {
     heroTitle: content?.heroTitle ?? "",
     heroSubtitle: content?.heroSubtitle ?? "",
     heroImageUrls: content?.heroImageUrls ?? [],
+    heroFeatures: content?.heroFeatures ?? DEFAULT_HERO_FEATURES,
     reviewsSectionTitle: content?.reviewsSectionTitle ?? "",
     reviewsSectionDescription: content?.reviewsSectionDescription ?? "",
     ctaEnabled: content?.ctaEnabled ?? true,
@@ -71,6 +75,10 @@ export function HomePageContentEditor({ canEdit }: { canEdit: boolean }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form) return;
+    if (form.heroFeatures.some((f) => !f.label.trim())) {
+      showToast("Every hero highlight needs a label — fill it in or remove the row.", "error");
+      return;
+    }
     setSaving(true);
     try {
       const input: UpdateHomePageContentInput = {
@@ -78,6 +86,7 @@ export function HomePageContentEditor({ canEdit }: { canEdit: boolean }) {
         heroTitle: form.heroTitle || undefined,
         heroSubtitle: form.heroSubtitle || undefined,
         heroImageUrls: form.heroImageUrls,
+        heroFeatures: form.heroFeatures.map((f) => ({ icon: f.icon, label: f.label.trim() })),
         reviewsSectionTitle: form.reviewsSectionTitle || undefined,
         reviewsSectionDescription: form.reviewsSectionDescription || undefined,
         ctaEnabled: form.ctaEnabled,
@@ -148,6 +157,10 @@ export function HomePageContentEditor({ canEdit }: { canEdit: boolean }) {
           <HeroImagesInput
             value={form.heroImageUrls}
             onChange={(urls) => setForm({ ...form, heroImageUrls: urls })}
+          />
+          <HeroFeaturesInput
+            value={form.heroFeatures}
+            onChange={(features) => setForm({ ...form, heroFeatures: features })}
           />
         </div>
 

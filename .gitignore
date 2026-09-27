@@ -49,3 +49,7 @@ pids
 *.pid.lock
 .temp
 .tmp
+
+# Local AI-tooling artifacts (Playwright MCP screenshots/snapshots/logs, MCP config)
+.playwright-mcp/
+.mcp.json

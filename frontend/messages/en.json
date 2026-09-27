@@ -93,6 +93,7 @@
     "checkingServiceability": "Checking if we deliver here…",
     "notDeliverable": "Not deliverable",
     "notServiceableError": "Sorry, we don't currently deliver to this location.",
+    "outOfAreaWarning": "This location is outside the delivery area. You can still save it — double-check with the customer first.",
     "label": "Label",
     "labelHint": "e.g. Home, Work",
     "contactPhone": "Contact phone",
@@ -219,6 +220,10 @@
     "resetting": "Resetting…",
     "resetSuccess": "Password reset — you can log in now.",
     "invalidResetLink": "This reset link is invalid or missing.",
+    "setPasswordTitle": "Set your password",
+    "setPasswordIntro": "Your account is ready. Choose a password to log in, track your orders and order again.",
+    "setPassword": "Set password",
+    "setPasswordSuccess": "Password set — you can log in now.",
     "accountNotVerified": "Please verify your account to continue."
   }
 }

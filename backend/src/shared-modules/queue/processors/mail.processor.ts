@@ -13,6 +13,17 @@ export interface ResetPasswordEmailJob {
   email: string;
   tenantId: string;
   resetUrl: string;
+  /** Decides the sender: a tenant's own users (CUSTOMER/STAFF) get it from
+   * the tenant's email; OWNER/SUPER_ADMIN from the platform. Optional only
+   * for jobs queued before this field existed. */
+  recipientRole?: string;
+}
+
+export interface AccountInviteEmailJob {
+  email: string;
+  tenantId: string;
+  firstName: string;
+  inviteUrl: string;
 }
 
 export interface PlatformActivationInviteEmailJob {
@@ -89,6 +100,16 @@ export class MailProcessor {
       {
         resetUrl: job.data.resetUrl,
       },
+      job.data.recipientRole,
+    );
+  }
+
+  @Process('send-account-invite')
+  async sendAccountInvite(job: Job<AccountInviteEmailJob>) {
+    await this.mailService.sendAccountInvite(
+      job.data.email,
+      job.data.tenantId,
+      { firstName: job.data.firstName, inviteUrl: job.data.inviteUrl },
     );
   }
 

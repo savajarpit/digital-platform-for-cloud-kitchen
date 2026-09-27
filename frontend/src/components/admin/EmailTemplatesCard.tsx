@@ -23,6 +23,7 @@ const KEY_LABEL: Record<string, string> = {
   "order-confirmation-customer": "Order Confirmation",
   welcome: "Welcome Email",
   "reset-password": "Reset Password",
+  "account-invite": "Account Invite (customer added by staff)",
 };
 
 export function EmailTemplatesCard() {

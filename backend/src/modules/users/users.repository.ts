@@ -92,6 +92,7 @@ export class UsersRepository {
               { firstName: { contains: search, mode: 'insensitive' } },
               { lastName: { contains: search, mode: 'insensitive' } },
               { email: { contains: search, mode: 'insensitive' } },
+              { phone: { contains: search } },
             ],
           }
         : {}),
@@ -133,6 +134,22 @@ export class UsersRepository {
           include: { plan: { select: { name: true } } },
         },
       },
+    });
+  }
+
+  findCustomerById(tenantId: string, id: string): Promise<User | null> {
+    return this.prisma.user.findFirst({
+      where: { id, tenantId, role: Role.CUSTOMER, deletedAt: null },
+    });
+  }
+
+  /** Just what buildStorefrontOrigin needs to link back to this tenant. */
+  findTenantDomain(
+    tenantId: string,
+  ): Promise<{ slug: string; customDomain: string | null } | null> {
+    return this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { slug: true, customDomain: true },
     });
   }
 

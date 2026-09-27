@@ -43,13 +43,13 @@ export function ReviewsManager({ canEdit }: { canEdit: boolean }) {
 
   // Every write refreshes the cached review list.
   function refetch() {
-    queryClient.invalidateQueries({ queryKey: qk.admin("reviews") });
+    return queryClient.invalidateQueries({ queryKey: qk.admin("reviews") });
   }
 
   async function handleTogglePublished(review: Review) {
     try {
       await updateReview(review.id, { isPublished: !review.isPublished });
-      refetch();
+      await refetch();
       showToast(`Review ${!review.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update review.", "error");

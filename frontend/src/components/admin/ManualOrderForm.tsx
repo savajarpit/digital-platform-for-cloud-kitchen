@@ -16,6 +16,7 @@ import { getDeliverySlots } from "@/lib/api/delivery-slots";
 import { qk, STALE } from "@/lib/query/keys";
 import { invalidateOrderAreas } from "@/lib/query/admin-invalidation";
 import { CustomerCombobox } from "@/components/admin/CustomerCombobox";
+import { AddCustomerAddressButton } from "@/components/admin/AddCustomerAddressButton";
 import { MealCombobox } from "@/components/admin/MealCombobox";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
@@ -41,7 +42,6 @@ export function ManualOrderForm() {
   const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().slice(0, 10));
   const [slotOverride, setSlotOverride] = useState<string | null>(null);
 
-  const [couponCode, setCouponCode] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "UPI">("CASH");
   const [notes, setNotes] = useState("");
 
@@ -142,7 +142,6 @@ export function ManualOrderForm() {
         items: validRows.map((r) => ({ mealId: r.mealId, quantity: r.quantity })),
         deliveryDate,
         deliverySlotId,
-        couponCode: couponCode.trim() || undefined,
         paymentMethod,
         notes: notes.trim() || undefined,
         overrideServiceability: serviceability?.serviceable === false,
@@ -196,6 +195,12 @@ export function ManualOrderForm() {
                 </SelectContent>
               </Select>
             )}
+            <AddCustomerAddressButton
+              customerId={customer.id}
+              customerPhone={customer.phone}
+              label={addresses?.length ? "Add another address" : "Add address"}
+              onAdded={(a) => setAddressOverride(a.id)}
+            />
             {serviceability?.serviceable === false && (
               <p className="mt-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400">
                 This address is outside the configured delivery area. You can still place this
@@ -278,16 +283,6 @@ export function ManualOrderForm() {
               ))}
             </SelectContent>
           </Select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-            Coupon code (optional)
-          </label>
-          <input
-            value={couponCode}
-            onChange={(e) => setCouponCode(e.target.value)}
-            className="input"
-          />
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Payment method</label>

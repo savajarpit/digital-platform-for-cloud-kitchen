@@ -24,11 +24,23 @@ export function AddressForm({
   address,
   onSaved,
   onCancel,
+  saveAddress,
+  defaultContactPhone,
+  allowOutOfArea = false,
+  cancelLabel,
 }: {
   /** When provided, the form edits this address instead of creating a new one. */
   address?: Address;
   onSaved: (address: Address) => void;
   onCancel?: () => void;
+  /** Staff saving onto a customer's account instead of their own — replaces
+   * the signed-in user's create call and their profile-phone prefill. */
+  saveAddress?: (input: AddressInput) => Promise<Address>;
+  defaultContactPhone?: string;
+  /** Staff may save an out-of-area address (a warning, not a block) — same
+   * stance as a manual order, which can override serviceability. */
+  allowOutOfArea?: boolean;
+  cancelLabel?: string;
 }) {
   const t = useTranslations("address");
   const { showToast } = useToast();
@@ -47,9 +59,11 @@ export function AddressForm({
     queryKey: qk.profile.all,
     queryFn: getMyProfile,
     staleTime: STALE.long,
-    enabled: !address,
+    enabled: !address && !saveAddress,
   });
-  const notServiceable = serviceability?.serviceable === false;
+  const outOfArea = serviceability?.serviceable === false;
+  const notServiceable = outOfArea && !allowOutOfArea;
+  const prefillPhone = defaultContactPhone ?? profile?.phone ?? undefined;
 
   async function handleLocationPicked(picked: PickedAddress) {
     setLat(picked.lat);
@@ -98,7 +112,7 @@ export function AddressForm({
     try {
       const saved = address
         ? await updateAddress(address.id, input)
-        : await createAddress(input);
+        : await (saveAddress ?? createAddress)(input);
       showToast(isEditing ? t("updated") : t("saved"), "success");
       onSaved(saved);
     } catch (err) {
@@ -122,6 +136,11 @@ export function AddressForm({
         {!checkingServiceability && notServiceable && (
           <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-950 dark:text-red-400">
             {t("notServiceableError")}
+          </p>
+        )}
+        {!checkingServiceability && outOfArea && allowOutOfArea && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+            {t("outOfAreaWarning")}
           </p>
         )}
       </div>
@@ -163,11 +182,11 @@ export function AddressForm({
         <PhoneInput
           // Remount once the profile arrives so a new address starts with
           // the customer's signup number instead of an empty field.
-          key={address ? address.id : (profile?.phone ?? "no-profile-phone")}
+          key={address ? address.id : (prefillPhone ?? "no-profile-phone")}
           id="contactPhone"
           name="contactPhone"
           required
-          defaultValue={address?.contactPhone ?? profile?.phone ?? undefined}
+          defaultValue={address?.contactPhone ?? prefillPhone}
         />
       </div>
       <Field
@@ -211,7 +230,7 @@ export function AddressForm({
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel} className="btn-ghost">
-            {t("cancel")}
+            {cancelLabel ?? t("cancel")}
           </button>
         )}
       </div>

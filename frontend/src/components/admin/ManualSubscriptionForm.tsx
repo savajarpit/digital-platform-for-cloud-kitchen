@@ -15,6 +15,7 @@ import { qk, STALE } from "@/lib/query/keys";
 import { invalidateSubscriptionAreas } from "@/lib/query/subscription-invalidation";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { CustomerCombobox } from "@/components/admin/CustomerCombobox";
+import { AddCustomerAddressButton } from "@/components/admin/AddCustomerAddressButton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
 import { formatPriceFromPaise } from "@/lib/format/currency";
@@ -62,7 +63,6 @@ export function ManualSubscriptionForm() {
   const addressId =
     addressDraft ?? addresses?.find((a) => a.isDefault)?.id ?? addresses?.[0]?.id ?? "";
 
-  const [couponCode, setCouponCode] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "UPI">("CASH");
 
   const [submitting, setSubmitting] = useState(false);
@@ -86,7 +86,6 @@ export function ManualSubscriptionForm() {
         planId,
         addressId,
         deliverySlotId: deliverySlotId || undefined,
-        couponCode: couponCode.trim() || undefined,
         paymentMethod,
       };
       const { subscription } = await createManualSubscription(input);
@@ -138,6 +137,12 @@ export function ManualSubscriptionForm() {
                 </SelectContent>
               </Select>
             )}
+            <AddCustomerAddressButton
+              customerId={customer.id}
+              customerPhone={customer.phone}
+              label={addresses?.length ? "Add another address" : "Add address"}
+              onAdded={(a) => setAddressDraft(a.id)}
+            />
           </div>
         )}
       </div>
@@ -191,16 +196,6 @@ export function ManualSubscriptionForm() {
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              Coupon code (optional)
-            </label>
-            <input
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value)}
-              className="input"
-            />
-          </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
               Payment method

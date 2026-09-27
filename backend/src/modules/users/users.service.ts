@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { UsersRepository } from './users.repository';
+import { CustomerInviteService } from './customer-invite.service';
 import { PaginationService } from '../../common/services/pagination.service';
 import { HashUtil } from '../../common/utils/hash.util';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -20,6 +21,7 @@ export class UsersService {
   constructor(
     private readonly usersRepo: UsersRepository,
     private readonly pagination: PaginationService,
+    private readonly invites: CustomerInviteService,
   ) {}
 
   async create(dto: CreateUserDto, tenantId: string): Promise<User> {
@@ -78,7 +80,7 @@ export class UsersService {
     // duplicate this same list of fields to drop.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { passwordHash: _passwordHash, ...safe } = customer;
-    return safe;
+    return { ...safe, invitePending: await this.invites.isPending(id) };
   }
 
   async update(

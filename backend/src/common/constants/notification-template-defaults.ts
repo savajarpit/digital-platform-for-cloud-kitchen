@@ -25,7 +25,7 @@ const LABEL = 'color:#71717a;font-size:13px;';
 /**
  * The single seed source for every email in the system — both the 7
  * platform-ops rows (SUPER_ADMIN-only, always OkaySync-branded) and the
- * default wording for the 6 customer-facing keys (SUPER_ADMIN-editable;
+ * default wording for the 7 customer-facing keys (SUPER_ADMIN-editable;
  * order-confirmation-customer/welcome/reset-password additionally have a
  * tenant-override path via TenantNotificationTemplate). `{{token}}` is
  * replaced by `renderTemplateString` at send time — see that file for the
@@ -49,8 +49,19 @@ export const PLATFORM_EMAIL_TEMPLATE_DEFAULTS: PlatformEmailTemplateDefault[] =
       description: 'Sent when a customer requests a password reset link.',
       scope: EmailTemplateScope.CUSTOMER_DEFAULT,
       subject: 'Reset your {{businessName}} password',
-      bodyHtml: `<p style="margin:0 0 16px;font-size:16px;">We got a request to reset your password.</p><p style="margin:0 0 24px;"><a href="{{resetUrl}}" style="${BTN}">Reset password</a></p><p style="margin:0;${LABEL}">This link expires in 1 hour. Didn’t request this? You can safely ignore this email.</p>`,
+      bodyHtml: `<p style="margin:0 0 16px;font-size:16px;">We got a request to reset your password.</p><p style="margin:0 0 24px;"><a href="{{resetUrl}}" style="${BTN}">Reset password</a></p><p style="margin:0;${LABEL}">This link expires in 15 minutes. Didn’t request this? You can safely ignore this email.</p>`,
       availableVars: ['resetUrl', 'businessName'],
+    },
+    {
+      key: 'account-invite',
+      name: 'Account Invite',
+      description:
+        'Sent when staff create a customer account on their behalf (e.g. a phone-in order) — lets the customer set their own password.',
+      scope: EmailTemplateScope.CUSTOMER_DEFAULT,
+      subject:
+        'Welcome to {{businessName}}, {{firstName}} — set up your account',
+      bodyHtml: `<p style="margin:0 0 16px;font-size:16px;">Hi {{firstName}},</p><p style="margin:0 0 16px;"><strong>{{businessName}}</strong> has created an account for you. Set your password to track your orders and subscriptions, save addresses, and order again in a few taps.</p><p style="margin:0 0 24px;"><a href="{{inviteUrl}}" style="${BTN}">Set your password</a></p><p style="margin:0;${LABEL}">This link expires in 7 days. Not expecting this? You can safely ignore this email.</p>`,
+      availableVars: ['firstName', 'inviteUrl', 'businessName'],
     },
     {
       key: 'otp',

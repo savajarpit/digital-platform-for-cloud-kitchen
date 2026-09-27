@@ -57,7 +57,7 @@ export function SocialLinksCard({ canEdit }: { canEdit: boolean }) {
   // Every write refreshes the cached list (the storefront footer reads the
   // same data server-side, but that is not cached here).
   function refetch() {
-    queryClient.invalidateQueries({ queryKey: qk.admin("social-links") });
+    return queryClient.invalidateQueries({ queryKey: qk.admin("social-links") });
   }
 
   const availablePlatforms = ALL_PLATFORMS.filter(
@@ -92,7 +92,7 @@ export function SocialLinksCard({ canEdit }: { canEdit: boolean }) {
   async function handleToggle(link: SocialLink) {
     try {
       await updateSocialLink(link.id, { isEnabled: !link.isEnabled });
-      refetch();
+      await refetch();
       showToast(`${PLATFORM_LABELS[link.platform]} link ${!link.isEnabled ? "enabled" : "disabled"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update social link.", "error");

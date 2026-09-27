@@ -109,6 +109,12 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     category: 'operations',
   },
   {
+    key: 'customers.manage',
+    description:
+      'Create customer accounts and add their addresses on their behalf — e.g. for a phone-in order — and (re)send them a set-password invite email',
+    category: 'operations',
+  },
+  {
     key: 'notification-templates.email.edit',
     description:
       'Edit the wording of your customer emails (order confirmation, welcome, reset-password) — only takes effect once SUPER_ADMIN has granted the Custom Notification Templates feature',

@@ -29,17 +29,17 @@ import { DeliveryDateSelectionCard } from "@/components/subscriptions-admin/Deli
 
 type Tab = "plans" | "subscribers" | "today" | "analytics" | "settings";
 const TABS: { key: Tab; label: string; icon: typeof CalendarClock }[] = [
+  { key: "analytics", label: "Analytics", icon: BarChart3 },
   { key: "plans", label: "Plans", icon: CalendarClock },
   { key: "subscribers", label: "Subscribers", icon: Users },
   { key: "today", label: "Today's Deliveries", icon: ClipboardList },
-  { key: "analytics", label: "Analytics", icon: BarChart3 },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
 export default function AdminSubscriptionsPage() {
   const canEdit = usePermission(PERMISSIONS.SUBSCRIPTIONS_MANAGE);
   const hasCustomization = useFeature("home-plans-customization");
-  const [tab, setTab] = useState<Tab>("plans");
+  const [tab, setTab] = useState<Tab>("analytics");
   const [page, setPage] = useState(1);
   const [planSearch, setPlanSearch] = useState("");
   const [creating, setCreating] = useState(false);

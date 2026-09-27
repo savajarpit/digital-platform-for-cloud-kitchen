@@ -1,18 +1,22 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Search, User, X } from "lucide-react";
+import { Check, ChevronDown, Search, User, UserPlus, X } from "lucide-react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { listCustomers, type Customer } from "@/lib/api/admin-customers";
 import { qk, STALE } from "@/lib/query/keys";
 import { ComboboxRowsSkeleton } from "@/components/ui/skeletons/ComboboxRowsSkeleton";
+import { CreateCustomerDialog } from "@/components/admin/CreateCustomerDialog";
+import { usePermission } from "@/context/PermissionsContext";
+import { PERMISSIONS } from "@/lib/constants/permissions";
 
 const PAGE_SIZE = 15;
 
-/** A debounced, server-searched customer picker for the manual-order form —
- * same shape as MealCombobox (search-as-you-type, infinite scroll), but for
- * existing customer accounts. Manual order creation is deliberately scoped
- * to existing customers only; a walk-in with no account isn't supported yet. */
+/** A debounced, server-searched customer picker for the manual order/
+ * subscription forms — same shape as MealCombobox (search-as-you-type,
+ * infinite scroll). Staff with `customers.manage` can also create a new
+ * customer right from the dropdown (phone-in orders); it's selected as soon
+ * as it's created. */
 export function CustomerCombobox({
   value,
   onChange,
@@ -20,7 +24,9 @@ export function CustomerCombobox({
   value: Customer | null;
   onChange: (customer: Customer | null) => void;
 }) {
+  const canCreate = usePermission(PERMISSIONS.CUSTOMERS_MANAGE);
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -79,7 +85,9 @@ export function CustomerCombobox({
       >
         <User className="h-4 w-4 shrink-0 text-zinc-400" />
         <span className="min-w-0 flex-1 truncate">
-          {value ? `${value.firstName} ${value.lastName ?? ""} — ${value.email}` : "Search customer by name or email…"}
+          {value
+            ? `${value.firstName} ${value.lastName ?? ""} — ${value.email}`
+            : "Search customer by name, email or phone…"}
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
       </button>
@@ -117,7 +125,7 @@ export function CustomerCombobox({
                 key={customer.id}
                 type="button"
                 onClick={() => handleSelect(customer)}
-                className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-primary-50 dark:hover:bg-primary-950 ${
+                className={`flex w-full cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-primary-50 dark:hover:bg-primary-950 ${
                   value?.id === customer.id ? "bg-primary-50 dark:bg-primary-950" : ""
                 }`}
               >
@@ -125,7 +133,10 @@ export function CustomerCombobox({
                   <p className="truncate text-zinc-700 dark:text-zinc-300">
                     {customer.firstName} {customer.lastName ?? ""}
                   </p>
-                  <p className="truncate text-xs text-zinc-400">{customer.email}</p>
+                  <p className="truncate text-xs text-zinc-400">
+                    {customer.email}
+                    {customer.phone ? ` · ${customer.phone}` : ""}
+                  </p>
                 </div>
                 {value?.id === customer.id && <Check className="h-3.5 w-3.5 shrink-0 text-primary-600" />}
               </button>
@@ -138,13 +149,38 @@ export function CustomerCombobox({
                 type="button"
                 onClick={loadMore}
                 disabled={loading}
-                className="w-full px-2 py-2 text-center text-xs font-medium text-primary-600 hover:underline"
+                className="w-full cursor-pointer px-2 py-2 text-center text-xs font-medium text-primary-600 hover:underline"
               >
                 {loading ? "Loading…" : "Load more"}
               </button>
             )}
           </div>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => {
+                setCreating(search);
+                setOpen(false);
+              }}
+              className="flex w-full cursor-pointer items-center gap-2 border-t border-zinc-100 px-3 py-2.5 text-left text-sm font-medium text-primary-600 hover:bg-primary-50 dark:border-zinc-800 dark:hover:bg-primary-950"
+            >
+              <UserPlus className="h-4 w-4 shrink-0" />
+              <span className="truncate">{search.trim() ? `Create new customer "${search.trim()}"` : "Create new customer"}</span>
+            </button>
+          )}
         </div>
+      )}
+
+      {creating !== null && (
+        <CreateCustomerDialog
+          open
+          initialSearch={creating}
+          onClose={() => setCreating(null)}
+          onCreated={(customer) => {
+            setSearch("");
+            onChange(customer);
+          }}
+        />
       )}
     </div>
   );

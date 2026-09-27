@@ -85,7 +85,7 @@ export function PlansTab({
     : null;
 
   function refetch() {
-    void invalidateSubscriptionAreas(queryClient);
+    return invalidateSubscriptionAreas(queryClient);
   }
 
   function handleDelete(plan: Plan) {
@@ -109,7 +109,7 @@ export function PlansTab({
   async function handleTogglePublish(plan: Plan) {
     try {
       await publishPlan(plan.id, !plan.isPublished);
-      refetch();
+      await refetch();
       showToast(`Plan ${!plan.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update plan.", "error");

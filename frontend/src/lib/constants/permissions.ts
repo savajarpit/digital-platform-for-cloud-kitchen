@@ -19,6 +19,7 @@ export const PERMISSIONS = {
   STAFF_MANAGE: "staff.manage",
   PROMOTIONS_MANAGE: "promotions.manage",
   CUSTOMERS_VIEW: "customers.view",
+  CUSTOMERS_MANAGE: "customers.manage",
   NOTIFICATION_TEMPLATES_EMAIL_EDIT: "notification-templates.email.edit",
   NOTIFICATION_TEMPLATES_WHATSAPP_EDIT: "notification-templates.whatsapp.edit",
   DINE_IN_MANAGE: "dine-in.manage",

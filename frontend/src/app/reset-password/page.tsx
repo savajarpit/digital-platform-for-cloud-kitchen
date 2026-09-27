@@ -19,7 +19,11 @@ function ResetPasswordForm() {
   const t = useTranslations("auth");
   const router = useRouter();
   const { showToast } = useToast();
-  const token = useSearchParams().get("token");
+  const searchParams = useSearchParams();
+  const token = searchParams.get("token");
+  // Admin-sent account invite — same token flow, first-time wording.
+  const isInvite = searchParams.get("invite") === "1";
+  const successMessage = isInvite ? t("setPasswordSuccess") : t("resetSuccess");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -39,7 +43,7 @@ function ResetPasswordForm() {
     setIsSubmitting(true);
     try {
       await resetPassword(token, newPassword);
-      showToast(t("resetSuccess"), "success");
+      showToast(successMessage, "success");
       setSuccess(true);
       setTimeout(() => router.push("/login"), 2000);
     } catch (err) {
@@ -53,13 +57,16 @@ function ResetPasswordForm() {
     <main className="flex flex-1 items-center justify-center px-4 py-16 sm:px-6">
       <div className="card w-full max-w-md p-8">
         <h1 className="font-display text-xl font-bold text-zinc-900 dark:text-zinc-100">
-          {t("resetPasswordTitle")}
+          {isInvite ? t("setPasswordTitle") : t("resetPasswordTitle")}
         </h1>
+        {isInvite && token && !success && (
+          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{t("setPasswordIntro")}</p>
+        )}
 
         {!token ? (
           <p className="mt-6 text-sm text-red-600 dark:text-red-400">{t("invalidResetLink")}</p>
         ) : success ? (
-          <p className="mt-6 text-sm text-primary-700 dark:text-primary-400">{t("resetSuccess")}</p>
+          <p className="mt-6 text-sm text-primary-700 dark:text-primary-400">{successMessage}</p>
         ) : (
           <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
             <FormField
@@ -81,8 +88,8 @@ function ResetPasswordForm() {
               autoComplete="new-password"
             />
 
-            <button type="submit" disabled={isSubmitting} className="btn-primary mt-2">
-              {isSubmitting ? t("resetting") : t("resetPassword")}
+            <button type="submit" disabled={isSubmitting} className="btn-primary mt-2 cursor-pointer">
+              {isSubmitting ? t("resetting") : isInvite ? t("setPassword") : t("resetPassword")}
             </button>
           </form>
         )}

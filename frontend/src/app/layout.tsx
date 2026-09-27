@@ -137,9 +137,12 @@ export default async function RootLayout({
   const isAdmin = role === "SUPER_ADMIN" || role === "OWNER" || role === "STAFF";
 
   return (
+    // THEME_INIT_SCRIPT adds "dark"/"light" to <html> before hydration by
+    // design; this only silences that element's own attribute mismatch.
     <html
       lang={locale}
       className={`${displaySans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <head>
         {/* Per-tenant brand colors — server-rendered so there is never a

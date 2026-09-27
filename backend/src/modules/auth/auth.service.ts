@@ -18,6 +18,12 @@ import { RedisService } from '../../shared-modules/cache/redis.service';
 import { HashUtil } from '../../common/utils/hash.util';
 import { CryptoUtil } from '../../common/utils/crypto.util';
 import { withTimeout } from '../../common/utils/with-timeout.util';
+import { buildStorefrontOrigin } from '../../common/utils/storefront-url.util';
+import {
+  ACCOUNT_INVITE_KEY_PREFIX,
+  ACCOUNT_INVITE_USER_KEY_PREFIX,
+  PASSWORD_RESET_KEY_PREFIX,
+} from '../../common/constants/auth-token.constant';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -244,16 +250,17 @@ export class AuthService {
 
     const token = CryptoUtil.generateToken(32);
     await this.redis.set(
-      `password-reset:${token}`,
+      `${PASSWORD_RESET_KEY_PREFIX}${token}`,
       { userId: user.id },
       PASSWORD_RESET_TTL_SECONDS,
     );
 
-    const resetUrl = `${this.config.get<string>('app.frontendUrl')}/reset-password?token=${token}`;
+    const resetUrl = `${await this.resetLinkOrigin(user.role, user.tenantId)}/reset-password?token=${token}`;
     const job: ResetPasswordEmailJob = {
       email: user.email,
       tenantId: user.tenantId,
       resetUrl,
+      recipientRole: user.role,
     };
     await withTimeout(
       this.mailQueue.add('send-reset-password', job, {
@@ -267,8 +274,13 @@ export class AuthService {
     );
   }
 
+  /** Consumes either a forgot-password token or an admin-sent account
+   * invite (CustomerInviteService) — an invite is just a longer-lived,
+   * welcome-worded reset. Both are single-use. */
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
-    const key = `password-reset:${dto.token}`;
+    const resetKey = `${PASSWORD_RESET_KEY_PREFIX}${dto.token}`;
+    const inviteKey = `${ACCOUNT_INVITE_KEY_PREFIX}${dto.token}`;
+    const key = (await this.redis.exists(resetKey)) ? resetKey : inviteKey;
     const stored = await this.redis.get<{ userId: string }>(key);
     if (!stored) {
       throw new UnauthorizedException('Invalid or expired reset link.');
@@ -277,6 +289,22 @@ export class AuthService {
     const passwordHash = await HashUtil.hash(dto.newPassword);
     await this.usersRepo.update(stored.userId, { passwordHash });
     await this.redis.del(key);
+    if (key === inviteKey) {
+      await this.redis.del(`${ACCOUNT_INVITE_USER_KEY_PREFIX}${stored.userId}`);
+    }
+  }
+
+  /** Customers/staff must land on their kitchen's own storefront (where
+   * they log in); SUPER_ADMIN has no storefront and uses FRONTEND_URL. */
+  private async resetLinkOrigin(role: Role, tenantId: string): Promise<string> {
+    const frontendUrl = this.config.get<string>('app.frontendUrl')!;
+    if (role === Role.SUPER_ADMIN) return frontendUrl;
+    const tenant = await this.usersRepo.findTenantDomain(tenantId);
+    if (!tenant) return frontendUrl;
+    return buildStorefrontOrigin(tenant, {
+      platformRootDomain: this.config.get<string>('app.platformRootDomain'),
+      frontendUrl,
+    });
   }
 
   async refreshTokens(userId: string): Promise<AuthTokens> {

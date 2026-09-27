@@ -2,15 +2,22 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight, UserPlus, Users } from "lucide-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { listCustomers } from "@/lib/api/admin-customers";
 import { qk, STALE } from "@/lib/query/keys";
 import { TableSkeleton } from "@/components/ui/skeletons/TableSkeleton";
 import { TableRowsSkeleton } from "@/components/ui/skeletons/TableRowsSkeleton";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { CreateCustomerDialog } from "@/components/admin/CreateCustomerDialog";
+import { usePermission } from "@/context/PermissionsContext";
+import { PERMISSIONS } from "@/lib/constants/permissions";
 
 export default function CustomersPage() {
+  const router = useRouter();
+  const canCreate = usePermission(PERMISSIONS.CUSTOMERS_MANAGE);
+  const [creating, setCreating] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -32,13 +39,29 @@ export default function CustomersPage() {
             Customers
           </h2>
         </div>
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search name or email"
-          className="w-full sm:w-64"
-        />
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search name, email or phone"
+            className="w-full sm:w-64"
+          />
+          {canCreate && (
+            <button type="button" onClick={() => setCreating(true)} className="btn-primary btn-sm cursor-pointer">
+              <UserPlus className="h-4 w-4" />
+              Add customer
+            </button>
+          )}
+        </div>
       </div>
+
+      {creating && (
+        <CreateCustomerDialog
+          open
+          onClose={() => setCreating(false)}
+          onCreated={(customer) => router.push(`/admin/customers/${customer.id}`)}
+        />
+      )}
 
       <CustomersTable page={page} search={debouncedSearch} onPageChange={setPage} />
     </div>

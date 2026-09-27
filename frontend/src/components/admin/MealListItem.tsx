@@ -16,7 +16,7 @@ export function MealListItem({
   meal: Meal;
   categories: Category[];
   canEdit: boolean;
-  onToggleAvailable: () => void;
+  onToggleAvailable: () => Promise<unknown>;
   onEdit: () => void;
   onDelete: () => void;
 }) {

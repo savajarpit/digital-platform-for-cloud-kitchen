@@ -4,14 +4,16 @@ import { PlatformEmailTemplateService } from './platform-email-template.service'
 import { renderTemplateString } from './template-renderer.util';
 import { FeaturesService } from '../../modules/features/features.service';
 
-/** The only 3 keys a tenant may ever override — order confirmation
- * (customer copy), welcome, and reset-password. OTP and the owner-copy/
- * subscription-disruption emails are never in this list, on purpose:
- * OTP is security-critical, the others are internal-facing. */
+/** The only keys a tenant may ever override — order confirmation
+ * (customer copy), welcome, reset-password, and the staff-sent account
+ * invite. OTP and the owner-copy/subscription-disruption emails are never
+ * in this list, on purpose: OTP is security-critical, the others are
+ * internal-facing. */
 export const TENANT_EDITABLE_EMAIL_KEYS = [
   'order-confirmation-customer',
   'welcome',
   'reset-password',
+  'account-invite',
 ] as const;
 
 const CUSTOM_TEMPLATES_FEATURE_KEY = 'custom-notification-templates';

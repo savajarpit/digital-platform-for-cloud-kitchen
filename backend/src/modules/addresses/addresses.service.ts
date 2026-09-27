@@ -38,10 +38,7 @@ export class AddressesService {
     tenantId: string,
     userId: string,
   ): Promise<(Address & { serviceable: boolean })[]> {
-    const addresses = await this.addressesRepo.findAllForUser(
-      tenantId,
-      userId,
-    );
+    const addresses = await this.addressesRepo.findAllForUser(tenantId, userId);
     return Promise.all(
       addresses.map(async (address) => {
         const result = await this.checkServiceability(tenantId, {
@@ -74,6 +71,19 @@ export class AddressesService {
       lat: dto.lat,
       lng: dto.lng,
     });
+    return this.createOnBehalf(tenantId, userId, dto);
+  }
+
+  /** Staff saving an address for a customer (phone-in order). No
+   * serviceability gate — same stance as a manual order, which may override
+   * it: the admin is vouching, and the manual forms already warn when the
+   * address is outside the delivery area. Caller must have already checked
+   * userId is a customer of this tenant. */
+  async createOnBehalf(
+    tenantId: string,
+    userId: string,
+    dto: CreateAddressDto,
+  ): Promise<Address> {
     if (dto.isDefault) {
       await this.addressesRepo.clearDefaultForUser(tenantId, userId);
     }

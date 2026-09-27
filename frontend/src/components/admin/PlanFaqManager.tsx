@@ -34,13 +34,13 @@ export function PlanFaqManager({ canEdit }: { canEdit: boolean }) {
 
   // Every write refreshes the cached FAQ list.
   function refetch() {
-    queryClient.invalidateQueries({ queryKey: qk.admin("plan", "faqs") });
+    return queryClient.invalidateQueries({ queryKey: qk.admin("plan", "faqs") });
   }
 
   async function handleTogglePublished(faq: PlanFaq) {
     try {
       await updatePlanFaq(faq.id, { isPublished: !faq.isPublished });
-      refetch();
+      await refetch();
       showToast(`FAQ ${!faq.isPublished ? "published" : "unpublished"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update FAQ.", "error");

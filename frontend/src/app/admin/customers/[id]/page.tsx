@@ -10,6 +10,8 @@ import { CustomerDetailSkeleton } from "@/components/admin/CustomerDetailSkeleto
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MapLink } from "@/components/ui/MapLink";
 import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
+import { CustomerInviteStatus } from "@/components/admin/CustomerInviteStatus";
+import { AddCustomerAddressButton } from "@/components/admin/AddCustomerAddressButton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 
 const ORDER_STATUS_STYLES: Record<string, string> = {
@@ -100,13 +102,21 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
               Verified {new Date(customer.verifiedAt).toLocaleDateString()}
             </p>
           )}
+          <CustomerInviteStatus
+            customerId={customer.id}
+            email={customer.email}
+            invitePending={customer.invitePending}
+          />
         </div>
 
         <div className="card flex flex-col gap-3 p-6 lg:col-span-2">
-          <h3 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            <MapPin className="h-4 w-4" />
-            Addresses
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              <MapPin className="h-4 w-4" />
+              Addresses
+            </h3>
+            <AddCustomerAddressButton customerId={customer.id} customerPhone={customer.phone} />
+          </div>
           {customer.addresses.length === 0 ? (
             <EmptyState compact title="No saved addresses." />
           ) : (

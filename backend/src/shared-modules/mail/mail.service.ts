@@ -3,10 +3,16 @@ import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { PlatformEmailTemplateService } from '../notification-templates/platform-email-template.service';
-import { renderEmailShell } from '../email-layout/email-layout.util';
+import { TenantNotificationTemplateService } from '../notification-templates/tenant-notification-template.service';
+import { EmailProviderFactory } from '../../modules/notifications/providers/email/email-provider.factory';
+import {
+  escapeHtml,
+  renderEmailShell,
+} from '../email-layout/email-layout.util';
 import { getTenantEmailBranding } from '../email-layout/tenant-branding.util';
 import { WelcomeTemplateData } from './templates/welcome.template';
 import { ResetPasswordTemplateData } from './templates/reset-password.template';
+import { AccountInviteTemplateData } from './templates/account-invite.template';
 import { PlatformActivationInviteTemplateData } from './templates/platform-activation-invite.template';
 import { PlatformInvoiceTemplateData } from './templates/platform-invoice.template';
 import { PlatformPaymentFailedTemplateData } from './templates/platform-payment-failed.template';
@@ -16,6 +22,16 @@ import { PlatformWebhookFailedTemplateData } from './templates/platform-webhook-
 import { PlatformCancellationRequestTemplateData } from './templates/platform-cancellation-request.template';
 
 const OKAYSYNC_BRAND = 'OkaySync';
+
+/** Who a tenant-branded email is for, which decides who sends it:
+ * - TENANT_USER (the tenant's customers, later staff): the tenant's own
+ *   email + the tenant's template override, falling back to the platform
+ *   SMTP/default wording when the tenant hasn't set those up.
+ * - TENANT_ADMIN (OWNER, SUPER_ADMIN): the platform talking to the
+ *   business — platform SMTP and platform wording, always. */
+type Audience = 'TENANT_USER' | 'TENANT_ADMIN';
+
+const TENANT_ADMIN_ROLES = new Set(['OWNER', 'SUPER_ADMIN']);
 
 @Injectable()
 export class MailService {
@@ -28,6 +44,8 @@ export class MailService {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly templates: PlatformEmailTemplateService,
+    private readonly tenantTemplates: TenantNotificationTemplateService,
+    private readonly emailFactory: EmailProviderFactory,
   ) {
     this.fromAddress = this.config.get<string>('mail.fromAddress') as string;
     this.fromName = this.config.get<string>('mail.fromName') as string;
@@ -74,12 +92,25 @@ export class MailService {
     tenantId: string,
     key: string,
     data: Record<string, string>,
+    audience: Audience,
   ): Promise<void> {
     const branding = await getTenantEmailBranding(this.prisma, tenantId);
-    const { subject, html: innerHtml } = await this.templates.render(key, {
-      ...data,
-      businessName: branding.businessName,
-    });
+    const raw = { ...data, businessName: branding.businessName };
+    // Every value here is plain text, much of it customer-typed (their
+    // name) — escape it for the HTML body so nobody can inject markup or
+    // phishing links into a kitchen-branded email. The subject is a plain
+    // text header, so it keeps the raw values ("Tom & Jerry", not "&amp;").
+    const escaped = Object.fromEntries(
+      Object.entries(raw).map(([k, v]) => [k, escapeHtml(v)]),
+    );
+    const render = (values: Record<string, string>) =>
+      audience === 'TENANT_USER'
+        ? this.tenantTemplates.renderEmail(tenantId, key, values)
+        : this.templates.render(key, values);
+    const [{ subject }, { html: innerHtml }] = await Promise.all([
+      render(raw),
+      render(escaped),
+    ]);
     const html = renderEmailShell({
       brandName: branding.businessName,
       brandLogoUrl: branding.logoUrl,
@@ -87,7 +118,30 @@ export class MailService {
       ownerLine: branding.businessName,
       showPoweredBy: branding.showPoweredBy,
     });
+    if (audience === 'TENANT_USER') {
+      await this.sendFromTenant(tenantId, to, subject, html);
+      return;
+    }
     await this.send(to, subject, html);
+  }
+
+  /** Same sender rule as order confirmations: the tenant's own configured
+   * email, else the platform SMTP so the email still goes out. */
+  private async sendFromTenant(
+    tenantId: string,
+    to: string,
+    subject: string,
+    html: string,
+  ): Promise<void> {
+    const settings = await this.prisma.notificationSettings.findUnique({
+      where: { tenantId },
+    });
+    const provider = settings ? this.emailFactory.create(settings) : null;
+    if (!provider) {
+      await this.send(to, subject, html);
+      return;
+    }
+    await provider.sendMail({ to, subject, html });
   }
 
   private async sendPlatformOps(
@@ -110,19 +164,44 @@ export class MailService {
     tenantId: string,
     data: WelcomeTemplateData,
   ): Promise<void> {
-    await this.sendCustomerFacing(to, tenantId, 'welcome', {
-      firstName: data.firstName,
-    });
+    await this.sendCustomerFacing(
+      to,
+      tenantId,
+      'welcome',
+      { firstName: data.firstName },
+      'TENANT_USER',
+    );
   }
 
   async sendResetPassword(
     to: string,
     tenantId: string,
     data: ResetPasswordTemplateData,
+    recipientRole?: string,
   ): Promise<void> {
-    await this.sendCustomerFacing(to, tenantId, 'reset-password', {
-      resetUrl: data.resetUrl,
-    });
+    await this.sendCustomerFacing(
+      to,
+      tenantId,
+      'reset-password',
+      { resetUrl: data.resetUrl },
+      recipientRole && TENANT_ADMIN_ROLES.has(recipientRole)
+        ? 'TENANT_ADMIN'
+        : 'TENANT_USER',
+    );
+  }
+
+  async sendAccountInvite(
+    to: string,
+    tenantId: string,
+    data: AccountInviteTemplateData,
+  ): Promise<void> {
+    await this.sendCustomerFacing(
+      to,
+      tenantId,
+      'account-invite',
+      { firstName: data.firstName, inviteUrl: data.inviteUrl },
+      'TENANT_USER',
+    );
   }
 
   async sendPlatformActivationInvite(

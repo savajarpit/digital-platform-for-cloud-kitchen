@@ -34,7 +34,7 @@ export function HomeSectionsManager({ canEdit }: { canEdit: boolean }) {
 
   // Every write refreshes the cached section list.
   function refetch() {
-    queryClient.invalidateQueries({ queryKey: qk.admin("home", "sections") });
+    return queryClient.invalidateQueries({ queryKey: qk.admin("home", "sections") });
   }
 
   async function handleCreate() {
@@ -53,7 +53,7 @@ export function HomeSectionsManager({ canEdit }: { canEdit: boolean }) {
   async function handleToggleEnabled(section: HomeSection) {
     try {
       await updateHomeSection(section.id, { isEnabled: !section.isEnabled });
-      refetch();
+      await refetch();
       showToast(`Section ${!section.isEnabled ? "enabled" : "disabled"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update section.", "error");

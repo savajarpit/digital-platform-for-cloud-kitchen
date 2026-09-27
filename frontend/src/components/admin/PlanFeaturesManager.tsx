@@ -34,13 +34,13 @@ export function PlanFeaturesManager({ canEdit }: { canEdit: boolean }) {
 
   // Every write refreshes the cached feature-card list.
   function refetch() {
-    queryClient.invalidateQueries({ queryKey: qk.admin("plan", "features") });
+    return queryClient.invalidateQueries({ queryKey: qk.admin("plan", "features") });
   }
 
   async function handleToggleEnabled(feature: PlanFeature) {
     try {
       await updatePlanFeature(feature.id, { isEnabled: !feature.isEnabled });
-      refetch();
+      await refetch();
       showToast(`Card ${!feature.isEnabled ? "enabled" : "disabled"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update feature.", "error");

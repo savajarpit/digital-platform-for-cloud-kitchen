@@ -80,13 +80,13 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
   const showSkeleton = isPlaceholderData && (editingId === null || editingId === "new");
 
   function refetch() {
-    void invalidateMenuAreas(queryClient);
+    return invalidateMenuAreas(queryClient);
   }
 
   async function handleToggleAvailable(meal: Meal) {
     try {
       await updateMeal(meal.id, { isAvailable: !meal.isAvailable });
-      refetch();
+      await refetch();
       showToast(`Meal marked ${!meal.isAvailable ? "available" : "unavailable"}`, "success");
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update meal.", "error");

@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -8,6 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { SubscriptionPlanViewMode } from '../../../generated/prisma';
 
 export class UpdateSubscriptionSettingsDto {
   @ApiPropertyOptional({
@@ -136,4 +138,43 @@ export class UpdateSubscriptionSettingsDto {
   @IsString()
   @MaxLength(120)
   contactEmail?: string;
+
+  @ApiPropertyOptional({
+    enum: SubscriptionPlanViewMode,
+    example: SubscriptionPlanViewMode.BOTH,
+    description:
+      'How a plan\'s menu is shown on the storefront. CALENDAR/BOTH require the "plan-calendar-view" feature.',
+  })
+  @IsOptional()
+  @IsEnum(SubscriptionPlanViewMode)
+  planViewMode?: SubscriptionPlanViewMode;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'Let customers choose their own delivery dates before checkout. Requires the "delivery-date-selection" feature.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  dateSelectionEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    example: 7,
+    description:
+      'Extra days beyond the plan length that customers may pick delivery dates from',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(60)
+  selectionFlexibilityDays?: number;
+
+  @ApiPropertyOptional({
+    example: false,
+    description:
+      'Let subscribers move an upcoming delivery to another date after purchase (skip and address changes are always allowed)',
+  })
+  @IsOptional()
+  @IsBoolean()
+  allowDateChangeAfterPurchase?: boolean;
 }

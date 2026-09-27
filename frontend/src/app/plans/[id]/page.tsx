@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Clock, Tag } from "lucide-react";
+import { CalendarClock, Clock } from "lucide-react";
 import {
   ApiError,
   getPlan,
@@ -21,16 +21,18 @@ import { useAddresses } from "@/lib/query/addresses";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { PlanDaysPreview } from "@/components/subscriptions/PlanDaysPreview";
-import {
-  PlanDetailSkeleton,
-  PlanPurchaseFieldsSkeleton,
-} from "@/components/subscriptions/PlanDetailSkeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
-import { formatPriceFromPaise } from "@/lib/format/currency";
-import { formatTime12h } from "@/lib/format/time";
+import { PlanMenuView } from "@/components/subscriptions/PlanMenuView";
+import { DeliveryDateSelector } from "@/components/subscriptions/DeliveryDateSelector";
+import { PlanPurchasePanel } from "@/components/subscriptions/PlanPurchasePanel";
+import { PlanCheckoutBar } from "@/components/subscriptions/PlanCheckoutBar";
+import { initialSelection } from "@/lib/plan-calendar/date-selection";
+import { PlanDetailSkeleton } from "@/components/subscriptions/PlanDetailSkeleton";
 
-export default function PlanDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function PlanDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = use(params);
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -65,6 +67,12 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
   const [selectedSlotId, setSelectedSlotId] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [isSubscribing, setIsSubscribing] = useState(false);
+  // Keyed by plan so a pick never leaks into another plan this page is
+  // reused for; absent = untouched, i.e. the default first-N dates.
+  const [picked, setPicked] = useState<{
+    planId: string;
+    dates: string[];
+  } | null>(null);
 
   useEffect(() => {
     if (subscriptionsEnabled === false) router.replace("/");
@@ -72,21 +80,35 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
 
   // undefined = loading, null = logged out, [] = none saved.
   const addressesUnauthorized =
-    addressesQuery.error instanceof ApiError && addressesQuery.error.status === 401;
+    addressesQuery.error instanceof ApiError &&
+    addressesQuery.error.status === 401;
   const addresses: Address[] | null | undefined =
     addressesQuery.data ??
     (addressesQuery.isPending ? undefined : addressesUnauthorized ? null : []);
   // Derived, not stored: the customer's pick if it's still valid, otherwise
   // the default (or first) serviceable address.
   const serviceableAddresses = (addresses ?? []).filter((a) => a.serviceable);
-  const selectedAddressId = serviceableAddresses.some((a) => a.id === addressChoice)
+  const selectedAddressId = serviceableAddresses.some(
+    (a) => a.id === addressChoice,
+  )
     ? addressChoice
-    : (serviceableAddresses.find((a) => a.isDefault) ?? serviceableAddresses[0])?.id ?? "";
+    : ((
+        serviceableAddresses.find((a) => a.isDefault) ?? serviceableAddresses[0]
+      )?.id ?? "");
 
   const deliverySlots = slotsConfig?.slots ?? [];
   const hasActiveForThisPlan = Boolean(
     mySubscriptions?.some((s) => s.planId === id && s.status === "ACTIVE"),
   );
+  const dateSelection = plan?.dateSelection ?? null;
+  const chosenDates = dateSelection
+    ? picked?.planId === id
+      ? picked.dates
+      : initialSelection(dateSelection.candidates, dateSelection.requiredCount)
+    : null;
+  const datesMissing = dateSelection
+    ? dateSelection.requiredCount - (chosenDates?.length ?? 0)
+    : 0;
 
   function handleSubscribeClick() {
     if (hasActiveForThisPlan) {
@@ -103,15 +125,17 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   async function doSubscribe() {
-    if (!plan || !selectedAddressId) return;
+    if (!plan || !selectedAddressId || datesMissing > 0) return;
     setIsSubscribing(true);
     try {
-      const { subscriptionId, razorpayOrderId, razorpayKeyId, amountInPaise } = await subscribe({
-        planId: plan.id,
-        addressId: selectedAddressId,
-        couponCode: couponCode || undefined,
-        deliverySlotId: selectedSlotId || undefined,
-      });
+      const { subscriptionId, razorpayOrderId, razorpayKeyId, amountInPaise } =
+        await subscribe({
+          planId: plan.id,
+          addressId: selectedAddressId,
+          couponCode: couponCode || undefined,
+          deliverySlotId: selectedSlotId || undefined,
+          deliveryDates: chosenDates ?? undefined,
+        });
       // A pending subscription now exists.
       void queryClient.invalidateQueries({ queryKey: qk.subscriptions.all });
 
@@ -131,11 +155,18 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
           })
             .then(() => {
               // Activation flips the subscription to ACTIVE and can schedule orders.
-              void queryClient.invalidateQueries({ queryKey: qk.subscriptions.all });
+              void queryClient.invalidateQueries({
+                queryKey: qk.subscriptions.all,
+              });
               void queryClient.invalidateQueries({ queryKey: qk.orders.all });
               router.push(`/account/subscriptions/${subscriptionId}`);
             })
-            .catch(() => showToast("Payment succeeded but activation failed — contact support.", "error"));
+            .catch(() =>
+              showToast(
+                "Payment succeeded but activation failed — contact support.",
+                "error",
+              ),
+            );
         },
         modal: {
           ondismiss: () => showToast("Payment cancelled.", "error"),
@@ -143,7 +174,10 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
       });
       razorpay.open();
     } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't start subscription.", "error");
+      showToast(
+        err instanceof ApiError ? err.message : "Couldn't start subscription.",
+        "error",
+      );
     } finally {
       setIsSubscribing(false);
     }
@@ -166,134 +200,67 @@ export default function PlanDetailPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const discountPercentage = plan.activePromotion?.discountPercentage ?? 0;
-  const discountedPriceInPaise =
-    discountPercentage > 0
-      ? plan.priceInPaise - Math.floor((plan.priceInPaise * discountPercentage) / 100)
-      : plan.priceInPaise;
+  const checkout = (
+    <PlanPurchasePanel
+      plan={plan}
+      addresses={addresses}
+      selectedAddressId={selectedAddressId}
+      onAddressChange={setAddressChoice}
+      deliverySlots={deliverySlots}
+      selectedSlotId={selectedSlotId}
+      onSlotChange={setSelectedSlotId}
+      couponCode={couponCode}
+      onCouponChange={setCouponCode}
+      hasActiveForThisPlan={hasActiveForThisPlan}
+      datesMissing={datesMissing}
+      isSubscribing={isSubscribing}
+      onSubscribeClick={handleSubscribeClick}
+    />
+  );
 
   return (
-    <main className="container-app flex-1 py-12">
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_22rem]">
-        <div>
-          <h1 className="font-display text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-            {plan.name}
-          </h1>
-          {plan.description && (
-            <p className="mt-3 text-base text-zinc-600 dark:text-zinc-400">{plan.description}</p>
-          )}
-          <div className="mt-4 flex items-center gap-4 text-sm text-zinc-500 dark:text-zinc-400">
-            <span className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4" />
-              {plan.durationDays} days
-            </span>
-            <span className="flex items-center gap-1.5">
-              <CalendarClock className="h-4 w-4" />
-              Delivered daily to your address
-            </span>
-          </div>
-
-          <PlanDaysPreview plan={plan} />
-        </div>
-
-        <div className="card sticky top-24 flex h-fit flex-col gap-4 p-6">
-          <div className="flex items-baseline gap-2">
-            {discountPercentage > 0 && (
-              <span className="text-lg text-zinc-400 line-through dark:text-zinc-500">
-                {formatPriceFromPaise(plan.priceInPaise)}
-              </span>
-            )}
-            <p className="font-display text-3xl font-bold text-primary-600">
-              {formatPriceFromPaise(discountedPriceInPaise)}
-            </p>
-            {discountPercentage > 0 && (
-              <span className="badge bg-red-600 text-white">{discountPercentage}% off</span>
-            )}
-          </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            One-time payment for the full {plan.durationDays}-day plan.
-          </p>
-
-          {addresses === undefined ? (
-            <PlanPurchaseFieldsSkeleton />
-          ) : addresses === null ? (
-            <Link href={`/login?redirect=/plans/${plan.id}`} className="btn-primary w-full text-center">
-              Log in to subscribe
-            </Link>
-          ) : addresses.length === 0 ? (
-            <Link href="/account/addresses" className="btn-primary w-full text-center">
-              Add a delivery address first
-            </Link>
-          ) : (
-            <>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  Deliver to
-                </label>
-                <Select value={selectedAddressId} onValueChange={setAddressChoice}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {addresses.map((addr) => (
-                      <SelectItem key={addr.id} value={addr.id} disabled={!addr.serviceable}>
-                        {addr.label ? `${addr.label} — ` : ""}
-                        {addr.line1}, {addr.city}
-                        {!addr.serviceable ? " (not deliverable)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {plan.timeSelectionEnabled && deliverySlots.length > 0 && (
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                    Delivery time (every day, unless changed later)
-                  </label>
-                  <Select value={selectedSlotId} onValueChange={setSelectedSlotId}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">No preference</SelectItem>
-                      {deliverySlots.map((slot) => (
-                        <SelectItem key={slot.id} value={slot.id}>
-                          {slot.name} ({formatTime12h(slot.startTime)}–{formatTime12h(slot.endTime)})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="flex flex-col gap-1">
-                <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  <Tag className="h-3.5 w-3.5" />
-                  Coupon code (optional)
-                </label>
-                <input
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  placeholder="FIRSTMONTH20"
-                  className="input"
-                />
-              </div>
-              {hasActiveForThisPlan && (
-                <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-                  You already have an active subscription to this plan.
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={handleSubscribeClick}
-                disabled={isSubscribing || !selectedAddressId}
-                className="btn-primary w-full"
-              >
-                {isSubscribing ? "Starting…" : "Subscribe & Pay"}
-              </button>
-            </>
-          )}
-        </div>
+    // Bottom padding below lg leaves room for the pinned checkout bar.
+    <main className="container-app flex-1 pt-8 pb-28 sm:pt-12 lg:pb-12">
+      <h1 className="font-display text-2xl font-bold text-zinc-900 sm:text-3xl dark:text-zinc-100">
+        {plan.name}
+      </h1>
+      {plan.description && (
+        <p className="mt-3 text-base text-zinc-600 dark:text-zinc-400">
+          {plan.description}
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">
+        <span className="flex items-center gap-1.5">
+          <Clock className="h-4 w-4" />
+          {plan.durationDays} days
+        </span>
+        <span className="flex items-center gap-1.5">
+          <CalendarClock className="h-4 w-4" />
+          Delivered daily to your address
+        </span>
       </div>
+
+      <div className="mt-6 sm:mt-8">
+        {dateSelection && chosenDates ? (
+          // The date picker is the plan's only calendar — it shows each
+          // date's menu itself, so the menu view isn't repeated below it.
+          <DeliveryDateSelector
+            key={plan.id}
+            plan={plan}
+            dateSelection={dateSelection}
+            selected={chosenDates}
+            onChange={(dates) => setPicked({ planId: plan.id, dates })}
+            checkout={checkout}
+          />
+        ) : (
+          <PlanMenuView plan={plan} checkout={checkout} />
+        )}
+      </div>
+
+      <PlanCheckoutBar
+        plan={plan}
+        datesPicked={chosenDates ? chosenDates.length : null}
+      />
     </main>
   );
 }

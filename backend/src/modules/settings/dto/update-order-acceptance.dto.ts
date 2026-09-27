@@ -1,13 +1,17 @@
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import type { ClosedDateAppliesTo } from '../../../common/utils/closed-dates.util';
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -61,6 +65,39 @@ export class OperatingHoursDto {
   sun?: DayHoursDto;
 }
 
+export class ClosedDateDto {
+  @ApiProperty({
+    example: '2026-11-08',
+    description: 'YYYY-MM-DD, tenant-local',
+  })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date must be YYYY-MM-DD' })
+  date!: string;
+
+  @ApiPropertyOptional({ example: 'Diwali' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  name?: string;
+
+  @ApiPropertyOptional({
+    example: 'We are closed for the festival. Deliveries resume the next day.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  note?: string;
+
+  @ApiPropertyOptional({
+    enum: ['ORDERS', 'SUBSCRIPTIONS', 'BOTH'],
+    default: 'ORDERS',
+    description:
+      'SUBSCRIPTIONS/BOTH also skip subscription deliveries and require the "plan-calendar-view" feature',
+  })
+  @IsOptional()
+  @IsIn(['ORDERS', 'SUBSCRIPTIONS', 'BOTH'])
+  appliesTo?: ClosedDateAppliesTo;
+}
+
 export class UpdateOrderAcceptanceDto {
   @ApiPropertyOptional({ type: OperatingHoursDto })
   @IsOptional()
@@ -73,11 +110,13 @@ export class UpdateOrderAcceptanceDto {
   @Matches(HHMM, { message: 'dailyCutoffTime must be HH:mm' })
   dailyCutoffTime?: string;
 
-  @ApiPropertyOptional({ example: ['2026-12-25'], type: [String] })
+  @ApiPropertyOptional({ type: [ClosedDateDto] })
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
-  closedDates?: string[];
+  @ArrayMaxSize(400)
+  @ValidateNested({ each: true })
+  @Type(() => ClosedDateDto)
+  closedDates?: ClosedDateDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

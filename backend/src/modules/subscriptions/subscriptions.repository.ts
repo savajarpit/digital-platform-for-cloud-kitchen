@@ -12,6 +12,8 @@ import {
   SubscriptionDisruption,
   SubscriptionInvoice,
   SubscriptionPlan,
+  SubscriptionPlanViewMode,
+  SubscriptionScheduledDate,
   SubscriptionSettings,
   SubscriptionSkip,
   SubscriptionStatus,
@@ -257,6 +259,7 @@ export class SubscriptionsRepository {
         plan: { include: PLAN_WITH_DAYS_INCLUDE },
         skips: { orderBy: { dateFrom: 'asc' } },
         dayOverrides: true,
+        scheduledDates: { orderBy: { sequence: 'asc' } },
         address: true,
         deliverySlot: true,
       },
@@ -342,6 +345,49 @@ export class SubscriptionsRepository {
       },
       select: { createdAt: true, priceInPaiseSnapshot: true, planId: true },
     });
+  }
+
+  /** How many currently-ACTIVE subscribers have a delivery that would land
+   * on this exact date — backs the admin "N subscribers affected" warning
+   * shown before closing a date to subscriptions. Two disjoint groups
+   * (a subscription is one or the other, never both, since usesDateSelection
+   * is fixed at signup): a `usesDateSelection` subscriber with a scheduled
+   * row for the date, or a contiguous subscriber whose active window
+   * (startDate..cycleEnd) simply spans it. The contiguous count is a
+   * deliberate over-approximation — it doesn't check a WEEKLY_FIXED plan's
+   * own off-weekdays, so it may count a subscriber who was never actually
+   * delivering that particular weekday. That's the safe direction for a
+   * warning (never under-counts who to double-check), not a hard blocker. */
+  async countActiveSubscriptionsAffectedByDate(
+    tenantId: string,
+    date: string,
+  ): Promise<number> {
+    const alreadySkipped = {
+      dateFrom: { lte: date },
+      dateTo: { gte: date },
+    };
+    const [scheduled, contiguous] = await Promise.all([
+      this.prisma.subscription.count({
+        where: {
+          tenantId,
+          status: SubscriptionStatus.ACTIVE,
+          usesDateSelection: true,
+          scheduledDates: { some: { date } },
+          skips: { none: alreadySkipped },
+        },
+      }),
+      this.prisma.subscription.count({
+        where: {
+          tenantId,
+          status: SubscriptionStatus.ACTIVE,
+          usesDateSelection: false,
+          startDate: { lte: new Date(`${date}T23:59:59.999Z`) },
+          cycleEnd: { gte: new Date(`${date}T00:00:00.000Z`) },
+          skips: { none: alreadySkipped },
+        },
+      }),
+    ]);
+    return scheduled + contiguous;
   }
 
   countActiveSubscribers(tenantId: string, planId?: string): Promise<number> {
@@ -565,6 +611,51 @@ export class SubscriptionsRepository {
     });
   }
 
+  // ─── Delivery date selection ─────────────────────────────
+
+  createScheduledDates(
+    subscriptionId: string,
+    dates: { date: string; sequence: number }[],
+  ): Promise<Prisma.BatchPayload> {
+    return this.prisma.subscriptionScheduledDate.createMany({
+      data: dates.map((d) => ({ subscriptionId, ...d })),
+    });
+  }
+
+  findScheduledDates(
+    subscriptionId: string,
+  ): Promise<SubscriptionScheduledDate[]> {
+    return this.prisma.subscriptionScheduledDate.findMany({
+      where: { subscriptionId },
+      orderBy: { sequence: 'asc' },
+    });
+  }
+
+  findScheduledDate(
+    subscriptionId: string,
+    date: string,
+  ): Promise<SubscriptionScheduledDate | null> {
+    return this.prisma.subscriptionScheduledDate.findUnique({
+      where: { subscriptionId_date: { subscriptionId, date } },
+    });
+  }
+
+  /** "Move to another date" — relocates one row in place (same `sequence`,
+   * new `date`). Unlike a skip/closure's compensation, nothing is banked
+   * here: the customer is relocating a day they already have, not being
+   * owed one back, so this is the one place a scheduled date's `date`
+   * actually changes rather than a new row being appended. */
+  updateScheduledDateDate(
+    subscriptionId: string,
+    oldDate: string,
+    newDate: string,
+  ): Promise<SubscriptionScheduledDate> {
+    return this.prisma.subscriptionScheduledDate.update({
+      where: { subscriptionId_date: { subscriptionId, date: oldDate } },
+      data: { date: newDate },
+    });
+  }
+
   createDisruption(
     data: Prisma.SubscriptionDisruptionUncheckedCreateInput,
   ): Promise<SubscriptionDisruption> {
@@ -630,6 +721,10 @@ export class SubscriptionsRepository {
       contactCtaTitle?: string;
       contactCtaDescription?: string;
       contactEmail?: string;
+      planViewMode?: SubscriptionPlanViewMode;
+      dateSelectionEnabled?: boolean;
+      selectionFlexibilityDays?: number;
+      allowDateChangeAfterPurchase?: boolean;
     },
   ): Promise<SubscriptionSettings> {
     return this.prisma.subscriptionSettings.upsert({

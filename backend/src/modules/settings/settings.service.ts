@@ -1,12 +1,18 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SettingsRepository } from './settings.repository';
+import { FeaturesService } from '../features/features.service';
 import { PlatformSettingsService } from '../../shared-modules/platform-settings/platform-settings.service';
+import {
+  ClosedDateEntry,
+  normalizeClosedDates,
+} from '../../common/utils/closed-dates.util';
 import {
   BusinessProfile,
   DeliverySlot,
@@ -53,12 +59,33 @@ export interface InstantDeliveryView {
   etaMaxMinutes: number;
 }
 
+/** OrderAcceptanceSettings with closedDates always in the current object
+ * shape, regardless of whether the stored JSON is still the legacy string[]. */
+export type OrderAcceptanceView = Omit<
+  OrderAcceptanceSettings,
+  'closedDates'
+> & {
+  closedDates: ClosedDateEntry[];
+};
+
+function toOrderAcceptanceView(
+  settings: OrderAcceptanceSettings,
+): OrderAcceptanceView {
+  return {
+    ...settings,
+    closedDates: normalizeClosedDates(settings.closedDates),
+  };
+}
+
+const PLAN_CALENDAR_FEATURE_KEY = 'plan-calendar-view';
+
 @Injectable()
 export class SettingsService {
   constructor(
     private readonly settingsRepo: SettingsRepository,
     private readonly config: ConfigService,
     private readonly platformSettings: PlatformSettingsService,
+    private readonly featuresService: FeaturesService,
   ) {}
 
   async getPublicConfig(
@@ -287,23 +314,66 @@ export class SettingsService {
 
   // ── Order acceptance ──────────────────────────────────────
 
-  getOrderAcceptanceSettings(
+  async getOrderAcceptanceSettings(
     tenantId: string,
-  ): Promise<OrderAcceptanceSettings | null> {
-    return this.settingsRepo.findOrderAcceptanceSettings(tenantId);
+  ): Promise<OrderAcceptanceView | null> {
+    const settings =
+      await this.settingsRepo.findOrderAcceptanceSettings(tenantId);
+    return settings ? toOrderAcceptanceView(settings) : null;
   }
 
-  updateOrderAcceptance(
+  async updateOrderAcceptance(
     tenantId: string,
     dto: UpdateOrderAcceptanceDto,
-  ): Promise<OrderAcceptanceSettings> {
-    const { operatingHours, ...rest } = dto;
-    return this.settingsRepo.upsertOrderAcceptanceSettings(tenantId, {
-      ...rest,
-      ...(operatingHours
-        ? { operatingHours: operatingHours as unknown as Prisma.InputJsonValue }
-        : {}),
-    });
+  ): Promise<OrderAcceptanceView> {
+    const { operatingHours, closedDates, ...rest } = dto;
+
+    let closedDatesJson: Prisma.InputJsonValue | undefined;
+    if (closedDates) {
+      // Subscription-affecting closures ride on the calendar feature —
+      // without it, closed dates keep their original orders-only meaning.
+      const touchesSubscriptions = closedDates.some(
+        (d) => d.appliesTo === 'SUBSCRIPTIONS' || d.appliesTo === 'BOTH',
+      );
+      if (
+        touchesSubscriptions &&
+        !(await this.featuresService.hasFeature(
+          tenantId,
+          PLAN_CALENDAR_FEATURE_KEY,
+        ))
+      ) {
+        throw new ForbiddenException(
+          'Closing subscription deliveries needs the calendar plan view feature, which is not enabled for your account.',
+        );
+      }
+      const byDate = new Map<string, ClosedDateEntry>();
+      for (const d of closedDates) {
+        byDate.set(d.date, {
+          date: d.date,
+          name: d.name?.trim() || null,
+          note: d.note?.trim() || null,
+          appliesTo: d.appliesTo ?? 'ORDERS',
+        });
+      }
+      closedDatesJson = [...byDate.values()].sort((a, b) =>
+        a.date.localeCompare(b.date),
+      ) as unknown as Prisma.InputJsonValue;
+    }
+
+    const saved = await this.settingsRepo.upsertOrderAcceptanceSettings(
+      tenantId,
+      {
+        ...rest,
+        ...(closedDatesJson ? { closedDates: closedDatesJson } : {}),
+        ...(operatingHours
+          ? {
+              operatingHours:
+                operatingHours as unknown as Prisma.InputJsonValue,
+            }
+          : {}),
+      },
+    );
+    return toOrderAcceptanceView(saved);
   }
 
   // ── Instant delivery ──────────────────────────────────────

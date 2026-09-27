@@ -6,16 +6,12 @@ import {
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { SubscriptionsRepository } from './subscriptions.repository';
+import { SubscriptionBankingService } from './subscription-banking.service';
 import { SettingsRepository } from '../settings/settings.repository';
 import { PaginationService } from '../../common/services/pagination.service';
 import { DateUtil } from '../../common/utils/date.util';
-import { PlanScheduleUtil } from '../../common/utils/plan-schedule.util';
 import { DeclareDisruptionDto } from './dto/declare-disruption.dto';
-import {
-  Subscription,
-  SubscriptionPlanSchedulingMode,
-  SubscriptionStatus,
-} from '../../generated/prisma';
+import { Subscription, SubscriptionStatus } from '../../generated/prisma';
 import { SubscriptionDisruptedJob } from '../notifications/notifications.processor';
 
 /**
@@ -35,6 +31,7 @@ export class SubscriptionDisruptionService {
     private readonly subscriptionsRepo: SubscriptionsRepository,
     private readonly settingsRepo: SettingsRepository,
     private readonly pagination: PaginationService,
+    private readonly bankingService: SubscriptionBankingService,
     @InjectQueue('notifications')
     private readonly notificationsQueue: Queue<SubscriptionDisruptedJob>,
   ) {}
@@ -83,10 +80,9 @@ export class SubscriptionDisruptionService {
         reason: dto.reason,
         disruptionId: disruption.id,
       });
-      const newCycleEnd = await this.bankExtraDays(
+      const newCycleEnd = await this.bankingService.bankExtraDays(
         tenantId,
-        subscription.planId,
-        subscription.cycleEnd as Date,
+        { ...subscription, cycleEnd: subscription.cycleEnd as Date },
         compensationDays,
       );
       await this.subscriptionsRepo.extendCycleEnd(
@@ -147,40 +143,6 @@ export class SubscriptionDisruptionService {
       tenantId,
       dto.planId,
     );
-  }
-
-  /** Same off-day-aware banking math as SubscriptionsService.bankExtraDays —
-   * duplicated rather than shared via a public method, since exposing it
-   * would widen SubscriptionsService's surface for a single caller; both
-   * independently delegate to the real shared logic in PlanScheduleUtil. */
-  private async bankExtraDays(
-    tenantId: string,
-    planId: string,
-    currentCycleEnd: Date,
-    bankedDaysDelta: number,
-  ): Promise<Date> {
-    const plan = await this.subscriptionsRepo.findPlanScheduleConfig(planId);
-    if (
-      !plan ||
-      plan.schedulingMode !== SubscriptionPlanSchedulingMode.WEEKLY_FIXED
-    ) {
-      return DateUtil.addDays(currentCycleEnd, bankedDaysDelta);
-    }
-    const timezone = await this.getTenantTimezone(tenantId);
-    const currentCycleEndStr = DateUtil.toTenantDateStr(
-      currentCycleEnd,
-      timezone,
-    );
-    const deliveryDayKeys =
-      await this.subscriptionsRepo.findPlanDeliveryDayKeys(planId);
-    const newCycleEndStr = PlanScheduleUtil.advanceRealDeliveryDays(
-      plan,
-      deliveryDayKeys,
-      currentCycleEndStr,
-      bankedDaysDelta,
-      false,
-    );
-    return new Date(`${newCycleEndStr}T00:00:00.000Z`);
   }
 
   private async getTenantTimezone(tenantId: string): Promise<string> {

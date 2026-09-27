@@ -2,16 +2,18 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Clock, Plus, Trash2 } from "lucide-react";
+import { Clock } from "lucide-react";
 import {
   ApiError,
   getOrderAcceptance,
   updateOrderAcceptance,
+  type ClosedDateEntry,
   type DayHours,
   type OperatingHours,
   type OrderAcceptanceSettings,
 } from "@/lib/api/admin-settings";
 import { usePermission } from "@/context/PermissionsContext";
+import { useFeatures } from "@/context/FeaturesContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
 import { Toggle } from "@/components/ui/Toggle";
@@ -20,6 +22,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { OrderHoursSkeleton } from "@/components/admin/skeletons/OrderHoursSkeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { InstantDeliveryCard } from "@/components/admin/InstantDeliveryCard";
+import { ClosedDatesCard } from "@/components/admin/ClosedDatesCard";
 import { TimeInput12h } from "@/components/ui/TimeInput12h";
 
 const DAYS: { key: keyof OperatingHours; label: string }[] = [
@@ -35,7 +38,7 @@ const DAYS: { key: keyof OperatingHours; label: string }[] = [
 type FormState = {
   hours: OperatingHours;
   cutoff: string;
-  closedDates: string[];
+  closedDates: ClosedDateEntry[];
   isTemporarilyClosed: boolean;
   closureReason: string;
 };
@@ -53,6 +56,7 @@ function toForm(s: OrderAcceptanceSettings): FormState {
 export default function OrderHoursPage() {
   const { showToast } = useToast();
   const canEdit = usePermission(PERMISSIONS.ORDER_HOURS_EDIT);
+  const { has: hasFeature } = useFeatures();
 
   const queryClient = useQueryClient();
   const queryKey = qk.admin("settings", "hours");
@@ -64,7 +68,6 @@ export default function OrderHoursPage() {
   // Unsaved edits live in `draft`; a background refetch never overwrites them.
   const [draft, setDraft] = useState<FormState | null>(null);
   const form = draft ?? (data ? toForm(data) : null);
-  const [newClosedDate, setNewClosedDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,16 +82,6 @@ export default function OrderHoursPage() {
     patchForm((f) => ({ hours: { ...f.hours, [day]: { ...f.hours[day], ...patch } } }));
   }
 
-  function addClosedDate() {
-    if (!form || !newClosedDate || form.closedDates.includes(newClosedDate)) return;
-    patchForm((f) => ({ closedDates: [...f.closedDates, newClosedDate].sort() }));
-    setNewClosedDate("");
-  }
-
-  function removeClosedDate(date: string) {
-    patchForm((f) => ({ closedDates: f.closedDates.filter((d) => d !== date) }));
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form) return;
@@ -99,7 +92,12 @@ export default function OrderHoursPage() {
       const updated = await updateOrderAcceptance({
         operatingHours: hours,
         dailyCutoffTime: cutoff || undefined,
-        closedDates,
+        closedDates: closedDates.map((d) => ({
+          date: d.date,
+          name: d.name ?? undefined,
+          note: d.note ?? undefined,
+          appliesTo: d.appliesTo,
+        })),
         isTemporarilyClosed,
         closureReason: closureReason || undefined,
       });
@@ -201,42 +199,12 @@ export default function OrderHoursPage() {
           </div>
         </div>
 
-        <div className="card flex flex-col gap-3 p-6">
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Closed dates</h3>
-          <div className="flex flex-wrap gap-2">
-            {closedDates.map((date) => (
-              <span
-                key={date}
-                className="badge gap-1.5 bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-              >
-                {date}
-                <button
-                  type="button"
-                  onClick={() => removeClosedDate(date)}
-                  className="text-zinc-400 hover:text-red-600"
-                  aria-label={`Remove ${date}`}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-            {closedDates.length === 0 && (
-              <EmptyState compact title="No closed dates set." />
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="date"
-              value={newClosedDate}
-              onChange={(e) => setNewClosedDate(e.target.value)}
-              className="input w-48"
-            />
-            <button type="button" onClick={addClosedDate} className="btn-outline btn-sm">
-              <Plus className="h-4 w-4" />
-              Add
-            </button>
-          </div>
-        </div>
+        <ClosedDatesCard
+          value={closedDates}
+          onChange={(next) => patchForm(() => ({ closedDates: next }))}
+          canEdit={canEdit}
+          subscriptionsAvailable={hasFeature("plan-calendar-view")}
+        />
 
         <button type="submit" disabled={saving} className="btn-primary w-fit">
           {saving ? "Saving…" : "Save changes"}

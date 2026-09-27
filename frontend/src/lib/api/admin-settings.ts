@@ -133,18 +133,36 @@ export interface OperatingHours {
   sun?: DayHours;
 }
 
+export type ClosedDateAppliesTo = "ORDERS" | "SUBSCRIPTIONS" | "BOTH";
+
+export interface ClosedDateEntry {
+  /** YYYY-MM-DD, tenant-local. */
+  date: string;
+  name: string | null;
+  note: string | null;
+  appliesTo: ClosedDateAppliesTo;
+}
+
 export interface OrderAcceptanceSettings {
   operatingHours: OperatingHours;
   dailyCutoffTime: string | null;
-  closedDates: string[];
+  closedDates: ClosedDateEntry[];
   isTemporarilyClosed: boolean;
   closureReason: string | null;
+}
+
+/** The PATCH takes optional name/note/appliesTo (null is not accepted). */
+export interface ClosedDateInput {
+  date: string;
+  name?: string;
+  note?: string;
+  appliesTo?: ClosedDateAppliesTo;
 }
 
 export interface UpdateOrderAcceptanceInput {
   operatingHours?: OperatingHours;
   dailyCutoffTime?: string;
-  closedDates?: string[];
+  closedDates?: ClosedDateInput[];
   isTemporarilyClosed?: boolean;
   closureReason?: string;
 }

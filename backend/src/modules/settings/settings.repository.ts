@@ -12,6 +12,10 @@ import {
   Prisma,
   ServiceablePincode,
 } from '../../generated/prisma';
+import {
+  ClosedDateEntry,
+  normalizeClosedDates,
+} from '../../common/utils/closed-dates.util';
 
 @Injectable()
 export class SettingsRepository {
@@ -59,6 +63,13 @@ export class SettingsRepository {
     return this.prisma.orderAcceptanceSettings.findUnique({
       where: { tenantId },
     });
+  }
+
+  /** Closed dates in the current object shape (legacy bare dates upgraded),
+   * [] when the tenant has no order-acceptance row yet. */
+  async findClosedDates(tenantId: string): Promise<ClosedDateEntry[]> {
+    const settings = await this.findOrderAcceptanceSettings(tenantId);
+    return normalizeClosedDates(settings?.closedDates);
   }
 
   upsertOrderAcceptanceSettings(

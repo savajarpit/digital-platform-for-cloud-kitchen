@@ -164,6 +164,17 @@ enum SubscriptionOffDayHandling {
   EXTEND_TO_COMPENSATE
 }
 
+// How the storefront plan-detail page shows a plan's day-by-day menu.
+// ACCORDION is today's stacked day cards and the default. CALENDAR/BOTH only
+// take effect when SUPER_ADMIN has granted the `plan-calendar-view` Feature
+// (see SubscriptionsService.getPublicSettings, which downgrades to ACCORDION
+// otherwise — a stored CALENDAR never reaches a tenant without the grant).
+enum SubscriptionPlanViewMode {
+  ACCORDION
+  CALENDAR
+  BOTH
+}
+
 /**
  * Which of the tenant's own semantic theme ramps accents a plan card —
  * never a raw hex, so a brand-color change in Settings reskins every plan
@@ -341,8 +352,8 @@ model User {
 // ─── Business configuration (white-label, per tenant) ────
 
 model BusinessProfile {
-  id                        String   @id @default(uuid())
-  tenantId                  String   @unique
+  id                        String           @id @default(uuid())
+  tenantId                  String           @unique
   displayName               String
   description               String?
   logoUrl                   String?
@@ -379,11 +390,11 @@ model BusinessProfile {
   state                     String?
   country                   String?
   pincode                   String?
-  timezone                  String   @default("Asia/Kolkata")
-  currency                  String   @default("INR")
+  timezone                  String           @default("Asia/Kolkata")
+  currency                  String           @default("INR")
   gstNumber                 String?
-  themeConfig               Json     @default("{}")
-  defaultLocale             String   @default("en")
+  themeConfig               Json             @default("{}")
+  defaultLocale             String           @default("en")
   // Superseded by the KitchenZone list (multi-outlet support) — kept as
   // columns rather than dropped so existing data isn't destroyed, but
   // AddressesService no longer reads these; a migration copies any
@@ -397,10 +408,10 @@ model BusinessProfile {
   // How many days ahead a customer may pick for delivery (0 = today only,
   // 2 = today/tomorrow/day-after). Checkout's day dropdown is bounded by
   // this, enforced again server-side in OrdersService.
-  maxAdvanceOrderDays       Int      @default(2)
+  maxAdvanceOrderDays       Int              @default(2)
   // Home page testimonials block — only rendered if true AND at least one
   // published Review exists.
-  showReviewsOnHomepage     Boolean  @default(false)
+  showReviewsOnHomepage     Boolean          @default(false)
   // Google Search Console's HTML-tag verification content (the value of
   // <meta name="google-site-verification" content="...">) — lets a tenant
   // prove domain ownership without needing DNS/file-upload access.
@@ -412,14 +423,14 @@ model BusinessProfile {
   // shared static asset (frontend `components/icons/FssaiBadge.tsx`), not
   // per-tenant uploadable — every tenant displaying it uses the same mark.
   fssaiLicenseNumber        String?
-  showFssaiLicense          Boolean  @default(false)
+  showFssaiLicense          Boolean          @default(false)
   // Tenant-wide pickup master switch — checkout only actually offers
   // pickup when this is true AND at least one KitchenZone also has its own
   // pickupEnabled set (see Order.fulfillmentType); same two-condition
   // gating shape as showFssaiLicense + fssaiLicenseNumber above.
-  pickupEnabled             Boolean  @default(false)
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  pickupEnabled             Boolean          @default(false)
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -1588,6 +1599,13 @@ model Subscription {
   // from the calendar (see PlanScheduleUtil), not a per-subscriber counter.
   nextPlanDayNumber Int       @default(1)
   bankedDays        Int       @default(0)
+  // True when this subscriber chose individual delivery dates at signup
+  // (see SubscriptionScheduledDate) instead of the plan's default contiguous
+  // schedule — set once at creation, never toggled later. Changes how both
+  // materialization (only fires on a scheduled date, not every calendar day)
+  // and compensation (a banked day appends a new scheduled date rather than
+  // just pushing cycleEnd) behave. See SubscriptionBankingService.
+  usesDateSelection Boolean   @default(false)
 
   // Set only by an admin's cancel+refund action (see Refund below) — the
   // existing self-service `cancel()` (customer-initiated, no refund) leaves
@@ -1599,15 +1617,16 @@ model Subscription {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant             Tenant                    @relation(fields: [tenantId], references: [id])
-  user               User                      @relation(fields: [userId], references: [id])
-  plan               SubscriptionPlan          @relation(fields: [planId], references: [id])
-  address            Address                   @relation(fields: [addressId], references: [id])
-  deliverySlot       DeliverySlot?             @relation(fields: [deliverySlotId], references: [id])
+  tenant             Tenant                      @relation(fields: [tenantId], references: [id])
+  user               User                        @relation(fields: [userId], references: [id])
+  plan               SubscriptionPlan            @relation(fields: [planId], references: [id])
+  address            Address                     @relation(fields: [addressId], references: [id])
+  deliverySlot       DeliverySlot?               @relation(fields: [deliverySlotId], references: [id])
   skips              SubscriptionSkip[]
   invoices           SubscriptionInvoice[]
   couponRedemption   PlanCouponRedemption?
   dayOverrides       SubscriptionDayOverride[]
+  scheduledDates     SubscriptionScheduledDate[]
   materializedOrders Order[]
   refunds            Refund[]
 
@@ -1704,6 +1723,34 @@ model SubscriptionDayOverride {
 }
 
 /**
+ * One customer-chosen delivery date, for a subscription that used delivery
+ * date selection at signup (Subscription.usesDateSelection). Rows are never
+ * deleted or reassigned to a different date — a skip/closure just means no
+ * order is created for that row's date; a compensated day APPENDS a new row
+ * with the next sequence instead (see SubscriptionBankingService), the same
+ * "never shortened, only extended" rule cycleEnd already follows for every
+ * other subscription. `sequence` is the 1-based order the dates were chosen
+ * in (ascending by date, decided once at signup) — RELATIVE_DAY plans feed
+ * it straight into PlanScheduleUtil.resolveKey as the template day counter;
+ * WEEKLY_FIXED plans ignore it (the weekday alone resolves the menu).
+ */
+model SubscriptionScheduledDate {
+  id             String   @id @default(uuid())
+  subscriptionId String
+  // YYYY-MM-DD, tenant-local.
+  date           String
+  sequence       Int
+  createdAt      DateTime @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, date])
+  @@unique([subscriptionId, sequence])
+  @@index([subscriptionId])
+  @@map("subscription_scheduled_dates")
+}
+
+/**
  * One row per tenant — mirrors OrderAcceptanceSettings' "is this tenant
  * open for business" shape, but deliberately separate: a tenant may want
  * to pause new subscriptions without pausing regular one-off ordering, or
@@ -1712,43 +1759,55 @@ model SubscriptionDayOverride {
  * brand-new subscription's Day 1 gets pushed at signup.
  */
 model SubscriptionSettings {
-  id                          String   @id @default(uuid())
-  tenantId                    String   @unique
+  id                           String                   @id @default(uuid())
+  tenantId                     String                   @unique
   // Master switch — OWNER's own choice to pause the subscriptions program
   // entirely. When false, the storefront hides /plans (nav, footer, home
   // page block) and blocks direct navigation to it; customers who already
   // have a subscription can still manage it from "My Subscriptions".
-  isEnabled                   Boolean  @default(true)
-  isAcceptingNewSubscriptions Boolean  @default(true)
-  closureReason               String?
+  isEnabled                    Boolean                  @default(true)
+  isAcceptingNewSubscriptions  Boolean                  @default(true)
+  closureReason                String?
   // Skip/pause/day-override edit lead time only — NOT signup start date
   // (see startDateLeadDays below for that).
-  noticeHoursBeforeDelivery   Int      @default(24)
+  noticeHoursBeforeDelivery    Int                      @default(24)
   // How many days out a new subscriber's Day 1 is scheduled — 0 means
   // same-day (verifyPayment() then materializes that one subscription
   // inline, since the nightly cron already ran/won't run again today).
   // Default of 1 matches the platform's original hardcoded behavior.
-  startDateLeadDays           Int      @default(1)
+  startDateLeadDays            Int                      @default(1)
   // Home page plans block — only rendered if true AND at least one
   // published SubscriptionPlan exists.
-  showOnHomepage              Boolean  @default(true)
+  showOnHomepage               Boolean                  @default(true)
   // Home page "Meal Plans" block copy — falls back to the frontend's own
   // hardcoded default when unset.
-  homepageTitle               String?
-  homepageDescription         String?
+  homepageTitle                String?
+  homepageDescription          String?
   // /plans page's own header band copy.
-  plansPageTitle              String?
-  plansPageSubtitle           String?
+  plansPageTitle               String?
+  plansPageSubtitle            String?
   // Plans-page extra sections, each independently toggleable.
-  whySubscribeEnabled         Boolean  @default(true)
-  faqEnabled                  Boolean  @default(true)
-  contactCtaEnabled           Boolean  @default(true)
-  contactCtaTitle             String?
-  contactCtaDescription       String?
+  whySubscribeEnabled          Boolean                  @default(true)
+  faqEnabled                   Boolean                  @default(true)
+  contactCtaEnabled            Boolean                  @default(true)
+  contactCtaTitle              String?
+  contactCtaDescription        String?
   // Falls back to BusinessProfile.supportEmail when unset.
-  contactEmail                String?
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  contactEmail                 String?
+  // Storefront plan-detail layout — see SubscriptionPlanViewMode. Ignored
+  // (treated as ACCORDION) unless the `plan-calendar-view` Feature is granted.
+  planViewMode                 SubscriptionPlanViewMode @default(ACCORDION)
+  // Customers pick their own delivery dates before checkout. Ignored unless
+  // BOTH `plan-calendar-view` and `delivery-date-selection` are granted.
+  dateSelectionEnabled         Boolean                  @default(false)
+  // Selection window = durationDays + this many extra days beyond it.
+  selectionFlexibilityDays     Int                      @default(7)
+  // When on, a subscriber may move an upcoming delivery to another date
+  // (still bound by noticeHoursBeforeDelivery). Skip and per-day address
+  // stay available regardless of this switch.
+  allowDateChangeAfterPurchase Boolean                  @default(false)
+  createdAt                    DateTime                 @default(now())
+  updatedAt                    DateTime                 @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 

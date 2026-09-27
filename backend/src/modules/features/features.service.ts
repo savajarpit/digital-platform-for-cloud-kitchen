@@ -1,7 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { FeaturesRepository } from './features.repository';
 import { Role } from '../../generated/prisma';
 import { FEATURE_CATALOG } from '../../common/enums/feature.enum';
+
+const PLAN_CALENDAR_FEATURE_KEY = 'plan-calendar-view';
+const DELIVERY_DATE_SELECTION_FEATURE_KEY = 'delivery-date-selection';
 
 export interface MyFeatures {
   features: string[];
@@ -60,7 +67,30 @@ export class FeaturesService {
     const feature = await this.featuresRepo.findFeatureByKey(featureKey);
     if (!feature) throw new NotFoundException('Unknown feature key');
 
+    if (enabled && featureKey === DELIVERY_DATE_SELECTION_FEATURE_KEY) {
+      const parentGranted = await this.hasFeature(
+        tenantId,
+        PLAN_CALENDAR_FEATURE_KEY,
+      );
+      if (!parentGranted) {
+        throw new BadRequestException(
+          'Turn on Plan Calendar View first — Delivery Date Selection depends on it.',
+        );
+      }
+    }
+
     await this.featuresRepo.upsertGrant(tenantId, feature.id, enabled, userId);
+
+    // Revoking the parent also revokes the dependent feature, so the grid
+    // never shows a child as on while its parent is off.
+    if (!enabled && featureKey === PLAN_CALENDAR_FEATURE_KEY) {
+      const child = await this.featuresRepo.findFeatureByKey(
+        DELIVERY_DATE_SELECTION_FEATURE_KEY,
+      );
+      if (child) {
+        await this.featuresRepo.upsertGrant(tenantId, child.id, false, userId);
+      }
+    }
 
     return {
       key: feature.key,

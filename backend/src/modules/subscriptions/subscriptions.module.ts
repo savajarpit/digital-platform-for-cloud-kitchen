@@ -6,6 +6,7 @@ import { SubscriptionsRepository } from './subscriptions.repository';
 import { SubscriptionsMaterializationScheduler } from './subscriptions-materialization.scheduler';
 import { SubscriptionMaterializationService } from './subscription-materialization.service';
 import { SubscriptionDisruptionService } from './subscription-disruption.service';
+import { SubscriptionBankingService } from './subscription-banking.service';
 import { AddressesModule } from '../addresses/addresses.module';
 import { PromotionsModule } from '../promotions/promotions.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -35,6 +36,7 @@ import { UsersModule } from '../users/users.module';
     SubscriptionsMaterializationScheduler,
     SubscriptionMaterializationService,
     SubscriptionDisruptionService,
+    SubscriptionBankingService,
     PaginationService,
   ],
   exports: [SubscriptionsService, SubscriptionsRepository],

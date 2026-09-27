@@ -178,7 +178,44 @@ export interface SubscriptionSettings {
   contactCtaTitle?: string | null;
   contactCtaDescription?: string | null;
   contactEmail?: string | null;
+  /** Storefront plan-detail layout. Anything but ACCORDION needs `calendarViewGranted`. */
+  planViewMode?: "ACCORDION" | "CALENDAR" | "BOTH";
+  /** Read-only: whether SUPER_ADMIN has granted this tenant the calendar plan view. */
+  calendarViewGranted?: boolean;
+  /** Let customers choose their own delivery dates before checkout. Needs `dateSelectionGranted`. */
+  dateSelectionEnabled?: boolean;
+  /** Extra days beyond a plan's own length that customers may pick delivery dates from. */
+  selectionFlexibilityDays?: number;
+  /** Let subscribers move an upcoming delivery to another date after purchase. */
+  allowDateChangeAfterPurchase?: boolean;
+  /** Read-only: whether SUPER_ADMIN has granted this tenant delivery date selection. */
+  dateSelectionGranted?: boolean;
 }
+
+/** The fields the PATCH accepts. The GET also returns read-only ones (id, tenantId,
+ * timestamps, grant flags) that the API's strict validation rejects if echoed back. */
+const EDITABLE_SETTINGS_KEYS = [
+  "isEnabled",
+  "isAcceptingNewSubscriptions",
+  "closureReason",
+  "noticeHoursBeforeDelivery",
+  "startDateLeadDays",
+  "showOnHomepage",
+  "homepageTitle",
+  "homepageDescription",
+  "plansPageTitle",
+  "plansPageSubtitle",
+  "whySubscribeEnabled",
+  "faqEnabled",
+  "contactCtaEnabled",
+  "contactCtaTitle",
+  "contactCtaDescription",
+  "contactEmail",
+  "planViewMode",
+  "dateSelectionEnabled",
+  "selectionFlexibilityDays",
+  "allowDateChangeAfterPurchase",
+] as const satisfies readonly (keyof SubscriptionSettings)[];
 
 export interface TodaysDeliveries {
   date: string;
@@ -423,6 +460,15 @@ export function getExpiringSoon(withinDays: number): Promise<ExpiringSoon> {
   return proxyFetch<ExpiringSoon>(`/subscriptions/admin/analytics/expiring?withinDays=${withinDays}`);
 }
 
+/** How many currently-ACTIVE subscribers have a delivery landing on this
+ * date — backs the closed-dates admin card's warning before closing a
+ * date that subscription deliveries already depend on. */
+export function getClosedDateImpact(date: string): Promise<{ count: number }> {
+  return proxyFetch<{ count: number }>(
+    `/subscriptions/admin/closed-date-impact?date=${encodeURIComponent(date)}`,
+  );
+}
+
 export function getSubscriptionSettings(): Promise<SubscriptionSettings> {
   return proxyFetch<SubscriptionSettings>("/subscriptions/settings");
 }
@@ -430,9 +476,13 @@ export function getSubscriptionSettings(): Promise<SubscriptionSettings> {
 export function updateSubscriptionSettings(
   input: Partial<SubscriptionSettings>,
 ): Promise<SubscriptionSettings> {
+  const body: Partial<Record<(typeof EDITABLE_SETTINGS_KEYS)[number], unknown>> = {};
+  for (const key of EDITABLE_SETTINGS_KEYS) {
+    if (input[key] !== undefined) body[key] = input[key];
+  }
   return proxyFetch<SubscriptionSettings>("/subscriptions/settings", {
     method: "PATCH",
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   });
 }
 

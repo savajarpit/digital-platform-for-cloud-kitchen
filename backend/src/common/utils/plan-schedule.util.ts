@@ -69,7 +69,12 @@ export class PlanScheduleUtil {
    * delivery day and should count as day 1); false when `fromDateStr` is an
    * already-counted anchor to advance PAST (an existing cycleEnd already
    * represents a counted day, so banking starts counting from the day
-   * after it). */
+   * after it).
+   *
+   * `closedDates` (tenant closures that skip subscription deliveries) never
+   * count as a delivery day in EITHER scheduling mode — a credited day must
+   * not land on a date the kitchen is closed. Omitted/empty keeps the exact
+   * pre-existing behavior, including RELATIVE_DAY's flat calendar math. */
   static advanceRealDeliveryDays(
     plan: {
       schedulingMode: SubscriptionPlanSchedulingMode;
@@ -81,14 +86,19 @@ export class PlanScheduleUtil {
     fromDateStr: string,
     count: number,
     inclusiveOfFromDate: boolean,
+    closedDates?: ReadonlySet<string>,
   ): string {
-    if (plan.schedulingMode !== SubscriptionPlanSchedulingMode.WEEKLY_FIXED) {
+    const isClosed = (dateStr: string) => closedDates?.has(dateStr) ?? false;
+    const weekly =
+      plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED;
+
+    if (!weekly && !closedDates?.size) {
       return DateUtil.addDaysToDateStr(
         fromDateStr,
         inclusiveOfFromDate ? count - 1 : count,
       );
     }
-    if (!deliveryDayKeys || deliveryDayKeys.size === 0) {
+    if (weekly && (!deliveryDayKeys || deliveryDayKeys.size === 0)) {
       throw new BadRequestException(
         'This plan has no days with any decided meals — cannot compute a delivery schedule.',
       );
@@ -101,14 +111,17 @@ export class PlanScheduleUtil {
       if (!(i === 0 && inclusiveOfFromDate)) {
         cursor = DateUtil.addDaysToDateStr(cursor, 1);
       }
-      const key = PlanScheduleUtil.resolveKey(plan, {
-        dateStr: cursor,
-        relativeCounter: 1, // unused for WEEKLY_FIXED
-      });
-      if (
-        'weekNumber' in key &&
-        deliveryDayKeys.has(`${key.weekNumber}-${key.weekday}`)
-      ) {
+      let isDeliveryDay = true; // RELATIVE_DAY: every calendar day delivers
+      if (weekly) {
+        const key = PlanScheduleUtil.resolveKey(plan, {
+          dateStr: cursor,
+          relativeCounter: 1, // unused for WEEKLY_FIXED
+        });
+        isDeliveryDay =
+          'weekNumber' in key &&
+          deliveryDayKeys!.has(`${key.weekNumber}-${key.weekday}`);
+      }
+      if (isDeliveryDay && !isClosed(cursor)) {
         counted++;
         if (counted === count) {
           landed = cursor;

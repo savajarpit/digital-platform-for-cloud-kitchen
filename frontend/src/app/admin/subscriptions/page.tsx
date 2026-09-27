@@ -24,6 +24,8 @@ import { PlansTab } from "@/components/subscriptions-admin/PlansTab";
 import { SubscribersTab } from "@/components/subscriptions-admin/SubscribersTab";
 import { TodaysDeliveriesTab } from "@/components/subscriptions-admin/TodaysDeliveriesTab";
 import { SubscriptionSettingsTab } from "@/components/subscriptions-admin/SubscriptionSettingsTab";
+import { PlanDisplaySettingsCard } from "@/components/subscriptions-admin/PlanDisplaySettingsCard";
+import { DeliveryDateSelectionCard } from "@/components/subscriptions-admin/DeliveryDateSelectionCard";
 
 type Tab = "plans" | "subscribers" | "today" | "analytics" | "settings";
 const TABS: { key: Tab; label: string; icon: typeof CalendarClock }[] = [
@@ -119,6 +121,8 @@ export default function AdminSubscriptionsPage() {
       {tab === "settings" && (
         <div className="flex flex-col gap-6">
           <SubscriptionSettingsTab canEdit={canEdit} />
+          <PlanDisplaySettingsCard canEdit={canEdit} />
+          <DeliveryDateSelectionCard canEdit={canEdit} />
           {hasCustomization && (
             <>
               <PlansPageSettingsCard canEdit={canEdit} />

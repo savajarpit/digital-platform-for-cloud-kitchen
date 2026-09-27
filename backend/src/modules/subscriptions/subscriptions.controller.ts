@@ -30,6 +30,7 @@ import { VerifyPlanPaymentDto } from './dto/verify-plan-payment.dto';
 import { SkipDayDto } from './dto/skip-day.dto';
 import { PauseDto } from './dto/pause.dto';
 import { SetDayOverrideDto } from './dto/set-day-override.dto';
+import { MoveDeliveryDateDto } from './dto/move-delivery-date.dto';
 import { UpdateSubscriptionSettingsDto } from './dto/update-subscription-settings.dto';
 import { DeclareDisruptionDto } from './dto/declare-disruption.dto';
 import { CancelRefundDto } from '../../shared-modules/refunds/dto/cancel-refund.dto';
@@ -338,6 +339,25 @@ export class SubscriptionsController {
     );
   }
 
+  @Get('admin/closed-date-impact')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequirePermission('settings.order-hours.edit')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Affected subscriber count retrieved successfully')
+  @ApiOperation({
+    summary:
+      'Admin: how many active subscribers have a delivery on this date — backs the closed-dates warning',
+  })
+  getClosedDateImpact(
+    @CurrentTenantId() tenantId: string,
+    @Query('date') date: string,
+  ) {
+    return this.subscriptionsService.countSubscribersAffectedByDate(
+      tenantId,
+      date,
+    );
+  }
+
   @Get('admin/analytics')
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
   @RequirePermission('subscriptions.manage')
@@ -636,6 +656,45 @@ export class SubscriptionsController {
     @Body() dto: SetDayOverrideDto,
   ) {
     return this.subscriptionsService.setDayOverride(tenantId, userId, id, dto);
+  }
+
+  @Get('mine/:id/move-candidates')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Move candidates retrieved successfully')
+  @ApiOperation({
+    summary: 'Valid dates a scheduled delivery could be moved to',
+  })
+  getMoveCandidates(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') userId: string,
+    @Param('id') id: string,
+    @Query('date') date: string,
+  ) {
+    return this.subscriptionsService.getMoveCandidates(
+      tenantId,
+      userId,
+      id,
+      date,
+    );
+  }
+
+  @Post('mine/:id/move')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Delivery moved to the new date')
+  @ApiOperation({ summary: 'Move a scheduled delivery to another date' })
+  moveDeliveryDate(
+    @CurrentTenantId() tenantId: string,
+    @CurrentUser('userId') userId: string,
+    @Param('id') id: string,
+    @Body() dto: MoveDeliveryDateDto,
+  ) {
+    return this.subscriptionsService.moveDeliveryDate(
+      tenantId,
+      userId,
+      id,
+      dto.date,
+      dto.newDate,
+    );
   }
 
   @Post('mine/:id/cancel')

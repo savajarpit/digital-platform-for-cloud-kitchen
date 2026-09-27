@@ -9,6 +9,13 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Toggle } from "@/components/ui/Toggle";
 import { TenantGrantRowsSkeleton } from "@/components/admin/TenantGrantRowsSkeleton";
 
+/** child feature key -> the feature it depends on. The API enforces the same
+ * rule (and turns the child off when its parent is revoked); this just keeps
+ * the grid from offering a toggle that would be rejected. */
+const FEATURE_DEPENDENCIES: Record<string, string> = {
+  "delivery-date-selection": "plan-calendar-view",
+};
+
 export function TenantFeatureGridCard({ tenantId }: { tenantId: string }) {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
@@ -27,7 +34,13 @@ export function TenantFeatureGridCard({ tenantId }: { tenantId: string }) {
 
   async function toggle(feature: FeatureGrant) {
     const next = !feature.enabled;
+    // Revoking a parent also revokes what depends on it (the API does the same).
+    const revokedChildren =
+      next || !features
+        ? []
+        : features.filter((f) => f.enabled && FEATURE_DEPENDENCIES[f.key] === feature.key);
     patchFeature(feature.key, next);
+    revokedChildren.forEach((child) => patchFeature(child.key, false));
     try {
       await setFeatureGrant(tenantId, feature.key, next);
       void queryClient.invalidateQueries({ queryKey: qk.admin("platform", "tenants", tenantId) });
@@ -35,6 +48,7 @@ export function TenantFeatureGridCard({ tenantId }: { tenantId: string }) {
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update feature.", "error");
       patchFeature(feature.key, !next);
+      revokedChildren.forEach((child) => patchFeature(child.key, true));
     }
   }
 
@@ -55,20 +69,36 @@ export function TenantFeatureGridCard({ tenantId }: { tenantId: string }) {
         isError ? <EmptyState compact title="Couldn't load features." /> : <TenantGrantRowsSkeleton />
       ) : (
         <div className="flex flex-col gap-2">
-          {features.map((feature) => (
-            <div
-              key={feature.key}
-              className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 px-3.5 py-2.5 dark:border-zinc-800"
-            >
-              <div>
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                  {feature.name}
-                </p>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">{feature.description}</p>
+          {features.map((feature) => {
+            const parent = FEATURE_DEPENDENCIES[feature.key]
+              ? features.find((f) => f.key === FEATURE_DEPENDENCIES[feature.key])
+              : undefined;
+            const blocked = Boolean(parent && !parent.enabled);
+            return (
+              <div
+                key={feature.key}
+                className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 px-3.5 py-2.5 dark:border-zinc-800"
+              >
+                <div>
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    {feature.name}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{feature.description}</p>
+                  {blocked && parent && (
+                    <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+                      Turn on {parent.name} first.
+                    </p>
+                  )}
+                </div>
+                <Toggle
+                  checked={feature.enabled}
+                  onChange={() => toggle(feature)}
+                  disabled={blocked}
+                  label={feature.name}
+                />
               </div>
-              <Toggle checked={feature.enabled} onChange={() => toggle(feature)} />
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

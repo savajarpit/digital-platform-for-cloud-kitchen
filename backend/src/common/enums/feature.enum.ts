@@ -81,4 +81,16 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
     description:
       'Lets OWNER/STAFF (with menu.manage) build reusable add-on groups — e.g. "Extra Roti", "Choose Spice Level" — and attach them to specific meals. Customers customize a meal before adding it to cart. Off by default.',
   },
+  {
+    key: 'plan-calendar-view',
+    name: 'Plan Calendar View',
+    description:
+      "Lets OWNER/STAFF show a plan's meals as a month calendar (with a day-details panel) instead of, or alongside, the accordion list — and unlocks named closed dates/holidays on the calendar. Off by default; the storefront keeps the accordion view.",
+  },
+  {
+    key: 'delivery-date-selection',
+    name: 'Delivery Date Selection',
+    description:
+      'Lets customers pick their own delivery dates before checkout and (optionally, tenant-controlled) move a delivery to another date later. Requires Plan Calendar View — has no effect without it. Off by default.',
+  },
 ];

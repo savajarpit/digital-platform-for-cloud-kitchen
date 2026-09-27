@@ -4,11 +4,12 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, ChevronLeft, FileText } from "lucide-react";
+import { CalendarClock, CalendarDays, ChevronLeft, FileText, List } from "lucide-react";
 import {
   ApiError,
   cancelSubscription,
   getMySubscription,
+  moveDeliveryDate,
   pauseSubscription,
   setDayOverride,
   skipDay,
@@ -17,10 +18,16 @@ import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
 import { useConfirm } from "@/context/ConfirmContext";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { SubscriptionDayCard } from "@/components/subscriptions/SubscriptionDayCard";
+import { UpcomingDaysList } from "@/components/subscriptions/UpcomingDaysList";
+import { SubscriptionCalendarSection } from "@/components/subscriptions/SubscriptionCalendarSection";
+import { MoveDeliveryDateModal } from "@/components/subscriptions/MoveDeliveryDateModal";
+import { SubscriptionPauseAndCancel } from "@/components/subscriptions/SubscriptionPauseAndCancel";
 import { SubscriptionDetailSkeleton } from "@/components/subscriptions/SubscriptionDetailSkeleton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { SUBSCRIPTION_STATUS_STYLES } from "@/lib/format/status-styles";
+
+const TAB_BASE =
+  "flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors";
 
 export default function SubscriptionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -46,6 +53,9 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
   const [pauseTo, setPauseTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [tab, setTab] = useState<"calendar" | "list">("calendar");
+  const [movingDate, setMovingDate] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
 
   useEffect(() => {
     if (unauthorized) router.push(`/login?redirect=/account/subscriptions/${id}`);
@@ -107,6 +117,21 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
       showToast(err instanceof ApiError ? err.message : "Couldn't update that day.", "error");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleConfirmMove(newDate: string) {
+    if (!movingDate) return;
+    setMoving(true);
+    try {
+      await moveDeliveryDate(id, movingDate, newDate);
+      showToast("Delivery moved to the new date.", "success");
+      setMovingDate(null);
+      await refresh();
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't move that delivery.", "error");
+    } finally {
+      setMoving(false);
     }
   }
 
@@ -185,93 +210,74 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
       </div>
 
       {isActive && (
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div className="card flex flex-col gap-3 p-5">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Upcoming days</h2>
-            <div className="flex flex-col gap-2">
-              {subscription.upcoming.length === 0 ? (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">Nothing scheduled.</p>
-              ) : (
-                subscription.upcoming.map((day) => (
-                  <SubscriptionDayCard
-                    key={day.date}
-                    day={day}
-                    subscription={subscription}
-                    expanded={expandedDate === day.date}
-                    busy={busy}
-                    onToggle={() => setExpandedDate(expandedDate === day.date ? null : day.date)}
-                    onSkip={() => handleSkip(day.date)}
-                    onSaveOverride={(addressId, slotId, note) =>
-                      handleDayOverrideSave(day.date, addressId, slotId, note)
-                    }
-                  />
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-6">
-            <form onSubmit={handlePause} className="card flex flex-col gap-3 p-5">
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                Pause a range (e.g. a vacation)
-              </h2>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Paused days are banked — your plan simply runs that many days longer once resumed.
-                Changes need at least a day&apos;s notice, so the earliest start is{" "}
-                {new Date(subscription.earliestEditableDate).toLocaleDateString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                })}
-                .
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">From</label>
-                  <input
-                    type="date"
-                    value={pauseFrom}
-                    onChange={(e) => setPauseFrom(e.target.value)}
-                    min={subscription.earliestEditableDate}
-                    className="input"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">To</label>
-                  <input
-                    type="date"
-                    value={pauseTo}
-                    onChange={(e) => setPauseTo(e.target.value)}
-                    min={pauseFrom || subscription.earliestEditableDate}
-                    className="input"
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={busy || !pauseFrom || !pauseTo}
-                className="btn-primary btn-sm self-start"
-              >
-                Pause
-              </button>
-            </form>
-
-            {subscription.canCancel && (
-              <div className="card flex flex-col gap-3 p-5">
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Cancel</h2>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Stops all future deliveries for this subscription immediately.
-                </p>
+        <div className="mt-6 flex flex-col gap-6">
+          {subscription.viewMode === "BOTH" && (
+            <div role="tablist" aria-label="View" className="inline-flex w-fit rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
+              {(
+                [
+                  { id: "calendar", label: "Calendar", Icon: CalendarDays },
+                  { id: "list", label: "List", Icon: List },
+                ] as const
+              ).map(({ id, label, Icon }) => (
                 <button
+                  key={id}
                   type="button"
-                  onClick={handleCancel}
-                  className="btn-outline btn-sm self-start text-red-600"
+                  role="tab"
+                  aria-selected={tab === id}
+                  onClick={() => setTab(id)}
+                  className={`${TAB_BASE} ${
+                    tab === id
+                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  }`}
                 >
-                  Cancel Subscription
+                  <Icon className="h-4 w-4" />
+                  {label}
                 </button>
-              </div>
-            )}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {subscription.viewMode === "ACCORDION" || (subscription.viewMode === "BOTH" && tab === "list") ? (
+            <UpcomingDaysList
+              subscription={subscription}
+              expandedDate={expandedDate}
+              busy={busy}
+              onToggle={(date) => setExpandedDate(expandedDate === date ? null : date)}
+              onSkip={handleSkip}
+              onSaveOverride={handleDayOverrideSave}
+            />
+          ) : (
+            <SubscriptionCalendarSection
+              subscription={subscription}
+              busy={busy}
+              onSkip={handleSkip}
+              onSaveOverride={handleDayOverrideSave}
+              onOpenMove={setMovingDate}
+            />
+          )}
+
+          <SubscriptionPauseAndCancel
+            subscription={subscription}
+            pauseFrom={pauseFrom}
+            pauseTo={pauseTo}
+            busy={busy}
+            onPauseFromChange={setPauseFrom}
+            onPauseToChange={setPauseTo}
+            onPause={handlePause}
+            onCancel={handleCancel}
+          />
         </div>
+      )}
+
+      {movingDate && (
+        <MoveDeliveryDateModal
+          subscriptionId={id}
+          date={movingDate}
+          moving={moving}
+          onClose={() => setMovingDate(null)}
+          onConfirm={handleConfirmMove}
+        />
       )}
     </main>
   );

@@ -1,6 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { SettingsRepository } from './settings.repository';
 import { RedisService } from '../../shared-modules/cache/redis.service';
+import {
+  closedDatesAffecting,
+  normalizeClosedDates,
+} from '../../common/utils/closed-dates.util';
 
 export interface OrderWindowStatus {
   isAcceptingOrders: boolean;
@@ -140,13 +144,17 @@ export class OrderAcceptanceService {
     for (const part of parts) dateParts[part.type] = part.value;
 
     const todayDate = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
-    const closedDates = Array.isArray(settings.closedDates)
-      ? (settings.closedDates as unknown[]).filter(
-          (d): d is string => typeof d === 'string',
-        )
-      : [];
-    if (closedDates.includes(todayDate)) {
-      return { isAcceptingOrders: false, reason: 'Closed today' };
+    const orderClosure = closedDatesAffecting(
+      normalizeClosedDates(settings.closedDates),
+      'ORDERS',
+    ).find((c) => c.date === todayDate);
+    if (orderClosure) {
+      return {
+        isAcceptingOrders: false,
+        reason: orderClosure.name
+          ? `Closed today — ${orderClosure.name}`
+          : 'Closed today',
+      };
     }
 
     const weekdayKey = WEEKDAY_MAP[dateParts.weekday] ?? 'mon';

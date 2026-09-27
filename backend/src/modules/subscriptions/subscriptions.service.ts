@@ -15,12 +15,28 @@ import { PaginationService } from '../../common/services/pagination.service';
 import { DateUtil } from '../../common/utils/date.util';
 import { AnalyticsRangeUtil } from '../../common/utils/analytics-range.util';
 import {
+  closedDatesAffecting,
+  subscriptionClosedDateSet,
+} from '../../common/utils/closed-dates.util';
+import {
+  buildPlanCalendar,
+  buildWeeklyMealsByDate,
+} from '../../common/utils/plan-calendar.util';
+import {
   PlanScheduleKey,
   PlanScheduleUtil,
 } from '../../common/utils/plan-schedule.util';
 import {
+  computeCandidateDeliveryDates,
+  computeUnavailableDates,
+  isManualSelectionPlan,
+  validateSelectedDates,
+} from '../../common/utils/plan-date-selection.util';
+import { buildSubscriptionCalendarDays } from '../../common/utils/subscription-calendar.util';
+import {
   SubscriptionOffDayHandling,
   SubscriptionPlanSchedulingMode,
+  SubscriptionPlanViewMode,
 } from '../../generated/prisma';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
@@ -39,6 +55,7 @@ import { UpdateSubscriptionSettingsDto } from './dto/update-subscription-setting
 import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 import { defaultSubscriptionSettings } from '../../common/constants/tenant-default-content';
 import { SubscriptionMaterializationService } from './subscription-materialization.service';
+import { SubscriptionBankingService } from './subscription-banking.service';
 import { RefundsRepository } from '../../shared-modules/refunds/refunds.repository';
 import { RAZORPAY_REFUNDS_FEATURE_KEY } from '../../shared-modules/refunds/refunds.constants';
 import { CancelRefundDto } from '../../shared-modules/refunds/dto/cancel-refund.dto';
@@ -61,6 +78,10 @@ const CANCEL_FEATURE_KEY = 'subscription-self-cancel';
 // brand-new tenant with no grant row keeps today's working behavior instead
 // of silently losing the time picker the moment this feature key exists.
 const TIME_LOCK_FEATURE_KEY = 'subscription-plan-time-lock';
+// SUPER_ADMIN opt-ins for the calendar plan view and (on top of it) customer
+// date selection — see getCalendarEntitlements for the dependency rule.
+const PLAN_CALENDAR_FEATURE_KEY = 'plan-calendar-view';
+const DATE_SELECTION_FEATURE_KEY = 'delivery-date-selection';
 
 @Injectable()
 export class SubscriptionsService {
@@ -76,6 +97,7 @@ export class SubscriptionsService {
     private readonly materializationService: SubscriptionMaterializationService,
     private readonly refundsRepo: RefundsRepository,
     private readonly usersRepo: UsersRepository,
+    private readonly bankingService: SubscriptionBankingService,
   ) {}
 
   // ─── Admin plan CRUD ─────────────────────────────────────
@@ -340,9 +362,12 @@ export class SubscriptionsService {
   // ─── Admin: tenant subscription settings ─────────────────
 
   async getSettings(tenantId: string) {
-    const settings = await this.subscriptionsRepo.findSettings(tenantId);
-    return (
-      settings ?? {
+    const [settings, entitlements] = await Promise.all([
+      this.subscriptionsRepo.findSettings(tenantId),
+      this.getCalendarEntitlements(tenantId),
+    ]);
+    return {
+      ...(settings ?? {
         isEnabled: true,
         isAcceptingNewSubscriptions: true,
         closureReason: null,
@@ -350,22 +375,81 @@ export class SubscriptionsService {
         startDateLeadDays: 1,
         showOnHomepage: true,
         ...defaultSubscriptionSettings(),
-      }
-    );
+        planViewMode: SubscriptionPlanViewMode.ACCORDION,
+        dateSelectionEnabled: false,
+        selectionFlexibilityDays: 7,
+        allowDateChangeAfterPurchase: false,
+      }),
+      // Tells the admin UI which of the calendar controls this tenant may
+      // use at all, so it can hide the rest instead of erroring on save.
+      calendarViewGranted: entitlements.calendarView,
+      dateSelectionGranted: entitlements.dateSelection,
+    };
   }
 
-  updateSettings(tenantId: string, dto: UpdateSubscriptionSettingsDto) {
-    return this.subscriptionsRepo.upsertSettings(tenantId, dto);
+  async updateSettings(tenantId: string, dto: UpdateSubscriptionSettingsDto) {
+    const entitlements = await this.getCalendarEntitlements(tenantId);
+    const usesCalendar =
+      dto.planViewMode !== undefined &&
+      dto.planViewMode !== SubscriptionPlanViewMode.ACCORDION;
+    const usesDateSelection =
+      dto.dateSelectionEnabled === true ||
+      dto.allowDateChangeAfterPurchase === true;
+    if (usesCalendar && !entitlements.calendarView) {
+      throw new ForbiddenException(
+        'The calendar plan view is not enabled for your account.',
+      );
+    }
+    if (usesDateSelection && !entitlements.dateSelection) {
+      throw new ForbiddenException(
+        'Delivery date selection is not enabled for your account.',
+      );
+    }
+    const saved = await this.subscriptionsRepo.upsertSettings(tenantId, dto);
+    // Same shape as getSettings(), so the admin UI can put the response
+    // straight back into its cache without losing the grant flags.
+    return {
+      ...saved,
+      calendarViewGranted: entitlements.calendarView,
+      dateSelectionGranted: entitlements.dateSelection,
+    };
+  }
+
+  /** delivery-date-selection is a calendar-driven UI, so it only counts as
+   * granted when plan-calendar-view is granted too — a stale grant row for
+   * the child is never enough on its own. */
+  private async getCalendarEntitlements(tenantId: string) {
+    const [calendarView, dateSelectionGranted] = await Promise.all([
+      this.featuresService.hasFeature(tenantId, PLAN_CALENDAR_FEATURE_KEY),
+      this.featuresService.hasFeature(tenantId, DATE_SELECTION_FEATURE_KEY),
+    ]);
+    return {
+      calendarView,
+      dateSelection: calendarView && dateSelectionGranted,
+    };
   }
 
   /** Public: the flags/copy the storefront home page + /plans page need. */
   async getPublicSettings(tenantId: string) {
-    const [settings, featureGranted] = await Promise.all([
+    const [settings, featureGranted, entitlements] = await Promise.all([
       this.subscriptionsRepo.findSettings(tenantId),
       this.featuresService.hasFeature(tenantId, SUBSCRIPTIONS_FEATURE_KEY),
+      this.getCalendarEntitlements(tenantId),
     ]);
     const defaults = defaultSubscriptionSettings();
     return {
+      // Downgrade to what the tenant is actually entitled to — a stored
+      // CALENDAR/BOTH (or a selection switch) never reaches the storefront
+      // once SUPER_ADMIN revokes the grant.
+      planViewMode: entitlements.calendarView
+        ? (settings?.planViewMode ?? SubscriptionPlanViewMode.ACCORDION)
+        : SubscriptionPlanViewMode.ACCORDION,
+      dateSelectionEnabled:
+        entitlements.dateSelection && (settings?.dateSelectionEnabled ?? false),
+      selectionFlexibilityDays: settings?.selectionFlexibilityDays ?? 7,
+      allowDateChangeAfterPurchase:
+        entitlements.dateSelection &&
+        (settings?.allowDateChangeAfterPurchase ?? false),
       isEnabled: (settings?.isEnabled ?? true) && featureGranted,
       showOnHomepage: settings?.showOnHomepage ?? true,
       homepageTitle: settings?.homepageTitle ?? defaults.homepageTitle,
@@ -494,13 +578,97 @@ export class SubscriptionsService {
       id,
     );
     if (!plan) throw new NotFoundException('Plan not found');
-    const [timeLocked, promoMap, timezone] = await Promise.all([
+    const [
+      timeLocked,
+      promoMap,
+      timezone,
+      settings,
+      entitlements,
+      closedDates,
+      bonusDays,
+    ] = await Promise.all([
       this.featuresService.hasFeature(tenantId, TIME_LOCK_FEATURE_KEY),
       this.promotionsService.getActiveScheduledDiscountsForPlans(tenantId, [
         plan.id,
       ]),
       this.getTenantTimezone(tenantId),
+      this.subscriptionsRepo.findSettings(tenantId),
+      this.getCalendarEntitlements(tenantId),
+      this.settingsRepo.findClosedDates(tenantId),
+      this.promotionsService.getApplicablePlanBonusDays(
+        tenantId,
+        plan.id,
+        plan.durationDays,
+      ),
     ]);
+
+    // The month calendar is only built for tenants that are entitled to it
+    // AND chose CALENDAR/BOTH — everyone else keeps today's exact payload.
+    const viewMode = entitlements.calendarView
+      ? (settings?.planViewMode ?? SubscriptionPlanViewMode.ACCORDION)
+      : SubscriptionPlanViewMode.ACCORDION;
+    const usesCalendar = viewMode !== SubscriptionPlanViewMode.ACCORDION;
+    const startDateStr = DateUtil.addDaysToDateStr(
+      DateUtil.getTenantNow(timezone).dateStr,
+      settings?.startDateLeadDays ?? 1,
+    );
+    const subscriptionClosedDates = closedDatesAffecting(
+      closedDates,
+      'SUBSCRIPTIONS',
+    );
+    const calendar = usesCalendar
+      ? buildPlanCalendar(plan, startDateStr, subscriptionClosedDates)
+      : null;
+
+    // Only surfaced pre-purchase when the tenant is entitled AND opted in —
+    // subscribe() re-derives and re-validates the exact same window rather
+    // than trusting anything the client echoes back.
+    const durationDaysSnapshot = plan.durationDays + bonusDays;
+    const dateSelectionActive =
+      entitlements.dateSelection && (settings?.dateSelectionEnabled ?? false);
+    const weeklyPlan =
+      plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED;
+    const deliveryDayKeys =
+      dateSelectionActive && weeklyPlan
+        ? await this.subscriptionsRepo.findPlanDeliveryDayKeys(plan.id)
+        : null;
+    const flexibilityDays = settings?.selectionFlexibilityDays ?? 7;
+    const candidates = dateSelectionActive
+      ? computeCandidateDeliveryDates(
+          plan,
+          deliveryDayKeys,
+          startDateStr,
+          durationDaysSnapshot,
+          flexibilityDays,
+          new Set(subscriptionClosedDates.map((c) => c.date)),
+        )
+      : [];
+    const dateSelection = dateSelectionActive
+      ? {
+          requiredCount: durationDaysSnapshot,
+          candidates,
+          unavailable: computeUnavailableDates(
+            plan,
+            deliveryDayKeys,
+            startDateStr,
+            durationDaysSnapshot,
+            flexibilityDays,
+            new Map(
+              subscriptionClosedDates.map((c) => [
+                c.date,
+                { name: c.name, note: c.note },
+              ]),
+            ),
+          ),
+          // Short plans: the customer actively picks every date. Long plans:
+          // everything is pre-selected and they only adjust exceptions.
+          manualSelection: isManualSelectionPlan(durationDaysSnapshot),
+          mealsByDate: weeklyPlan
+            ? buildWeeklyMealsByDate(plan, candidates)
+            : null,
+        }
+      : null;
+
     return {
       ...plan,
       timeSelectionEnabled: !timeLocked,
@@ -509,6 +677,9 @@ export class SubscriptionsService {
         plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED
           ? buildPlanPreviewWindow(plan, timezone)
           : null,
+      viewMode,
+      calendar,
+      dateSelection,
     };
   }
 
@@ -666,6 +837,56 @@ export class SubscriptionsService {
       plan.id,
       plan.durationDays,
     );
+    const durationDaysSnapshot = plan.durationDays + bonusDays;
+
+    // Delivery date selection — gated the same way getPublicSettings() gates
+    // what the storefront is even allowed to show, so a request forged
+    // straight against the API can't use it just because the DTO field
+    // exists on the wire.
+    const entitlements = await this.getCalendarEntitlements(tenantId);
+    const dateSelectionActive =
+      entitlements.dateSelection && (settings?.dateSelectionEnabled ?? false);
+    let sortedDeliveryDates: string[] | undefined;
+    if (dateSelectionActive || dto.deliveryDates) {
+      if (!dateSelectionActive) {
+        throw new BadRequestException(
+          'Choosing delivery dates is not available for this plan.',
+        );
+      }
+      if (!dto.deliveryDates || dto.deliveryDates.length === 0) {
+        throw new BadRequestException(
+          'Choose your delivery dates to subscribe.',
+        );
+      }
+      const timezone = await this.getTenantTimezone(tenantId);
+      const startDateStr = DateUtil.addDaysToDateStr(
+        DateUtil.getTenantNow(timezone).dateStr,
+        settings?.startDateLeadDays ?? 1,
+      );
+      const deliveryDayKeys =
+        plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED
+          ? await this.subscriptionsRepo.findPlanDeliveryDayKeys(plan.id)
+          : null;
+      const closedDates = closedDatesAffecting(
+        await this.settingsRepo.findClosedDates(tenantId),
+        'SUBSCRIPTIONS',
+      );
+      const candidates = computeCandidateDeliveryDates(
+        plan,
+        deliveryDayKeys,
+        startDateStr,
+        durationDaysSnapshot,
+        settings?.selectionFlexibilityDays ?? 7,
+        new Set(closedDates.map((c) => c.date)),
+      );
+      const validation = validateSelectedDates(
+        dto.deliveryDates,
+        candidates,
+        durationDaysSnapshot,
+      );
+      if (!validation.ok) throw new BadRequestException(validation.message);
+      sortedDeliveryDates = validation.dates;
+    }
 
     const subscription = await this.subscriptionsRepo.createSubscription({
       tenantId,
@@ -674,11 +895,19 @@ export class SubscriptionsService {
       addressId: dto.addressId,
       deliverySlotId: dto.deliverySlotId,
       priceInPaiseSnapshot: amountInPaise,
-      durationDaysSnapshot: plan.durationDays + bonusDays,
+      durationDaysSnapshot,
       planNameSnapshot: plan.name,
       couponCode: resolvedCouponCode,
       bonusDaysGranted: bonusDays,
+      usesDateSelection: sortedDeliveryDates !== undefined,
     });
+
+    if (sortedDeliveryDates) {
+      await this.subscriptionsRepo.createScheduledDates(
+        subscription.id,
+        sortedDeliveryDates.map((date, i) => ({ date, sequence: i + 1 })),
+      );
+    }
 
     // Recorded at subscribe-time, not payment-confirmation — mirrors the
     // existing order-checkout coupon-redemption convention (CouponRedemption
@@ -762,28 +991,51 @@ export class SubscriptionsService {
    */
   private async activateSubscriptionNow(
     tenantId: string,
-    subscription: { id: string; planId: string; durationDaysSnapshot: number },
+    subscription: {
+      id: string;
+      planId: string;
+      durationDaysSnapshot: number;
+      usesDateSelection: boolean;
+    },
   ): Promise<void> {
-    // Days out from today, tenant-controlled (SubscriptionSettings.
-    // startDateLeadDays, default 1 — matches the platform's original
-    // always-tomorrow behavior). A tenant that opts into 0 (same-day) is
-    // opting into the inline materialization call below, since the nightly
-    // cron already ran/won't run again today.
-    const settings = await this.subscriptionsRepo.findSettings(tenantId);
-    const startDateLeadDays = settings?.startDateLeadDays ?? 1;
-    const startDate = DateUtil.addDays(DateUtil.now(), startDateLeadDays);
-    const cycleEnd = await this.computeInitialCycleEnd(
-      tenantId,
-      subscription.planId,
-      startDate,
-      subscription.durationDaysSnapshot,
-    );
+    let startDate: Date;
+    let cycleEnd: Date;
+    if (subscription.usesDateSelection) {
+      // The dates were fixed at signup (see subscribe()'s validation against
+      // the selection window) — activation just reads them back rather than
+      // recomputing anything, so a delayed payment can never silently pick
+      // different dates than what the customer actually chose.
+      const scheduledDates = await this.subscriptionsRepo.findScheduledDates(
+        subscription.id,
+      );
+      startDate = new Date(`${scheduledDates[0].date}T00:00:00.000Z`);
+      cycleEnd = new Date(`${scheduledDates.at(-1)!.date}T00:00:00.000Z`);
+    } else {
+      // Days out from today, tenant-controlled (SubscriptionSettings.
+      // startDateLeadDays, default 1 — matches the platform's original
+      // always-tomorrow behavior).
+      const settings = await this.subscriptionsRepo.findSettings(tenantId);
+      const startDateLeadDays = settings?.startDateLeadDays ?? 1;
+      startDate = DateUtil.addDays(DateUtil.now(), startDateLeadDays);
+      cycleEnd = await this.computeInitialCycleEnd(
+        tenantId,
+        subscription.planId,
+        startDate,
+        subscription.durationDaysSnapshot,
+      );
+    }
     await this.subscriptionsRepo.activateSubscription(subscription.id, {
       startDate,
       cycleEnd,
     });
 
-    if (startDateLeadDays === 0) {
+    // Same-day delivery: startDate already being "today or earlier" (a
+    // startDateLeadDays of 0, or a delayed payment that let a chosen
+    // delivery date arrive before the nightly cron next runs) means the
+    // cron won't reach it in time — materialize inline instead.
+    const timezone = await this.getTenantTimezone(tenantId);
+    const todayStr = DateUtil.getTenantNow(timezone).dateStr;
+    if (todayStr >= DateUtil.toTenantDateStr(startDate, timezone)) {
       const materializable =
         await this.subscriptionsRepo.findSubscriptionForMaterialization(
           subscription.id,
@@ -961,20 +1213,57 @@ export class SubscriptionsService {
     if (!subscription) throw new NotFoundException('Subscription not found');
 
     const timezone = await this.getTenantTimezone(tenantId);
-    const [addresses, deliverySlots, canCancel, timeLocked, earliest] =
-      await Promise.all([
-        this.addressesService.findAll(tenantId, userId),
-        this.settingsRepo.findActiveDeliverySlots(tenantId),
-        this.featuresService.hasFeature(tenantId, CANCEL_FEATURE_KEY),
-        this.featuresService.hasFeature(tenantId, TIME_LOCK_FEATURE_KEY),
-        this.getEarliestEditableDate(tenantId, timezone),
-      ]);
+    const [
+      addresses,
+      deliverySlots,
+      canCancel,
+      timeLocked,
+      earliest,
+      settings,
+      entitlements,
+      closedDates,
+    ] = await Promise.all([
+      this.addressesService.findAll(tenantId, userId),
+      this.settingsRepo.findActiveDeliverySlots(tenantId),
+      this.featuresService.hasFeature(tenantId, CANCEL_FEATURE_KEY),
+      this.featuresService.hasFeature(tenantId, TIME_LOCK_FEATURE_KEY),
+      this.getEarliestEditableDate(tenantId, timezone),
+      this.subscriptionsRepo.findSettings(tenantId),
+      this.getCalendarEntitlements(tenantId),
+      this.settingsRepo.findClosedDates(tenantId),
+    ]);
     const canOverrideTime = !timeLocked;
     const upcoming = buildUpcomingPreview(
       subscription,
       timezone,
       earliest.dateStr,
     );
+
+    // Same downgrade rule as the storefront's findPublishedPlan — a stored
+    // CALENDAR/BOTH never reaches a tenant that lost the grant.
+    const viewMode = entitlements.calendarView
+      ? (settings?.planViewMode ?? SubscriptionPlanViewMode.ACCORDION)
+      : SubscriptionPlanViewMode.ACCORDION;
+    // "Move to another date" needs both the grant AND the tenant's own
+    // switch — and only ever applies to a subscriber who actually used date
+    // selection at signup (a contiguous subscriber has no scheduled rows to
+    // move in the first place).
+    const canMoveDates =
+      subscription.usesDateSelection &&
+      entitlements.dateSelection &&
+      (settings?.allowDateChangeAfterPurchase ?? false);
+    const calendar =
+      subscription.startDate && subscription.cycleEnd
+        ? buildSubscriptionCalendarDays(
+            subscription,
+            DateUtil.toTenantDateStr(subscription.startDate, timezone),
+            DateUtil.toTenantDateStr(subscription.cycleEnd, timezone),
+            DateUtil.getTenantNow(timezone).dateStr,
+            earliest.dateStr,
+            closedDatesAffecting(closedDates, 'SUBSCRIPTIONS'),
+          )
+        : [];
+
     return {
       ...subscription,
       upcoming,
@@ -983,7 +1272,147 @@ export class SubscriptionsService {
       canCancel,
       canOverrideTime,
       earliestEditableDate: earliest.dateStr,
+      viewMode,
+      canMoveDates,
+      calendar,
     };
+  }
+
+  /** Valid dates the customer could move `date` to — every candidate
+   * delivery day within the plan's original selection window that isn't
+   * already scheduled, excluding `date` itself. Reuses the exact same
+   * window math the checkout picker used, anchored at the subscription's
+   * own startDate so a move can never land the subscriber somewhere their
+   * original signup window wouldn't have offered. */
+  async getMoveCandidates(
+    tenantId: string,
+    userId: string,
+    subscriptionId: string,
+    date: string,
+  ) {
+    const subscription = await this.getOwnedActiveSubscription(
+      tenantId,
+      userId,
+      subscriptionId,
+    );
+    await this.assertCanMoveDates(tenantId, subscription);
+    const timezone = await this.getTenantTimezone(tenantId);
+    await this.assertWithinNoticeWindow(tenantId, date);
+
+    const scheduled = await this.subscriptionsRepo.findScheduledDate(
+      subscription.id,
+      date,
+    );
+    if (!scheduled) {
+      throw new BadRequestException('That date is not part of this plan.');
+    }
+
+    const [plan, settings, closedDates, allScheduled] = await Promise.all([
+      this.subscriptionsRepo.findPlanScheduleConfig(subscription.planId),
+      this.subscriptionsRepo.findSettings(tenantId),
+      this.settingsRepo.findClosedDates(tenantId),
+      this.subscriptionsRepo.findScheduledDates(subscription.id),
+    ]);
+    if (!plan) throw new NotFoundException('Plan not found');
+
+    const startDateStr = DateUtil.toTenantDateStr(
+      subscription.startDate!,
+      timezone,
+    );
+    const deliveryDayKeys =
+      plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED
+        ? await this.subscriptionsRepo.findPlanDeliveryDayKeys(
+            subscription.planId,
+          )
+        : null;
+    const candidates = computeCandidateDeliveryDates(
+      plan,
+      deliveryDayKeys,
+      startDateStr,
+      subscription.durationDaysSnapshot,
+      settings?.selectionFlexibilityDays ?? 7,
+      new Set(
+        closedDatesAffecting(closedDates, 'SUBSCRIPTIONS').map((c) => c.date),
+      ),
+    );
+    const alreadyScheduled = new Set(allScheduled.map((s) => s.date));
+    const { dateStr: earliestDateStr } = await this.getEarliestEditableDate(
+      tenantId,
+      timezone,
+    );
+    return candidates.filter(
+      (d) => d !== date && !alreadyScheduled.has(d) && d >= earliestDateStr,
+    );
+  }
+
+  /** Moves one already-scheduled delivery to another date — an in-place
+   * relocation (see SubscriptionsRepository.updateScheduledDateDate), not a
+   * skip: nothing is banked, the total delivery count is unchanged. Updates
+   * the subscription's own startDate/cycleEnd too if the move happened to
+   * touch either edge. */
+  async moveDeliveryDate(
+    tenantId: string,
+    userId: string,
+    subscriptionId: string,
+    date: string,
+    newDate: string,
+  ) {
+    const subscription = await this.getOwnedActiveSubscription(
+      tenantId,
+      userId,
+      subscriptionId,
+    );
+    await this.assertCanMoveDates(tenantId, subscription);
+    await this.assertWithinNoticeWindow(tenantId, date);
+    await this.assertWithinNoticeWindow(tenantId, newDate);
+
+    const candidates = await this.getMoveCandidates(
+      tenantId,
+      userId,
+      subscriptionId,
+      date,
+    );
+    if (!candidates.includes(newDate)) {
+      throw new BadRequestException(
+        'That date is not available to move this delivery to.',
+      );
+    }
+
+    await this.subscriptionsRepo.updateScheduledDateDate(
+      subscription.id,
+      date,
+      newDate,
+    );
+    const allScheduled = await this.subscriptionsRepo.findScheduledDates(
+      subscription.id,
+    );
+    const sortedDates = allScheduled.map((s) => s.date).sort();
+    await this.subscriptionsRepo.activateSubscription(subscription.id, {
+      startDate: new Date(`${sortedDates[0]}T00:00:00.000Z`),
+      cycleEnd: new Date(`${sortedDates.at(-1)}T00:00:00.000Z`),
+    });
+    return this.findMySubscription(tenantId, userId, subscriptionId);
+  }
+
+  private async assertCanMoveDates(
+    tenantId: string,
+    subscription: { usesDateSelection: boolean },
+  ): Promise<void> {
+    if (!subscription.usesDateSelection) {
+      throw new BadRequestException(
+        'This subscription does not use chosen delivery dates.',
+      );
+    }
+    const entitlements = await this.getCalendarEntitlements(tenantId);
+    const settings = await this.subscriptionsRepo.findSettings(tenantId);
+    if (
+      !entitlements.dateSelection ||
+      !settings?.allowDateChangeAfterPurchase
+    ) {
+      throw new ForbiddenException(
+        'Moving a delivery to another date is not enabled for this business.',
+      );
+    }
   }
 
   async findSubscriptionForAdmin(tenantId: string, id: string) {
@@ -1010,6 +1439,18 @@ export class SubscriptionsService {
    * OrdersService.getOverview(), and reuses its exact date-range/bucketing
    * math via AnalyticsRangeUtil rather than a second hand-rolled copy.
    */
+  /** Backs the closed-dates admin card's "N subscribers affected" warning —
+   * see SubscriptionsRepository.countActiveSubscriptionsAffectedByDate for
+   * exactly what counts as "affected". */
+  countSubscribersAffectedByDate(
+    tenantId: string,
+    date: string,
+  ): Promise<{ count: number }> {
+    return this.subscriptionsRepo
+      .countActiveSubscriptionsAffectedByDate(tenantId, date)
+      .then((count) => ({ count }));
+  }
+
   async getAnalytics(tenantId: string, query: QuerySubscriptionAnalyticsDto) {
     const now = DateUtil.now();
     const timezone = await this.getTenantTimezone(tenantId);
@@ -1141,16 +1582,24 @@ export class SubscriptionsService {
     dto: SkipDayDto,
   ) {
     await this.assertWithinNoticeWindow(tenantId, dto.date);
+    // Nothing is delivered on a tenant closure, so there is nothing to skip —
+    // and crediting a banked day for it would hand out a free extra delivery
+    // on plans that do not compensate closures.
+    const closedDates = await this.settingsRepo.findClosedDates(tenantId);
+    if (subscriptionClosedDateSet(closedDates).has(dto.date)) {
+      throw new BadRequestException(
+        'The kitchen is closed on that date, so there is no delivery to skip.',
+      );
+    }
     await this.subscriptionsRepo.createSkip({
       subscriptionId: subscription.id,
       dateFrom: dto.date,
       dateTo: dto.date,
       bankedDays: 1,
     });
-    const newCycleEnd = await this.bankExtraDays(
+    const newCycleEnd = await this.bankingService.bankExtraDays(
       tenantId,
-      subscription.planId,
-      subscription.cycleEnd as Date,
+      { ...subscription, cycleEnd: subscription.cycleEnd as Date },
       1,
     );
     return this.subscriptionsRepo.extendCycleEnd(
@@ -1194,10 +1643,9 @@ export class SubscriptionsService {
       dateTo: dto.dateTo,
       bankedDays,
     });
-    const newCycleEnd = await this.bankExtraDays(
+    const newCycleEnd = await this.bankingService.bankExtraDays(
       tenantId,
-      subscription.planId,
-      subscription.cycleEnd as Date,
+      { ...subscription, cycleEnd: subscription.cycleEnd as Date },
       bankedDays,
     );
     return this.subscriptionsRepo.extendCycleEnd(
@@ -1521,44 +1969,6 @@ export class SubscriptionsService {
       return new Date(`${cycleEndStr}T00:00:00.000Z`);
     }
     return DateUtil.addDays(startDate, durationDaysSnapshot - 1);
-  }
-
-  /** Advances a subscription's cycleEnd by `bankedDaysDelta` REAL delivery
-   * days, skipping any WEEKLY_FIXED off-weekday along the way — landing a
-   * banked/credited day on a day with no deliveries at all would defeat
-   * the entire point of banking. Always applied, regardless of the plan's
-   * offDayHandling (that toggle only governs the INITIAL duration at
-   * activation, not what a credited day lands on). No-op behavior change
-   * for RELATIVE_DAY plans, which have no off-day concept. Shared by
-   * skipDay()/pause() and the tenant disruption tool. */
-  private async bankExtraDays(
-    tenantId: string,
-    planId: string,
-    currentCycleEnd: Date,
-    bankedDaysDelta: number,
-  ): Promise<Date> {
-    const plan = await this.subscriptionsRepo.findPlanScheduleConfig(planId);
-    if (
-      !plan ||
-      plan.schedulingMode !== SubscriptionPlanSchedulingMode.WEEKLY_FIXED
-    ) {
-      return DateUtil.addDays(currentCycleEnd, bankedDaysDelta);
-    }
-    const timezone = await this.getTenantTimezone(tenantId);
-    const currentCycleEndStr = DateUtil.toTenantDateStr(
-      currentCycleEnd,
-      timezone,
-    );
-    const deliveryDayKeys =
-      await this.subscriptionsRepo.findPlanDeliveryDayKeys(planId);
-    const newCycleEndStr = PlanScheduleUtil.advanceRealDeliveryDays(
-      plan,
-      deliveryDayKeys,
-      currentCycleEndStr,
-      bankedDaysDelta,
-      false,
-    );
-    return new Date(`${newCycleEndStr}T00:00:00.000Z`);
   }
 }
 

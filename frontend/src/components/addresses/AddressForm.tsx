@@ -2,6 +2,9 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { useQuery } from "@tanstack/react-query";
+import { getMyProfile } from "@/lib/api/users";
+import { qk, STALE } from "@/lib/query/keys";
 import {
   ApiError,
   checkServiceability,
@@ -40,6 +43,12 @@ export function AddressForm({
   const [serviceability, setServiceability] = useState<ServiceabilityResult | null>(null);
   const [checkingServiceability, setCheckingServiceability] = useState(false);
   const isEditing = Boolean(address);
+  const { data: profile } = useQuery({
+    queryKey: qk.profile.all,
+    queryFn: getMyProfile,
+    staleTime: STALE.long,
+    enabled: !address,
+  });
   const notServiceable = serviceability?.serviceable === false;
 
   async function handleLocationPicked(picked: PickedAddress) {
@@ -149,13 +158,16 @@ export function AddressForm({
 
       <div className="flex flex-col gap-1">
         <label htmlFor="contactPhone" className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          {t("contactPhone")}
+          {t("contactPhone")} <span className="text-red-500">*</span>
         </label>
         <PhoneInput
+          // Remount once the profile arrives so a new address starts with
+          // the customer's signup number instead of an empty field.
+          key={address ? address.id : (profile?.phone ?? "no-profile-phone")}
           id="contactPhone"
           name="contactPhone"
           required
-          defaultValue={address?.contactPhone}
+          defaultValue={address?.contactPhone ?? profile?.phone ?? undefined}
         />
       </div>
       <Field

@@ -4,7 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, CalendarDays, ChevronLeft, FileText, List } from "lucide-react";
+import { CalendarClock, ChevronLeft, FileText } from "lucide-react";
 import {
   ApiError,
   cancelSubscription,
@@ -23,11 +23,19 @@ import { SubscriptionCalendarSection } from "@/components/subscriptions/Subscrip
 import { MoveDeliveryDateModal } from "@/components/subscriptions/MoveDeliveryDateModal";
 import { SubscriptionPauseAndCancel } from "@/components/subscriptions/SubscriptionPauseAndCancel";
 import { SubscriptionDetailSkeleton } from "@/components/subscriptions/SubscriptionDetailSkeleton";
+import { PlanViewTabs, type PlanViewTab } from "@/components/subscriptions/PlanViewTabs";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { SUBSCRIPTION_STATUS_STYLES } from "@/lib/format/status-styles";
 
-const TAB_BASE =
-  "flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors";
+/** "Mon, 5 Oct" for a tenant-local YYYY-MM-DD (UTC-parsed so it never shifts a day). */
+function formatDay(date: string): string {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+}
 
 export default function SubscriptionDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -53,7 +61,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
   const [pauseTo, setPauseTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
-  const [tab, setTab] = useState<"calendar" | "list">("calendar");
+  const [tab, setTab] = useState<PlanViewTab>("calendar");
   const [movingDate, setMovingDate] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
 
@@ -67,34 +75,53 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     return queryClient.invalidateQueries({ queryKey: qk.subscriptions.all });
   }
 
-  async function handleSkip(date: string) {
-    setBusy(true);
-    try {
-      await skipDay(id, date);
-      showToast("Day skipped — pushed to the end of your plan.", "success");
-      await refresh();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't skip this day.", "error");
-    } finally {
-      setBusy(false);
-    }
+  // Skip and pause can't be undone by the customer, so both ask first.
+  function handleSkip(date: string) {
+    confirm({
+      title: "Skip this delivery?",
+      message: `There'll be no delivery on ${formatDay(date)}. The day is added back at the end of your plan. This can't be undone.`,
+      confirmLabel: "Skip delivery",
+      processingLabel: "Skipping…",
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await skipDay(id, date);
+          showToast("Day skipped — pushed to the end of your plan.", "success");
+          await refresh();
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't skip this day.", "error");
+        } finally {
+          setBusy(false);
+        }
+      },
+    });
   }
 
-  async function handlePause(e: React.FormEvent) {
+  function handlePause(e: React.FormEvent) {
     e.preventDefault();
     if (!pauseFrom || !pauseTo) return;
-    setBusy(true);
-    try {
-      await pauseSubscription(id, pauseFrom, pauseTo);
-      showToast("Paused for the selected range.", "success");
-      setPauseFrom("");
-      setPauseTo("");
-      await refresh();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't pause.", "error");
-    } finally {
-      setBusy(false);
-    }
+    const range =
+      pauseFrom === pauseTo ? formatDay(pauseFrom) : `${formatDay(pauseFrom)} to ${formatDay(pauseTo)}`;
+    confirm({
+      title: "Pause deliveries?",
+      message: `No deliveries from ${range}. Those days are added back at the end of your plan. This can't be undone.`,
+      confirmLabel: "Pause",
+      processingLabel: "Pausing…",
+      onConfirm: async () => {
+        setBusy(true);
+        try {
+          await pauseSubscription(id, pauseFrom, pauseTo);
+          showToast("Paused for the selected range.", "success");
+          setPauseFrom("");
+          setPauseTo("");
+          await refresh();
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't pause.", "error");
+        } finally {
+          setBusy(false);
+        }
+      },
+    });
   }
 
   async function handleDayOverrideSave(
@@ -139,6 +166,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     confirm({
       message: "Cancel this subscription? This cannot be undone.",
       confirmLabel: "Cancel Subscription",
+      cancelLabel: "Keep subscription",
       processingLabel: "Cancelling…",
       variant: "danger",
       onConfirm: async () => {
@@ -212,29 +240,8 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
       {isActive && (
         <div className="mt-6 flex flex-col gap-6">
           {subscription.viewMode === "BOTH" && (
-            <div role="tablist" aria-label="View" className="inline-flex w-fit rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
-              {(
-                [
-                  { id: "calendar", label: "Calendar", Icon: CalendarDays },
-                  { id: "list", label: "List", Icon: List },
-                ] as const
-              ).map(({ id, label, Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={tab === id}
-                  onClick={() => setTab(id)}
-                  className={`${TAB_BASE} ${
-                    tab === id
-                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
-                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </button>
-              ))}
+            <div className="-mb-4 self-start">
+              <PlanViewTabs tab={tab} onChange={setTab} />
             </div>
           )}
 

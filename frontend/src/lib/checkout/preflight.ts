@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { checkServiceability, type Address } from "@/lib/api/addresses";
 import { fetchMealsOrThrow } from "@/lib/api/menu-client";
 import { getOrderWindowStatus } from "@/lib/api/order-window";
+import { getDeliverySlots } from "@/lib/api/delivery-slots";
 import { qk } from "@/lib/query/keys";
 import type { CartAddonSelection, CartItem } from "@/lib/store/cart-store";
 
@@ -34,18 +35,26 @@ export async function runCheckoutPreflight({
   items,
   isPickup,
   address,
+  schedule,
 }: {
   queryClient: QueryClient;
   items: CartItem[];
   isPickup: boolean;
   address: Pick<Address, "pincode" | "lat" | "lng"> | undefined;
+  /** Instant needs the kitchen open right now; a scheduled order needs its own day open. */
+  schedule: "instant" | { date: string };
 }): Promise<PreflightResult> {
   const fresh = { staleTime: 0 } as const;
 
-  const [windowStatus, meals, serviceability] = await Promise.all([
-    queryClient
-      .fetchQuery({ queryKey: qk.checkout.orderWindow, queryFn: getOrderWindowStatus, ...fresh })
-      .catch(() => null),
+  const [windowStatus, slotsConfig, meals, serviceability] = await Promise.all([
+    schedule === "instant"
+      ? queryClient
+          .fetchQuery({ queryKey: qk.checkout.orderWindow, queryFn: getOrderWindowStatus, ...fresh })
+          .catch(() => null)
+      : Promise.resolve(null),
+    schedule === "instant"
+      ? Promise.resolve(null)
+      : queryClient.fetchQuery({ queryKey: qk.checkout.slots, queryFn: getDeliverySlots, ...fresh }).catch(() => null),
     queryClient
       .fetchQuery({ queryKey: qk.meals.list({}), queryFn: () => fetchMealsOrThrow(), ...fresh })
       .catch(() => null),
@@ -67,6 +76,15 @@ export async function runCheckoutPreflight({
 
   if (windowStatus && !windowStatus.isAcceptingOrders) {
     return { ok: false, message: windowStatus.reason ?? "We're not accepting orders right now." };
+  }
+  if (slotsConfig && schedule !== "instant") {
+    if (slotsConfig.storeClosedReason) {
+      return { ok: false, message: `We're not taking orders right now — ${slotsConfig.storeClosedReason}.` };
+    }
+    const day = slotsConfig.days.find((d) => d.date === schedule.date);
+    if (day && !day.open) {
+      return { ok: false, message: `We can't deliver on that day (${day.reason ?? "closed"}) — please pick another.` };
+    }
   }
 
   if (meals) {

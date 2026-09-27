@@ -16,6 +16,7 @@ import { useAddresses, useAddressCacheSync } from "@/lib/query/addresses";
 import { buildGoogleMapsLink } from "@/lib/format/maps-link";
 import { hhmmToMinutes } from "@/lib/format/time";
 import { runCheckoutPreflight } from "@/lib/checkout/preflight";
+import { useRazorpayBranding } from "@/lib/razorpay/useRazorpayBranding";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { PaymentConfirmingScreen } from "@/components/checkout/PaymentConfirmingScreen";
 import { CheckoutSkeleton } from "@/components/checkout/CheckoutSkeleton";
@@ -39,8 +40,9 @@ export default function CheckoutPage() {
 
   // Public settings (order window, pickup, instant delivery, slots) — cached,
   // so a return visit paints instantly and refreshes quietly behind it.
-  const { windowClosed, pickupInfo, instantStatus, slots, dayOptions, todayStr, nowMinutes } =
+  const { windowClosed, closedNowNote, pickupInfo, instantStatus, slots, dayOptions, todayStr, nowMinutes } =
     useCheckoutData({ today: t("today"), tomorrow: t("tomorrow") });
+  const razorpayBranding = useRazorpayBranding();
 
   const { data: addressList, isPending: addressesPending, error: addressesError } = useAddresses();
   const { afterSave: cacheSavedAddress } = useAddressCacheSync();
@@ -107,7 +109,9 @@ export default function CheckoutPage() {
   // Instant delivery is the default whenever it's actually available — the
   // customer can still switch to scheduling a later day/slot instead.
   const isInstant = !isPickup && Boolean(instantStatus?.available) && (instantChoice ?? true);
-  const selectedDay = dayOptions.some((d) => d.value === dayChoice) ? dayChoice : (dayOptions[0]?.value ?? "");
+  // A holiday is listed but never picked — including as the default.
+  const openDays = dayOptions.filter((d) => d.closedName === undefined);
+  const selectedDay = openDays.some((d) => d.value === dayChoice) ? dayChoice : (openDays[0]?.value ?? "");
 
   const selectedAddress = addresses?.find((a) => a.id === selectedAddressId);
   const { data: serviceability = null } = useQuery({
@@ -173,6 +177,7 @@ export default function CheckoutPage() {
         items,
         isPickup,
         address: selectedAddress,
+        schedule: isInstant ? "instant" : { date: selectedDay },
       });
       if (!check.ok) {
         for (const p of check.prune ?? []) updateItemAddons(p.lineKey, p.addons);
@@ -210,7 +215,7 @@ export default function CheckoutPage() {
         amount: order.totalInPaise,
         currency: "INR",
         order_id: razorpayOrderId,
-        name: "Order payment",
+        ...razorpayBranding(selectedAddress?.contactPhone),
         description: `Order ${order.orderNumber}`,
         handler: (response) => {
           paymentSucceeded = true;
@@ -262,6 +267,11 @@ export default function CheckoutPage() {
       {windowClosed && (
         <div className="mt-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
           {windowClosed}
+        </div>
+      )}
+      {closedNowNote && (
+        <div className="mt-6 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300">
+          {closedNowNote}
         </div>
       )}
 

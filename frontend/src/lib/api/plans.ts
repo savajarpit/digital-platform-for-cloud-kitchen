@@ -46,6 +46,9 @@ export interface PlansHomeSettings {
   contactCtaTitle: string;
   contactCtaDescription: string;
   contactEmail?: string;
+  /** How plan menus are laid out (already downgraded to what the tenant is entitled to). */
+  planViewMode?: "ACCORDION" | "CALENDAR" | "BOTH";
+  dateSelectionEnabled?: boolean;
 }
 
 const DEFAULT_PLANS_HOME_SETTINGS: PlansHomeSettings = {

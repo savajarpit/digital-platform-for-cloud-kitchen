@@ -3,11 +3,15 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, Plus, Trash2 } from "lucide-react";
-import type { ClosedDateAppliesTo, ClosedDateEntry } from "@/lib/api/admin-settings";
+import type {
+  ClosedDateAppliesTo,
+  ClosedDateEntry,
+} from "@/lib/api/admin-settings";
 import { getClosedDateImpact } from "@/lib/api/admin-subscriptions";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { qk } from "@/lib/query/keys";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { useConfirm } from "@/context/ConfirmContext";
 
 const APPLIES_TO_OPTIONS: { value: ClosedDateAppliesTo; label: string }[] = [
   { value: "ORDERS", label: "Orders" },
@@ -32,7 +36,8 @@ function formatDate(date: string): string {
 
 interface ClosedDatesCardProps {
   value: ClosedDateEntry[];
-  onChange: (next: ClosedDateEntry[]) => void;
+  /** Persists the new list; resolves false when saving failed. */
+  onChange: (next: ClosedDateEntry[]) => Promise<boolean>;
   canEdit: boolean;
   /** Tenant has the plan-calendar-view feature — only then can a closure
    * also skip subscription deliveries and show on the plan calendar. */
@@ -50,7 +55,16 @@ export function ClosedDatesCard({
   const [date, setDate] = useState("");
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
-  const [appliesTo, setAppliesTo] = useState<ClosedDateAppliesTo>("ORDERS");
+  // A holiday usually closes the whole kitchen, so it defaults to BOTH once
+  // subscriptions can be closed at all. Derived rather than seeded into
+  // state, because the feature flag loads after the first render.
+  const [appliesToChoice, setAppliesTo] = useState<ClosedDateAppliesTo | null>(
+    null,
+  );
+  const appliesTo: ClosedDateAppliesTo =
+    appliesToChoice ?? (subscriptionsAvailable ? "BOTH" : "ORDERS");
+  const [busy, setBusy] = useState(false);
+  const confirm = useConfirm();
 
   // Only worth checking once subscriptions are actually in play for this
   // date, and once the admin has stopped typing — a keystroke-per-request
@@ -64,25 +78,51 @@ export function ClosedDatesCard({
     enabled: Boolean(debouncedDate) && touchesSubscriptions && !alreadyClosed,
     staleTime: 60_000,
   });
-  const affectedCount = touchesSubscriptions && !alreadyClosed ? (impact?.count ?? 0) : 0;
+  const affectedCount =
+    touchesSubscriptions && !alreadyClosed ? (impact?.count ?? 0) : 0;
 
-  function add() {
-    if (!date) return;
+  async function add() {
+    if (!date || busy) return;
     const entry: ClosedDateEntry = {
       date,
       name: name.trim() || null,
       note: note.trim() || null,
       appliesTo: subscriptionsAvailable ? appliesTo : "ORDERS",
     };
+    setBusy(true);
     // Same date twice replaces the earlier entry, matching what the server keeps.
-    onChange([...value.filter((d) => d.date !== date), entry].sort((a, b) => a.date.localeCompare(b.date)));
+    const saved = await onChange(
+      [...value.filter((d) => d.date !== date), entry].sort((a, b) =>
+        a.date.localeCompare(b.date),
+      ),
+    );
+    setBusy(false);
+    // A failed save keeps what was typed so the admin can just retry.
+    if (!saved) return;
     setDate("");
     setName("");
     setNote("");
   }
 
-  function remove(target: string) {
-    onChange(value.filter((d) => d.date !== target));
+  function remove(entry: ClosedDateEntry) {
+    if (busy) return;
+    const touches = subscriptionsAvailable && entry.appliesTo !== "ORDERS";
+    confirm({
+      title: "Remove closed date?",
+      message: `${entry.name ?? "This closure"} on ${formatDate(entry.date)} will be removed${
+        touches
+          ? " — orders and subscription deliveries resume on that day as normal."
+          : " — orders are accepted on that day as normal."
+      }`,
+      confirmLabel: "Remove",
+      processingLabel: "Removing…",
+      variant: "danger",
+      onConfirm: async () => {
+        setBusy(true);
+        await onChange(value.filter((d) => d.date !== entry.date));
+        setBusy(false);
+      },
+    });
   }
 
   return (
@@ -115,7 +155,9 @@ export function ClosedDatesCard({
                   </span>
                 </p>
                 {entry.note && (
-                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{entry.note}</p>
+                  <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                    {entry.note}
+                  </p>
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -127,8 +169,9 @@ export function ClosedDatesCard({
                 {canEdit && (
                   <button
                     type="button"
-                    onClick={() => remove(entry.date)}
-                    className="cursor-pointer text-zinc-400 hover:text-red-600"
+                    onClick={() => remove(entry)}
+                    disabled={busy}
+                    className="cursor-pointer text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label={`Remove ${entry.name ?? entry.date}`}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -170,7 +213,9 @@ export function ClosedDatesCard({
           <div className="flex flex-wrap items-center justify-between gap-3">
             {subscriptionsAvailable ? (
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Applies to</span>
+                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Applies to
+                </span>
                 <div className="inline-flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800">
                   {APPLIES_TO_OPTIONS.map((opt) => (
                     <button
@@ -191,17 +236,24 @@ export function ClosedDatesCard({
             ) : (
               <span />
             )}
-            <button type="button" onClick={add} disabled={!date} className="btn-outline btn-sm cursor-pointer">
+            <button
+              type="button"
+              onClick={() => void add()}
+              disabled={!date || busy}
+              className="btn-outline btn-sm cursor-pointer disabled:cursor-not-allowed"
+            >
               <Plus className="h-4 w-4" />
-              Add closed date
+              {busy ? "Saving…" : "Add closed date"}
             </button>
           </div>
           {affectedCount > 0 && (
             <p className="flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>
-                <strong>{affectedCount}</strong> subscriber{affectedCount === 1 ? "" : "s"} have deliveries
-                on this day. For unplanned closures, use Declare disruption instead.
+                <strong>{affectedCount}</strong> subscriber
+                {affectedCount === 1 ? " has" : "s have"} deliveries on this
+                day.
+                For unplanned closures, use Declare disruption instead.
               </span>
             </p>
           )}

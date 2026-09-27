@@ -1,30 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo } from "react";
+import { Lock } from "lucide-react";
 import type { SubscriptionCalendarDay } from "@/lib/api/subscriptions";
-import {
-  addMonths,
-  buildMonthGrid,
-  formatMonthTitle,
-  monthOf,
-} from "@/lib/plan-calendar/month-grid";
 import { SubscriptionCalendarCell } from "./SubscriptionCalendarCell";
-import { STATUS_LABELS } from "./subscription-calendar-styles";
+import { PlanMonthGrid } from "./PlanMonthGrid";
+import { SLOT_DOT, SLOT_LABELS, SLOT_ORDER } from "./plan-calendar-styles";
+import {
+  HATCH_STYLE,
+  STATUS_LABELS,
+  STATUS_TONE,
+} from "./subscription-calendar-styles";
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const NAV_BUTTON =
-  "flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800";
 const LEGEND_KINDS: SubscriptionCalendarDay["kind"][] = [
-  "DELIVERED",
   "UPCOMING",
+  "DELIVERED",
   "SKIPPED",
   "DISRUPTED",
   "HOLIDAY",
+  "OFF_DAY",
 ];
 
-/** Month grid of a subscription's full lifetime — past deliveries and
- * skips alongside future upcoming/locked days, all in one calendar. */
+/** Month-by-month view of a subscription's whole lifetime — past deliveries
+ * and skips alongside upcoming and locked days — showing only the weeks from
+ * its first day on, like the plan calendar. */
 export function SubscriptionCalendar({
   days,
   focusedDate,
@@ -34,74 +33,57 @@ export function SubscriptionCalendar({
   focusedDate: string | null;
   onSelect: (date: string) => void;
 }) {
-  const firstMonth = monthOf(days[0]?.date ?? focusedDate ?? "");
-  const lastMonth = monthOf(days.at(-1)?.date ?? focusedDate ?? "");
-  const [month, setMonth] = useState(
-    monthOf(focusedDate ?? days[0]?.date ?? ""),
-  );
-
   const daysByDate = useMemo(
     () => new Map(days.map((d) => [d.date, d])),
     [days],
   );
-  const weeks = useMemo(() => buildMonthGrid(month), [month]);
+  const startDate = days[0]?.date;
+  const endDate = days.at(-1)?.date;
+  if (!startDate || !endDate) return null;
 
   return (
     <div className="card p-4 sm:p-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="font-display text-lg font-bold text-zinc-900 sm:text-xl dark:text-zinc-100">
-          {formatMonthTitle(month)}
-        </h2>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setMonth((m) => addMonths(m, -1))}
-            disabled={month <= firstMonth}
-            aria-label="Previous month"
-            className={NAV_BUTTON}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setMonth((m) => addMonths(m, 1))}
-            disabled={month >= lastMonth}
-            aria-label="Next month"
-            className={NAV_BUTTON}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1.5 sm:gap-2">
-        {WEEKDAYS.map((label) => (
-          <div
-            key={label}
-            className="pb-1 text-center text-[10px] font-semibold tracking-wide text-zinc-400 uppercase sm:text-xs"
-          >
-            {label}
-          </div>
-        ))}
-        {weeks.flat().map((cell) => (
+      <PlanMonthGrid
+        startDate={startDate}
+        endDate={endDate}
+        focusedDate={focusedDate}
+        renderCell={(cell, otherMonth) => (
           <SubscriptionCalendarCell
-            key={cell.date}
             cell={cell}
-            day={daysByDate.get(cell.date)}
+            day={cell.inMonth ? daysByDate.get(cell.date) : undefined}
             focused={cell.date === focusedDate}
+            otherMonth={otherMonth && cell.inMonth}
             onSelect={onSelect}
           />
-        ))}
-      </div>
+        )}
+      />
 
-      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-zinc-100 pt-4 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-        {LEGEND_KINDS.map((kind) => (
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-zinc-100 pt-4 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+        {[
+          ...LEGEND_KINDS,
+          // Only when an upcoming holiday actually adds a day.
+          ...(days.some((d) => d.kind === "PROJECTED")
+            ? (["PROJECTED"] as const)
+            : []),
+        ].map((kind) => (
           <span key={kind} className="flex items-center gap-1.5">
-            <span className="h-3 w-3 rounded border border-zinc-200 dark:border-zinc-700" />
+            <span
+              className={`h-3 w-3 rounded border ${STATUS_TONE[kind]}`}
+              style={kind === "HOLIDAY" ? HATCH_STYLE : undefined}
+            />
             {STATUS_LABELS[kind]}
           </span>
         ))}
-        <span className="flex items-center gap-1.5">Locked (&lt;24h)</span>
+        <span className="flex items-center gap-1.5">
+          <Lock className="h-3 w-3" aria-hidden />
+          Locked (too close to change)
+        </span>
+        {SLOT_ORDER.map((slot) => (
+          <span key={slot} className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 rounded-full ${SLOT_DOT[slot]}`} />
+            {SLOT_LABELS[slot]}
+          </span>
+        ))}
       </div>
     </div>
   );

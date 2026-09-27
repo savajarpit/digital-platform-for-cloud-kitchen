@@ -13,6 +13,7 @@ import {
   ClosedDateEntry,
   normalizeClosedDates,
 } from '../../common/utils/closed-dates.util';
+import { orderDayAvailability } from '../../common/utils/order-day-availability.util';
 import {
   BusinessProfile,
   DeliverySlot,
@@ -192,23 +193,44 @@ export class SettingsService {
     slots: DeliverySlot[];
     todayStr: string;
     nowMinutes: number;
+    /** Each orderable day and whether a scheduled order can be placed for it. */
+    days: { date: string; open: boolean; reason: string | null }[];
+    /** Set when the store is temporarily closed — nothing can be ordered at all. */
+    storeClosedReason: string | null;
   }> {
-    const [profile, slots] = await Promise.all([
+    const [profile, slots, acceptance] = await Promise.all([
       this.settingsRepo.findBusinessProfile(tenantId),
       this.settingsRepo.findActiveDeliverySlots(tenantId),
+      this.settingsRepo.findOrderAcceptanceSettings(tenantId),
     ]);
     // The checkout day-picker must anchor to "today" in the tenant's
     // timezone — the exact same value orders.service validates against.
     // A browser building the list from its own clock (or worse, from
     // toISOString(), which is UTC) offers the wrong day near midnight and
     // the order is rejected with "Delivery date must be between …".
-    const { dateStr: todayStr, minutesSinceMidnight: nowMinutes } =
-      DateUtil.getTenantNow(profile?.timezone ?? 'Asia/Kolkata');
+    const now = DateUtil.getTenantNow(profile?.timezone ?? 'Asia/Kolkata');
+    const { dateStr: todayStr, minutesSinceMidnight: nowMinutes } = now;
+    const maxAdvanceOrderDays = profile?.maxAdvanceOrderDays ?? 2;
+    // Same rule orders.service enforces (orderDayAvailability), so checkout
+    // shows a closed day as closed instead of letting the order bounce.
+    const days = Array.from({ length: maxAdvanceOrderDays + 1 }, (_, i) => {
+      const date = DateUtil.addDaysToDateStr(todayStr, i);
+      const availability = orderDayAvailability(acceptance, date, now);
+      return {
+        date,
+        open: availability.open,
+        reason: availability.open ? null : availability.reason,
+      };
+    });
     return {
-      maxAdvanceOrderDays: profile?.maxAdvanceOrderDays ?? 2,
+      maxAdvanceOrderDays,
       slots,
       todayStr,
       nowMinutes,
+      days,
+      storeClosedReason: acceptance?.isTemporarilyClosed
+        ? acceptance.closureReason || 'Temporarily closed'
+        : null,
     };
   }
 

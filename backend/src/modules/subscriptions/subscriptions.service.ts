@@ -28,11 +28,14 @@ import {
 } from '../../common/utils/plan-schedule.util';
 import {
   computeCandidateDeliveryDates,
-  computeUnavailableDates,
+  computeSelectionWindow,
   isManualSelectionPlan,
   validateSelectedDates,
 } from '../../common/utils/plan-date-selection.util';
 import { buildSubscriptionCalendarDays } from '../../common/utils/subscription-calendar.util';
+import { buildUpcomingPreview } from '../../common/utils/subscription-upcoming.util';
+import { projectHolidayReplacements } from '../../common/utils/subscription-holiday-projection.util';
+import { deliversOn } from '../../common/utils/subscription-prep.util';
 import {
   SubscriptionOffDayHandling,
   SubscriptionPlanSchedulingMode,
@@ -67,7 +70,6 @@ import {
   Subscription,
 } from '../../generated/prisma';
 
-const PREVIEW_DAYS_AHEAD = 14;
 // SUPER_ADMIN platform-level kill switch — separate from the tenant's own
 // SubscriptionSettings.isEnabled self-service toggle. Both must be on for
 // the storefront to show plans; this one only SUPER_ADMIN controls.
@@ -632,34 +634,27 @@ export class SubscriptionsService {
       dateSelectionActive && weeklyPlan
         ? await this.subscriptionsRepo.findPlanDeliveryDayKeys(plan.id)
         : null;
-    const flexibilityDays = settings?.selectionFlexibilityDays ?? 7;
-    const candidates = dateSelectionActive
-      ? computeCandidateDeliveryDates(
+    const selectionWindow = dateSelectionActive
+      ? computeSelectionWindow(
           plan,
           deliveryDayKeys,
           startDateStr,
           durationDaysSnapshot,
-          flexibilityDays,
-          new Set(subscriptionClosedDates.map((c) => c.date)),
+          settings?.selectionFlexibilityDays ?? 7,
+          new Map(
+            subscriptionClosedDates.map((c) => [
+              c.date,
+              { name: c.name, note: c.note },
+            ]),
+          ),
         )
-      : [];
-    const dateSelection = dateSelectionActive
+      : null;
+    const candidates = selectionWindow?.candidates ?? [];
+    const dateSelection = selectionWindow
       ? {
           requiredCount: durationDaysSnapshot,
           candidates,
-          unavailable: computeUnavailableDates(
-            plan,
-            deliveryDayKeys,
-            startDateStr,
-            durationDaysSnapshot,
-            flexibilityDays,
-            new Map(
-              subscriptionClosedDates.map((c) => [
-                c.date,
-                { name: c.name, note: c.note },
-              ]),
-            ),
-          ),
+          unavailable: selectionWindow.unavailable,
           // Short plans: the customer actively picks every date. Long plans:
           // everything is pre-selected and they only adjust exceptions.
           manualSelection: isManualSelectionPlan(durationDaysSnapshot),
@@ -701,8 +696,9 @@ export class SubscriptionsService {
 
     let key: PlanScheduleKey;
     let todayStr: string | undefined;
+    let timezone = 'Asia/Kolkata';
     if (plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED) {
-      const timezone = await this.getTenantTimezone(tenantId);
+      timezone = await this.getTenantTimezone(tenantId);
       todayStr = DateUtil.getTenantNow(timezone).dateStr;
       key = PlanScheduleUtil.resolveKey(plan, {
         dateStr: todayStr,
@@ -717,7 +713,7 @@ export class SubscriptionsService {
       key = { dayNumber };
     }
 
-    const [day, subscriberCount] = await Promise.all([
+    const [day, activeCount, prepCandidates] = await Promise.all([
       'dayNumber' in key
         ? this.subscriptionsRepo.findPlanDayWithSlots(planId, key.dayNumber)
         : this.subscriptionsRepo.findPlanDayByWeekAndWeekday(
@@ -725,16 +721,33 @@ export class SubscriptionsService {
             key.weekNumber,
             key.weekday,
           ),
-      // todayStr is only set for WEEKLY_FIXED, where every subscriber shares
-      // the same real date — RELATIVE_DAY's projection stays the existing
-      // hypothetical "if everyone hit day N" count, skip-unaware, since
-      // there's no single shared date to check skips against there.
-      this.subscriptionsRepo.countActiveSubscriptionsForPlan(
-        tenantId,
-        planId,
-        todayStr,
-      ),
+      // RELATIVE_DAY's projection stays the hypothetical "if everyone hit
+      // day N" count — there's no single shared date to check against.
+      todayStr
+        ? Promise.resolve(0)
+        : this.subscriptionsRepo.countActiveSubscriptionsForPlan(
+            tenantId,
+            planId,
+          ),
+      // WEEKLY_FIXED: every subscriber shares today's real date, so count
+      // only those actually delivering today — started, not yet ended, not
+      // skipped/paused, and (date selection) today is one of their dates.
+      todayStr
+        ? this.subscriptionsRepo.findActiveSubscriptionsForPrep(
+            tenantId,
+            planId,
+            todayStr,
+          )
+        : Promise.resolve([]),
     ]);
+    // A weekday with no slots is an off day — nobody is cooked for.
+    const isOffDay = todayStr !== undefined && (day?.slots ?? []).length === 0;
+    const subscriberCount = !todayStr
+      ? activeCount
+      : isOffDay
+        ? 0
+        : prepCandidates.filter((s) => deliversOn(s, todayStr, timezone))
+            .length;
 
     const items = (day?.slots ?? [])
       .filter((slot) => slot.meal)
@@ -1233,10 +1246,36 @@ export class SubscriptionsService {
       this.settingsRepo.findClosedDates(tenantId),
     ]);
     const canOverrideTime = !timeLocked;
+    const subscriptionClosures = closedDatesAffecting(
+      closedDates,
+      'SUBSCRIPTIONS',
+    );
+    const todayStr = DateUtil.getTenantNow(timezone).dateStr;
+    const startDateStr = subscription.startDate
+      ? DateUtil.toTenantDateStr(subscription.startDate, timezone)
+      : null;
+    const cycleEndStr = subscription.cycleEnd
+      ? DateUtil.toTenantDateStr(subscription.cycleEnd, timezone)
+      : null;
+    // Display only — the materializer still banks each holiday's day on the
+    // day itself; this just shows the customer where it will land.
+    const projection =
+      startDateStr && cycleEndStr && subscription.status === 'ACTIVE'
+        ? projectHolidayReplacements(
+            subscription,
+            todayStr,
+            startDateStr,
+            cycleEndStr,
+            subscriptionClosures,
+          )
+        : undefined;
     const upcoming = buildUpcomingPreview(
       subscription,
+      todayStr,
       timezone,
       earliest.dateStr,
+      subscriptionClosures,
+      projection,
     );
 
     // Same downgrade rule as the storefront's findPublishedPlan — a stored
@@ -1253,14 +1292,15 @@ export class SubscriptionsService {
       entitlements.dateSelection &&
       (settings?.allowDateChangeAfterPurchase ?? false);
     const calendar =
-      subscription.startDate && subscription.cycleEnd
+      startDateStr && cycleEndStr
         ? buildSubscriptionCalendarDays(
             subscription,
-            DateUtil.toTenantDateStr(subscription.startDate, timezone),
-            DateUtil.toTenantDateStr(subscription.cycleEnd, timezone),
-            DateUtil.getTenantNow(timezone).dateStr,
+            startDateStr,
+            cycleEndStr,
+            todayStr,
             earliest.dateStr,
-            closedDatesAffecting(closedDates, 'SUBSCRIPTIONS'),
+            subscriptionClosures,
+            projection,
           )
         : [];
 
@@ -2070,151 +2110,6 @@ function buildPlanPreviewWindow(
     cursor = DateUtil.addDaysToDateStr(cursor, 1);
     if (isRealDay) realDayCount++;
     if (extendMode && realDayCount >= plan.durationDays) break;
-  }
-  return preview;
-}
-
-export interface UpcomingPreviewDay {
-  date: string;
-  skipped: boolean;
-  meals: {
-    slotType: string;
-    mealId: string | null;
-    name: string | null;
-    imageUrl: string | null;
-  }[];
-  addressId: string;
-  deliverySlotId: string | null;
-  isOverridden: boolean;
-  /** This day's prep/customization note, if the customer set one — surfaced
-   * here so the account page can pre-fill it when the day card reopens. */
-  note: string | null;
-  /** Too close to delivery to skip/pause/override — the notice window has
-   * already passed. The frontend should hide those controls and explain
-   * why instead of letting the customer submit and hit a rejection. */
-  locked: boolean;
-  /** Set only when this day was skipped by a tenant-declared disruption
-   * (never the customer's own skip/pause) — shown instead of the plain
-   * "Skipped" label so the customer understands why. */
-  disruptionReason: string | null;
-}
-
-/** Projects the next PREVIEW_DAYS_AHEAD calendar days (capped at cycleEnd) —
- * a skipped day consumes no template day (mirrors the real materialization
- * job exactly: nextPlanDayNumber only advances on a day that actually gets
- * prepared), and the template loops via modulo once its own day count is
- * exhausted, so bonus/banked days beyond the template's length still show
- * a real (repeated) day instead of going blank. Each day also resolves its
- * effective address/slot — a SubscriptionDayOverride if one exists for
- * that date, else the subscription's own default. */
-function buildUpcomingPreview(
-  subscription: {
-    nextPlanDayNumber: number;
-    startDate: Date | null;
-    cycleEnd: Date | null;
-    addressId: string;
-    deliverySlotId: string | null;
-    skips: { dateFrom: string; dateTo: string; reason: string | null }[];
-    dayOverrides: {
-      date: string;
-      addressId: string | null;
-      deliverySlotId: string | null;
-      note: string | null;
-    }[];
-    plan: {
-      schedulingMode: SubscriptionPlanSchedulingMode;
-      durationDays: number;
-      weekCount: number | null;
-      scheduleAnchorDate: string | null;
-      days: {
-        dayNumber: number | null;
-        weekNumber: number | null;
-        weekday: number | null;
-        slots: {
-          slotType: string;
-          meal: { id: string; name: string; imageUrl: string | null } | null;
-        }[];
-      }[];
-    };
-  },
-  timezone: string,
-  earliestEditableDateStr: string,
-): UpcomingPreviewDay[] {
-  if (!subscription.cycleEnd || !subscription.startDate) return [];
-  const { dateStr: todayStr } = DateUtil.getTenantNow(timezone);
-  const cycleEndStr = DateUtil.toTenantDateStr(subscription.cycleEnd, timezone);
-  const startDateStr = DateUtil.toTenantDateStr(
-    subscription.startDate,
-    timezone,
-  );
-
-  const daysByNumber = new Map(
-    subscription.plan.days.map((d) => [d.dayNumber, d]),
-  );
-  const daysByWeekWeekday = new Map(
-    subscription.plan.days.map((d) => [`${d.weekNumber}-${d.weekday}`, d]),
-  );
-  const overridesByDate = new Map(
-    subscription.dayOverrides.map((o) => [o.date, o]),
-  );
-  const preview: UpcomingPreviewDay[] = [];
-  // Never starts before Day 1 actually begins — matches the scheduler's
-  // own startDateStr guard, so the preview never shows a day the nightly
-  // job wouldn't actually materialize.
-  let cursor = todayStr > startDateStr ? todayStr : startDateStr;
-  let counter = subscription.nextPlanDayNumber;
-
-  for (let i = 0; i < PREVIEW_DAYS_AHEAD && cursor <= cycleEndStr; i++) {
-    const skip = subscription.skips.find(
-      (s) => s.dateFrom <= cursor && cursor <= s.dateTo,
-    );
-    const override = overridesByDate.get(cursor);
-    const addressId = override?.addressId ?? subscription.addressId;
-    const deliverySlotId =
-      override?.deliverySlotId ?? subscription.deliverySlotId ?? null;
-    const locked = cursor < earliestEditableDateStr;
-
-    if (skip) {
-      preview.push({
-        date: cursor,
-        skipped: true,
-        meals: [],
-        addressId,
-        deliverySlotId,
-        isOverridden: Boolean(override),
-        note: override?.note ?? null,
-        locked,
-        disruptionReason: skip.reason,
-      });
-    } else {
-      const key = PlanScheduleUtil.resolveKey(subscription.plan, {
-        dateStr: cursor,
-        relativeCounter: counter,
-      });
-      const planDay =
-        'dayNumber' in key
-          ? daysByNumber.get(key.dayNumber)
-          : daysByWeekWeekday.get(`${key.weekNumber}-${key.weekday}`);
-      const meals = (planDay?.slots ?? []).map((slot) => ({
-        slotType: slot.slotType,
-        mealId: slot.meal?.id ?? null,
-        name: slot.meal?.name ?? null,
-        imageUrl: slot.meal?.imageUrl ?? null,
-      }));
-      preview.push({
-        date: cursor,
-        skipped: false,
-        meals,
-        addressId,
-        deliverySlotId,
-        isOverridden: Boolean(override),
-        note: override?.note ?? null,
-        locked,
-        disruptionReason: null,
-      });
-      counter += 1;
-    }
-    cursor = DateUtil.addDaysToDateStr(cursor, 1);
   }
   return preview;
 }

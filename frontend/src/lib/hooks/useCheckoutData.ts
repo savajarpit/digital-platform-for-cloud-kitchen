@@ -21,15 +21,19 @@ const NO_INSTANT: InstantDeliveryStatus = { available: false, etaMinMinutes: 30,
 const NO_SLOTS: DeliverySlot[] = [];
 
 export interface CheckoutData {
-  /** Reason the kitchen isn't taking orders right now, or null when it is. */
+  /** Why nothing at all can be ordered (store temporarily closed / no open day), or null. */
   windowClosed: string | null;
+  /** Kitchen closed right now but later days are open — informational, not blocking. */
+  closedNowNote: string | null;
   /** null while loading. */
   pickupInfo: PickupInfo | null;
   /** null while loading. */
   instantStatus: InstantDeliveryStatus | null;
   /** null while loading. */
   slots: DeliverySlot[] | null;
-  dayOptions: { value: string; label: string }[];
+  /** `closedName` is set (possibly "") on a closed day — holiday, weekly off,
+   * cutoff passed: listed but not pickable. */
+  dayOptions: { value: string; label: string; closedName?: string }[];
   /** Tenant-local "today" (YYYY-MM-DD) and minutes since midnight. */
   todayStr: string;
   nowMinutes: number;
@@ -87,6 +91,7 @@ export function useCheckoutData(labels: { today: string; tomorrow: string }): Ch
   const dayOptions = useMemo(() => {
     if (!config) return [];
     const [ty, tm, td] = config.todayStr.split("-").map(Number);
+    const closedByDate = new Map(config.days.filter((d) => !d.open).map((d) => [d.date, d.reason ?? ""]));
     return Array.from({ length: config.maxAdvanceOrderDays + 1 }, (_, i) => {
       const date = new Date(Date.UTC(ty, tm - 1, td + i));
       const value = date.toISOString().slice(0, 10);
@@ -101,14 +106,24 @@ export function useCheckoutData(labels: { today: string; tomorrow: string }): Ch
                 day: "numeric",
                 timeZone: "UTC",
               });
-      return { value, label };
+      return { value, label, closedName: closedByDate.get(value) };
     });
   }, [config, today, tomorrow]);
 
   const status = windowQuery.data;
+  // Only a temporarily closed store (or no open day at all) blocks checkout —
+  // a kitchen that's merely closed right now still takes scheduled orders.
+  const windowClosed = config?.storeClosedReason
+    ? `We're not taking orders right now — ${config.storeClosedReason.replace(/\.$/, "")}.`
+    : (config && config.days.every((d) => !d.open)
+      ? "No delivery days are open right now — please check back later."
+      : null);
   return {
-    windowClosed:
-      status && !status.isAcceptingOrders ? (status.reason ?? "Not currently accepting orders") : null,
+    windowClosed,
+    closedNowNote:
+      !windowClosed && status && !status.isAcceptingOrders
+        ? `${status.reason ?? "The kitchen is closed right now"} — you can still schedule a delivery for later.`
+        : null,
     pickupInfo: pickupQuery.data ?? (pickupQuery.isError ? NO_PICKUP : null),
     instantStatus: instantQuery.data ?? (instantQuery.isError ? NO_INSTANT : null),
     slots: config?.slots ?? (slotsQuery.isError ? NO_SLOTS : null),

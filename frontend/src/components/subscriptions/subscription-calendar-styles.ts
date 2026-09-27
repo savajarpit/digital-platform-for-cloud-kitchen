@@ -8,6 +8,7 @@ export const STATUS_LABELS: Record<SubscriptionDayKind, string> = {
   HOLIDAY: "Holiday",
   OFF_DAY: "No delivery",
   NOT_SCHEDULED: "Not scheduled",
+  PROJECTED: "Added for holiday",
 };
 
 export const STATUS_TONE: Record<SubscriptionDayKind, string> = {
@@ -25,6 +26,8 @@ export const STATUS_TONE: Record<SubscriptionDayKind, string> = {
     "border-transparent bg-zinc-100 text-zinc-400 dark:bg-zinc-800/70 dark:text-zinc-600",
   NOT_SCHEDULED:
     "border-dashed border-zinc-100 bg-transparent text-zinc-300 dark:border-zinc-800 dark:text-zinc-700",
+  PROJECTED:
+    "border-dashed border-primary-300 bg-primary-50/40 text-zinc-900 dark:border-primary-800 dark:bg-primary-950/20 dark:text-zinc-100",
 };
 
 export const STATUS_BADGE: Record<SubscriptionDayKind, string> = {
@@ -39,6 +42,8 @@ export const STATUS_BADGE: Record<SubscriptionDayKind, string> = {
   OFF_DAY: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
   NOT_SCHEDULED:
     "bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600",
+  PROJECTED:
+    "bg-primary-50 text-primary-700 dark:bg-primary-950/60 dark:text-primary-400",
 };
 
 /** Diagonal hatching for holidays — layers over any tint. */

@@ -65,6 +65,13 @@ export function PlanDisplaySettingsCard({ canEdit }: { canEdit: boolean }) {
         How customers see a plan&apos;s day-by-day menu on your storefront.
       </p>
 
+      {data.dateSelectionEnabled && (
+        <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-400">
+          Delivery date selection is on, so customers always get the calendar to pick their dates. List opens on the
+          list with a Calendar tab; Both opens on the calendar with a List tab.
+        </p>
+      )}
+
       <div role="radiogroup" aria-label="Plan menu layout" className="flex flex-col gap-2">
         {OPTIONS.map((opt) => {
           const selected = value === opt.value;

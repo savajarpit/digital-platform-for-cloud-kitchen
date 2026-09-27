@@ -63,7 +63,9 @@ export function DeliveryDateSelectionCard({ canEdit }: { canEdit: boolean }) {
       showToast("Delivery date selection saved", "success");
     } catch (err) {
       showToast(
-        err instanceof ApiError ? err.message : "Couldn't save delivery date selection.",
+        err instanceof ApiError
+          ? err.message
+          : "Couldn't save delivery date selection.",
         "error",
       );
     } finally {
@@ -84,8 +86,8 @@ export function DeliveryDateSelectionCard({ canEdit }: { canEdit: boolean }) {
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
           Let customers choose their delivery dates
           <span className="block text-xs font-normal text-zinc-400">
-            The next valid days are pre-selected at checkout — customers can swap them for any
-            other day inside the window.
+            The next valid days are pre-selected at checkout — customers can
+            swap them for any other day inside the window.
           </span>
         </span>
         <Toggle
@@ -98,7 +100,7 @@ export function DeliveryDateSelectionCard({ canEdit }: { canEdit: boolean }) {
       {value.dateSelectionEnabled && (
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-            Flexibility days (extra days beyond plan length)
+            Flexibility days (extra delivery days to choose from)
           </label>
           <input
             type="number"
@@ -112,7 +114,9 @@ export function DeliveryDateSelectionCard({ canEdit }: { canEdit: boolean }) {
             className="input w-32"
           />
           <p className="text-xs text-zinc-400">
-            Default is 7. With 5, a 7-day plan lets customers choose within a 12-day window.
+            Default is 7. With 5, customers of a 7-day plan pick 7 out of 12
+            available delivery days. Holidays and off-days don&apos;t count
+            towards these.
           </p>
         </div>
       )}
@@ -121,13 +125,15 @@ export function DeliveryDateSelectionCard({ canEdit }: { canEdit: boolean }) {
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
           Allow customers to change dates after purchase
           <span className="block text-xs font-normal text-zinc-400">
-            Lets subscribers move an upcoming delivery to another date. Skip and address changes
-            stay available either way.
+            Lets subscribers move an upcoming delivery to another date. Skip and
+            address changes stay available either way.
           </span>
         </span>
         <Toggle
           checked={value.allowDateChangeAfterPurchase}
-          onChange={(checked) => patch({ allowDateChangeAfterPurchase: checked })}
+          onChange={(checked) =>
+            patch({ allowDateChangeAfterPurchase: checked })
+          }
           disabled={!canEdit}
         />
       </label>

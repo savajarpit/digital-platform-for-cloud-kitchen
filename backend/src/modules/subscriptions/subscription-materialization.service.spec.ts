@@ -261,17 +261,18 @@ describe('SubscriptionMaterializationService — usesDateSelection', () => {
     expect(mockRepo.advanceSubscriptionDay).not.toHaveBeenCalled();
   });
 
-  it('delivers using the scheduled row’s own sequence, not nextPlanDayNumber', async () => {
-    mockRepo.findScheduledDate.mockResolvedValue({ sequence: 2 });
+  it('delivers the running plan day (not the row’s sequence) and advances it', async () => {
+    // Row sequence 4, but only 2 earlier dates were delivered (one skipped),
+    // so today is Day 3 — a skip shifts menus like a contiguous plan.
+    mockRepo.findScheduledDate.mockResolvedValue({ sequence: 4 });
 
     await service.materializeOne(
       subscription({ usesDateSelection: true, nextPlanDayNumber: 3 }),
     );
 
-    expect(mockRepo.findPlanDayWithSlots).toHaveBeenCalledWith('p1', 2);
+    expect(mockRepo.findPlanDayWithSlots).toHaveBeenCalledWith('p1', 3);
     expect(mockRepo.createMaterializedOrder).toHaveBeenCalledTimes(1);
-    // Sequence is fixed at signup — there is no running counter to advance.
-    expect(mockRepo.advanceSubscriptionDay).not.toHaveBeenCalled();
+    expect(mockRepo.advanceSubscriptionDay).toHaveBeenCalledWith('sub1', 4);
   });
 
   it('a closure on a scheduled date still banks through SubscriptionBankingService', async () => {

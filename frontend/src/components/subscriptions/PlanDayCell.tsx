@@ -77,8 +77,10 @@ export function PlanDayCell({
   onRemove?: (date: string) => void;
 }) {
   const number = dayOfMonth(date);
+  // On its own line above the number: inline ("SEP 28") doesn't fit a
+  // phone-width box.
   const monthPrefix = showMonth ? (
-    <span className="mr-0.5 text-[9px] font-medium tracking-wide uppercase sm:text-[10px]">
+    <span className="mb-0.5 block text-[8px] leading-none font-medium tracking-wide uppercase sm:text-[10px]">
       {formatMonthShort(date)}
     </span>
   ) : null;
@@ -89,7 +91,7 @@ export function PlanDayCell({
         className="flex h-[4.5rem] items-start p-1.5 text-sm text-zinc-300 sm:h-20 sm:p-2 dark:text-zinc-700"
         aria-hidden
       >
-        <span>
+        <span className="flex flex-col leading-none">
           {monthPrefix}
           {number}
         </span>
@@ -118,7 +120,7 @@ export function PlanDayCell({
         className={`${BOX} ${TONE[kind]} ${selectedTone} ${ring} cursor-pointer transition-colors`}
       >
         <span
-          className={`text-sm leading-none font-semibold ${
+          className={`flex flex-col text-sm leading-none font-semibold ${
             kind === "OFF_DAY" || kind === "HOLIDAY"
               ? "text-zinc-500 dark:text-zinc-400"
               : highlighted

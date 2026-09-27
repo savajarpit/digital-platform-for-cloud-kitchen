@@ -82,6 +82,29 @@ export default function OrderHoursPage() {
     patchForm((f) => ({ hours: { ...f.hours, [day]: { ...f.hours[day], ...patch } } }));
   }
 
+  // Closed dates save on their own the moment one is added or removed — an
+  // "Add" that silently waited for the page's Save button lost holidays.
+  async function saveClosedDates(next: ClosedDateEntry[]): Promise<boolean> {
+    try {
+      const updated = await updateOrderAcceptance({
+        closedDates: next.map((d) => ({
+          date: d.date,
+          name: d.name ?? undefined,
+          note: d.note ?? undefined,
+          appliesTo: d.appliesTo,
+        })),
+      });
+      queryClient.setQueryData(queryKey, updated);
+      // Keep any unsaved hours edits, but take the saved closed dates.
+      setDraft((prev) => (prev ? { ...prev, closedDates: updated.closedDates } : null));
+      showToast(next.length > (form?.closedDates.length ?? 0) ? "Closed date saved" : "Closed date removed", "success");
+      return true;
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Couldn't save the closed date.", "error");
+      return false;
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form) return;
@@ -201,7 +224,7 @@ export default function OrderHoursPage() {
 
         <ClosedDatesCard
           value={closedDates}
-          onChange={(next) => patchForm(() => ({ closedDates: next }))}
+          onChange={saveClosedDates}
           canEdit={canEdit}
           subscriptionsAvailable={hasFeature("plan-calendar-view")}
         />

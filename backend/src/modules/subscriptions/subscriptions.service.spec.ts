@@ -481,7 +481,7 @@ describe('SubscriptionsService — storefront plan calendar', () => {
     });
   });
 
-  it('excludes a subscription-affecting closed date from the candidates', async () => {
+  it('skips a subscription-affecting closed date without shrinking the window, and reports it as a holiday', async () => {
     mockRepo.findSettings.mockResolvedValue({
       dateSelectionEnabled: true,
       selectionFlexibilityDays: 0,
@@ -494,10 +494,45 @@ describe('SubscriptionsService — storefront plan calendar', () => {
 
     const result = await service.findPublishedPlan('t1', 'p1');
 
+    // 3 required + 0 flexibility = 3 real delivery days, the holiday skipped.
     expect(result.dateSelection?.candidates).toEqual([
       '2026-09-23',
       '2026-09-25',
+      '2026-09-26',
     ]);
+    expect(result.dateSelection?.unavailable).toEqual([
+      {
+        date: '2026-09-24',
+        kind: 'HOLIDAY',
+        holiday: { name: 'Diwali', note: null },
+      },
+    ]);
+  });
+
+  it('ignores an orders-only closed date in the subscription window', async () => {
+    mockRepo.findSettings.mockResolvedValue({
+      dateSelectionEnabled: true,
+      selectionFlexibilityDays: 0,
+      startDateLeadDays: 1,
+    });
+    grant('subscriptions', CALENDAR, SELECTION);
+    mockSettingsRepo.findClosedDates.mockResolvedValue([
+      {
+        date: '2026-09-24',
+        name: 'Stock-taking',
+        note: null,
+        appliesTo: 'ORDERS',
+      },
+    ]);
+
+    const result = await service.findPublishedPlan('t1', 'p1');
+
+    expect(result.dateSelection?.candidates).toEqual([
+      '2026-09-23',
+      '2026-09-24',
+      '2026-09-25',
+    ]);
+    expect(result.dateSelection?.unavailable).toEqual([]);
   });
 
   it('flags a long plan as not manual (pre-selected, exceptions-only)', async () => {

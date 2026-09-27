@@ -8,7 +8,7 @@ import { CalendarClock, Clock } from "lucide-react";
 import {
   ApiError,
   getPlan,
-  getSubscriptionsEnabled,
+  getPlanPageSettings,
   listMySubscriptions,
   subscribe,
   verifySubscriptionPayment,
@@ -27,6 +27,8 @@ import { PlanPurchasePanel } from "@/components/subscriptions/PlanPurchasePanel"
 import { PlanCheckoutBar } from "@/components/subscriptions/PlanCheckoutBar";
 import { initialSelection } from "@/lib/plan-calendar/date-selection";
 import { PlanDetailSkeleton } from "@/components/subscriptions/PlanDetailSkeleton";
+import { usePlanLayoutHint } from "@/components/subscriptions/PlanLayoutHint";
+import { useRazorpayBranding } from "@/lib/razorpay/useRazorpayBranding";
 
 export default function PlanDetailPage({
   params,
@@ -46,11 +48,14 @@ export default function PlanDetailPage({
   });
   // Bounce a direct visit while the tenant has subscriptions switched off.
   // A failed check is ignored (the page just stays).
-  const { data: subscriptionsEnabled } = useQuery({
-    queryKey: qk.plans.subscriptionsEnabled,
-    queryFn: getSubscriptionsEnabled,
+  const { data: pageSettings } = useQuery({
+    queryKey: qk.plans.pageSettings,
+    queryFn: getPlanPageSettings,
     staleTime: STALE.list,
   });
+  const subscriptionsEnabled = pageSettings?.isEnabled;
+  const layoutHint = usePlanLayoutHint();
+  const razorpayBranding = useRazorpayBranding();
   const addressesQuery = useAddresses();
   const { data: slotsConfig } = useQuery({
     queryKey: qk.checkout.slots,
@@ -145,7 +150,9 @@ export default function PlanDetailPage({
         amount: amountInPaise,
         currency: "INR",
         order_id: razorpayOrderId,
-        name: "Plan subscription",
+        ...razorpayBranding(
+          addresses?.find((a) => a.id === selectedAddressId)?.contactPhone,
+        ),
         description: plan.name,
         handler: (response) => {
           verifySubscriptionPayment({
@@ -184,7 +191,7 @@ export default function PlanDetailPage({
   }
 
   if (!plan) {
-    if (isPending) return <PlanDetailSkeleton />;
+    if (isPending) return <PlanDetailSkeleton calendar={pageSettings?.usesCalendar ?? layoutHint} />;
     return (
       <main className="container-app flex-1 py-12">
         <EmptyState

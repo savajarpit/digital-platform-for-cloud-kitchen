@@ -17,6 +17,8 @@ interface RazorpayCheckoutOptions {
   subscription_id?: string;
   name: string;
   description?: string;
+  /** Logo shown at the top of the checkout. */
+  image?: string;
   handler: (response: RazorpayCheckoutResponse) => void;
   prefill?: { name?: string; email?: string; contact?: string };
   theme?: { color?: string };

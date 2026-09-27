@@ -29,7 +29,7 @@ export function CheckoutSlotSection({
   /** null while the slot config is still loading. */
   slots: DeliverySlot[] | null;
   visibleSlots: DeliverySlot[];
-  dayOptions: { value: string; label: string }[];
+  dayOptions: { value: string; label: string; closedName?: string }[];
   selectedDay: string;
   onDayChange: (day: string) => void;
   effectiveSlotId: string;
@@ -119,8 +119,12 @@ export function CheckoutSlotSection({
               <SelectContent>
                 {dayOptions.length === 0 && <SelectItem value="">{t("selectDay")}</SelectItem>}
                 {dayOptions.map((day) => (
-                  <SelectItem key={day.value} value={day.value}>
-                    {day.label}
+                  <SelectItem key={day.value} value={day.value} disabled={day.closedName !== undefined}>
+                    {day.closedName === undefined
+                      ? day.label
+                      : day.closedName
+                        ? t("dayClosedNamed", { day: day.label, name: day.closedName })
+                        : t("dayClosed", { day: day.label })}
                   </SelectItem>
                 ))}
               </SelectContent>

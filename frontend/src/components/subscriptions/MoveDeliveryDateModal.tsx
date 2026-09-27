@@ -64,8 +64,8 @@ export function MoveDeliveryDateModal({
               Move {formatLongDate(date)}
             </h3>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Choose a new date. Your plan length and last delivery stay the
-              same.
+              Choose a new date. You still get the same number of deliveries
+              — this one just happens on the new day.
             </p>
           </div>
           <button

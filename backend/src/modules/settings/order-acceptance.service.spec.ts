@@ -95,3 +95,65 @@ describe('OrderAcceptanceService — closed dates', () => {
     expect(status.isAcceptingOrders).toBe(true);
   });
 });
+
+describe('OrderAcceptanceService — scheduled order days', () => {
+  let service: OrderAcceptanceService;
+
+  beforeEach(() => {
+    // Sunday 2026-11-08, 11:30 IST.
+    jest.useFakeTimers().setSystemTime(SUNDAY_NOON_IST);
+    service = new OrderAcceptanceService(
+      mockRepo as unknown as SettingsRepository,
+      mockRedis as unknown as RedisService,
+    );
+    mockRepo.findBusinessProfile.mockResolvedValue({
+      timezone: 'Asia/Kolkata',
+    });
+    mockRepo.findOrderAcceptanceSettings.mockResolvedValue({
+      operatingHours: OPEN_ALL_WEEK,
+      dailyCutoffTime: '11:00',
+      isTemporarilyClosed: false,
+      closureReason: null,
+      closedDates: [
+        { date: '2026-11-09', name: 'Diwali', appliesTo: 'ORDERS' },
+        { date: '2026-11-10', name: 'Staff day', appliesTo: 'SUBSCRIPTIONS' },
+      ],
+    });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.resetAllMocks();
+  });
+
+  it('rejects today once the cutoff has passed, but allows a later open day', async () => {
+    await expect(
+      service.assertOrderDayOpen('t1', '2026-11-08'),
+    ).rejects.toThrow('Orders for today are closed');
+    await expect(
+      service.assertOrderDayOpen('t1', '2026-11-11'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects an ORDERS holiday, not a SUBSCRIPTIONS-only one', async () => {
+    await expect(
+      service.assertOrderDayOpen('t1', '2026-11-09'),
+    ).rejects.toThrow('(Diwali)');
+    await expect(
+      service.assertOrderDayOpen('t1', '2026-11-10'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('rejects every day while the store is temporarily closed', async () => {
+    mockRepo.findOrderAcceptanceSettings.mockResolvedValue({
+      operatingHours: OPEN_ALL_WEEK,
+      dailyCutoffTime: null,
+      isTemporarilyClosed: true,
+      closureReason: 'Renovation',
+      closedDates: [],
+    });
+    await expect(
+      service.assertOrderDayOpen('t1', '2026-11-11'),
+    ).rejects.toThrow('Renovation');
+  });
+});

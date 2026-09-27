@@ -5,6 +5,12 @@ import {
   closedDatesAffecting,
   normalizeClosedDates,
 } from '../../common/utils/closed-dates.util';
+import { DateUtil } from '../../common/utils/date.util';
+import {
+  orderDayAvailability,
+  orderDayClosedMessage,
+  type OrderDayAvailability,
+} from '../../common/utils/order-day-availability.util';
 
 export interface OrderWindowStatus {
   isAcceptingOrders: boolean;
@@ -67,6 +73,35 @@ export class OrderAcceptanceService {
     if (!status.isAcceptingOrders) {
       throw new BadRequestException(
         status.reason ?? 'Not currently accepting orders',
+      );
+    }
+  }
+
+  /** Scheduled-order availability for each of `dates` (see
+   * orderDayAvailability) — the kitchen being closed right now doesn't stop
+   * a customer booking a later day, but a holiday, a weekly off, today's
+   * passed cutoff, or a temporarily closed store does. */
+  async getOrderDays(
+    tenantId: string,
+    dates: string[],
+  ): Promise<{ date: string; availability: OrderDayAvailability }[]> {
+    const [settings, profile] = await Promise.all([
+      this.settingsRepo.findOrderAcceptanceSettings(tenantId),
+      this.settingsRepo.findBusinessProfile(tenantId),
+    ]);
+    const now = DateUtil.getTenantNow(profile?.timezone ?? 'Asia/Kolkata');
+    return dates.map((date) => ({
+      date,
+      availability: orderDayAvailability(settings, date, now),
+    }));
+  }
+
+  /** Rejects a scheduled order for a day the kitchen won't deliver on. */
+  async assertOrderDayOpen(tenantId: string, dateStr: string): Promise<void> {
+    const [{ availability }] = await this.getOrderDays(tenantId, [dateStr]);
+    if (!availability.open) {
+      throw new BadRequestException(
+        orderDayClosedMessage(dateStr, availability),
       );
     }
   }

@@ -64,6 +64,8 @@
     "deliveryDay": "Delivery day",
     "deliverySlot": "Delivery slot",
     "selectDay": "Select a day",
+    "dayClosed": "{day} — Closed",
+    "dayClosedNamed": "{day} — Closed ({name})",
     "selectSlot": "Select a slot",
     "today": "Today",
     "tomorrow": "Tomorrow",

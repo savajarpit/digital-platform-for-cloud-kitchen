@@ -125,6 +125,10 @@ export interface UpcomingPreviewDay {
   /** Set only when this day was skipped by the business (a declared
    * disruption) rather than by the customer's own skip/pause. */
   disruptionReason: string | null;
+  /** Upcoming holiday only — the day it will add at the end of the plan. */
+  replacementDate: string | null;
+  /** The kitchen's holiday (not a declared disruption or the customer's own skip). */
+  isHoliday: boolean;
 }
 
 export interface SubscriptionSummary {
@@ -148,7 +152,9 @@ export type SubscriptionDayKind =
   | "DISRUPTED"
   | "HOLIDAY"
   | "OFF_DAY"
-  | "NOT_SCHEDULED";
+  | "NOT_SCHEDULED"
+  /** After the plan's current end — the day an upcoming holiday adds back. */
+  | "PROJECTED";
 
 export interface SubscriptionCalendarDay {
   date: string;
@@ -162,6 +168,8 @@ export interface SubscriptionCalendarDay {
   note: string | null;
   /** DISRUPTED/HOLIDAY only — the tenant's reason/name for that day. */
   reason: string | null;
+  /** Upcoming HOLIDAY only — the day it will add at the end of the plan. */
+  replacementDate: string | null;
   locked: boolean;
 }
 
@@ -213,12 +221,24 @@ export function getPlan(id: string): Promise<PlanDetail> {
   return proxyFetch<PlanDetail>(`/subscriptions/plans/${id}`);
 }
 
-/** Client-safe check for the tenant's subscriptions-enabled master switch —
- * used to bounce a direct visit to a plan detail page while it's disabled. */
-export function getSubscriptionsEnabled(): Promise<boolean> {
-  return proxyFetch<{ isEnabled: boolean }>(
-    "/subscriptions/settings/public",
-  ).then((settings) => settings.isEnabled);
+export interface PlanPageSettings {
+  /** The tenant's subscriptions master switch — a plan page bounces when off. */
+  isEnabled: boolean;
+  /** The plan page will show a calendar (so its loading skeleton should too). */
+  usesCalendar: boolean;
+}
+
+/** Client-safe read of the public subscription settings a plan detail page
+ * needs before the plan itself has loaded. */
+export function getPlanPageSettings(): Promise<PlanPageSettings> {
+  return proxyFetch<{
+    isEnabled: boolean;
+    planViewMode: PlanViewMode;
+    dateSelectionEnabled: boolean;
+  }>("/subscriptions/settings/public").then((s) => ({
+    isEnabled: s.isEnabled,
+    usesCalendar: s.dateSelectionEnabled || s.planViewMode !== "ACCORDION",
+  }));
 }
 
 export function subscribe(input: {

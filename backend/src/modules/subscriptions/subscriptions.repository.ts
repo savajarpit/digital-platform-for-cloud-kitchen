@@ -870,6 +870,28 @@ export class SubscriptionsRepository {
     });
   }
 
+  /** Active subscriptions on a plan with just what deliversOn() needs to
+   * decide whether each one really gets a delivery on `dateStr`. */
+  findActiveSubscriptionsForPrep(
+    tenantId: string,
+    planId: string,
+    dateStr: string,
+  ) {
+    return this.prisma.subscription.findMany({
+      where: { tenantId, planId, status: SubscriptionStatus.ACTIVE },
+      select: {
+        startDate: true,
+        cycleEnd: true,
+        usesDateSelection: true,
+        scheduledDates: { where: { date: dateStr }, select: { date: true } },
+        skips: {
+          where: { dateFrom: { lte: dateStr }, dateTo: { gte: dateStr } },
+          select: { dateFrom: true, dateTo: true },
+        },
+      },
+    });
+  }
+
   async createMaterializedOrder(input: {
     tenantId: string;
     userId: string;

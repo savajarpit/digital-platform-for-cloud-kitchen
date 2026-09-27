@@ -42,10 +42,14 @@ export function SubscriptionPauseAndCancel({
         </p>
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            <label
+              htmlFor="pause-from"
+              className="text-xs font-medium text-zinc-700 dark:text-zinc-300"
+            >
               From
             </label>
             <input
+              id="pause-from"
               type="date"
               value={pauseFrom}
               onChange={(e) => onPauseFromChange(e.target.value)}
@@ -54,10 +58,14 @@ export function SubscriptionPauseAndCancel({
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            <label
+              htmlFor="pause-to"
+              className="text-xs font-medium text-zinc-700 dark:text-zinc-300"
+            >
               To
             </label>
             <input
+              id="pause-to"
               type="date"
               value={pauseTo}
               onChange={(e) => onPauseToChange(e.target.value)}

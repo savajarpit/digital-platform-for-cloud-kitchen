@@ -16,6 +16,10 @@ export interface DeliverySlotsConfig {
    * browser clock, or a near-midnight order gets rejected server-side. */
   todayStr: string;
   nowMinutes: number;
+  /** Each orderable day, and why it can't be scheduled when it can't (holiday, weekly off, cutoff passed). */
+  days: { date: string; open: boolean; reason: string | null }[];
+  /** Store temporarily closed — nothing can be ordered, today or later. */
+  storeClosedReason: string | null;
 }
 
 /** Public, client-side — drives the checkout page's day/slot pickers. */

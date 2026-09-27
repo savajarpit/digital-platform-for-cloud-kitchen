@@ -26,7 +26,7 @@ export const qk = {
   },
   plans: {
     detail: (id: string) => ["plans", "detail", id] as const,
-    subscriptionsEnabled: ["plans", "subscriptions-enabled"] as const,
+    pageSettings: ["plans", "page-settings"] as const,
   },
   /** Tenant branding/config (printed on invoices). */
   config: {

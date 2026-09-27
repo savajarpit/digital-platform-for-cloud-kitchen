@@ -329,8 +329,9 @@ export class OrdersService {
     userId: string,
     dto: CreateOrderDto,
   ): Promise<CreatedOrder> {
-    await this.orderAcceptanceService.assertAcceptingOrders(tenantId);
-
+    // No blanket "open right now" gate: buildOrderCore checks instant orders
+    // against the live window and scheduled ones against their own day, so
+    // a closed kitchen still takes bookings for a later open day.
     const core = await this.buildOrderCore(tenantId, userId, dto);
 
     // Razorpay order first, on purpose: if it fails, nothing is written to
@@ -392,8 +393,7 @@ export class OrdersService {
     order: OrderWithAdminDetails;
     serviceabilityOverridden: boolean;
   }> {
-    await this.orderAcceptanceService.assertAcceptingOrders(tenantId);
-
+    // Same per-day rule as create() — enforced inside buildOrderCore.
     const customer = await this.usersRepo.findById(
       dto.customerUserId,
       tenantId,
@@ -870,6 +870,10 @@ export class OrdersService {
           `Delivery date must be between ${todayStr} and ${maxDateStr}.`,
         );
       }
+      await this.orderAcceptanceService.assertOrderDayOpen(
+        tenantId,
+        dto.deliveryDate!,
+      );
       if (
         dto.deliveryDate === todayStr &&
         DateUtil.hhmmToMinutes(slot.startTime) <= nowMinutes

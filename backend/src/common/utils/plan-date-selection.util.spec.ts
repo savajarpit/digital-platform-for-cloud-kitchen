@@ -2,7 +2,7 @@ import { SubscriptionPlanSchedulingMode } from '../../generated/prisma';
 import {
   MAX_SELECTION_WINDOW_DAYS,
   computeCandidateDeliveryDates,
-  computeUnavailableDates,
+  computeSelectionWindow,
   isManualSelectionPlan,
   validateSelectedDates,
 } from './plan-date-selection.util';
@@ -23,17 +23,20 @@ const weeklyPlan = {
 };
 const MON_TO_SAT = new Set(['1-1', '1-2', '1-3', '1-4', '1-5', '1-6']);
 
-describe('computeCandidateDeliveryDates', () => {
-  it('RELATIVE_DAY: every day in the window is a candidate', () => {
-    const dates = computeCandidateDeliveryDates(
+type Closure = { name: string | null; note: string | null };
+const NO_CLOSURES = new Map<string, Closure>();
+
+describe('computeSelectionWindow', () => {
+  it('RELATIVE_DAY: duration + flexibility consecutive days, nothing unavailable', () => {
+    const w = computeSelectionWindow(
       relativePlan,
       null,
       '2026-09-22',
       7,
       2,
-      new Set(),
+      NO_CLOSURES,
     );
-    expect(dates).toEqual([
+    expect(w.candidates).toEqual([
       '2026-09-22',
       '2026-09-23',
       '2026-09-24',
@@ -44,61 +47,99 @@ describe('computeCandidateDeliveryDates', () => {
       '2026-09-29',
       '2026-09-30',
     ]);
+    expect(w.unavailable).toEqual([]);
   });
 
-  it('RELATIVE_DAY: a closed date is excluded from the candidates', () => {
-    const dates = computeCandidateDeliveryDates(
+  it('a holiday does not eat into the count — the window walks one day further', () => {
+    const diwali = new Map<string, Closure>([
+      ['2026-09-23', { name: 'Diwali', note: 'Back on Thursday' }],
+    ]);
+    const w = computeSelectionWindow(
       relativePlan,
       null,
       '2026-09-22',
       3,
       0,
-      new Set(['2026-09-23']),
+      diwali,
     );
-    expect(dates).toEqual(['2026-09-22', '2026-09-24']);
+    expect(w.candidates).toEqual(['2026-09-22', '2026-09-24', '2026-09-25']);
+    expect(w.unavailable).toEqual([
+      {
+        date: '2026-09-23',
+        kind: 'HOLIDAY',
+        holiday: { name: 'Diwali', note: 'Back on Thursday' },
+      },
+    ]);
   });
 
-  it('WEEKLY_FIXED: excludes the off-weekday', () => {
-    const dates = computeCandidateDeliveryDates(
+  it('WEEKLY_FIXED: 7 required + 7 flexibility = 14 real delivery days, Sundays skipped', () => {
+    const w = computeSelectionWindow(
+      weeklyPlan,
+      MON_TO_SAT,
+      '2026-09-21',
+      7,
+      7,
+      NO_CLOSURES,
+    );
+    expect(w.candidates).toHaveLength(14);
+    expect(w.candidates.at(-1)).toBe('2026-10-06');
+    expect(w.unavailable.map((d) => [d.date, d.kind])).toEqual([
+      ['2026-09-27', 'OFF_DAY'],
+      ['2026-10-04', 'OFF_DAY'],
+    ]);
+  });
+
+  it('a closure on an off-weekday shows as the holiday', () => {
+    const w = computeSelectionWindow(
       weeklyPlan,
       MON_TO_SAT,
       '2026-09-21',
       7,
       0,
-      new Set(),
+      new Map<string, Closure>([['2026-09-27', { name: null, note: null }]]),
     );
-    expect(dates).toEqual([
-      '2026-09-21',
-      '2026-09-22',
-      '2026-09-23',
-      '2026-09-24',
-      '2026-09-25',
-      '2026-09-26',
+    expect(w.unavailable.map((d) => [d.date, d.kind])).toEqual([
+      ['2026-09-27', 'HOLIDAY'],
     ]);
   });
 
-  it('window = duration + flexibility, capped at MAX_SELECTION_WINDOW_DAYS', () => {
-    const dates = computeCandidateDeliveryDates(
+  it('stops at MAX_SELECTION_WINDOW_DAYS calendar days', () => {
+    const w = computeSelectionWindow(
       relativePlan,
       null,
       '2026-01-01',
       100,
       100,
-      new Set(),
+      NO_CLOSURES,
     );
-    expect(dates).toHaveLength(MAX_SELECTION_WINDOW_DAYS);
+    expect(w.candidates).toHaveLength(MAX_SELECTION_WINDOW_DAYS);
   });
 
   it('a WEEKLY_FIXED plan with no delivery weekday yields no candidates', () => {
-    const dates = computeCandidateDeliveryDates(
+    const w = computeSelectionWindow(
       weeklyPlan,
       new Set(),
       '2026-09-21',
       6,
       0,
-      new Set(),
+      NO_CLOSURES,
     );
-    expect(dates).toEqual([]);
+    expect(w.candidates).toEqual([]);
+  });
+});
+
+describe('computeCandidateDeliveryDates', () => {
+  it('matches the window candidates, treating each closed date as a holiday', () => {
+    expect(
+      computeCandidateDeliveryDates(
+        relativePlan,
+        null,
+        '2026-09-22',
+        3,
+        0,
+        new Set(['2026-09-23']),
+      ),
+    ).toEqual(['2026-09-22', '2026-09-24', '2026-09-25']);
   });
 });
 
@@ -153,58 +194,5 @@ describe('validateSelectedDates', () => {
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.message).toContain('2026-10-01');
-  });
-});
-
-describe('computeUnavailableDates', () => {
-  type Closure = { name: string | null; note: string | null };
-  const diwali = new Map<string, Closure>([
-    ['2026-09-23', { name: 'Diwali', note: 'Back on Thursday' }],
-  ]);
-
-  it('RELATIVE_DAY: only closures are unavailable, with their name and note', () => {
-    expect(
-      computeUnavailableDates(relativePlan, null, '2026-09-22', 3, 0, diwali),
-    ).toEqual([
-      {
-        date: '2026-09-23',
-        kind: 'HOLIDAY',
-        holiday: { name: 'Diwali', note: 'Back on Thursday' },
-      },
-    ]);
-  });
-
-  it('WEEKLY_FIXED: marks the off-weekday and closures, a closure winning over an off-day', () => {
-    const closures = new Map<string, Closure>([
-      ...diwali,
-      ['2026-09-27', { name: null, note: null }],
-    ]);
-    expect(
-      computeUnavailableDates(
-        weeklyPlan,
-        MON_TO_SAT,
-        '2026-09-21',
-        14,
-        0,
-        closures,
-      ).map((d) => [d.date, d.kind]),
-    ).toEqual([
-      ['2026-09-23', 'HOLIDAY'],
-      ['2026-09-27', 'HOLIDAY'],
-      ['2026-10-04', 'OFF_DAY'],
-    ]);
-  });
-
-  it('is exactly the complement of the candidates over the window', () => {
-    const args = [weeklyPlan, MON_TO_SAT, '2026-09-21', 10, 4] as const;
-    const candidates = computeCandidateDeliveryDates(
-      ...args,
-      new Set(diwali.keys()),
-    );
-    const unavailable = computeUnavailableDates(...args, diwali).map(
-      (d) => d.date,
-    );
-    expect([...candidates, ...unavailable].sort()).toHaveLength(14);
-    expect(candidates.filter((d) => unavailable.includes(d))).toEqual([]);
   });
 });

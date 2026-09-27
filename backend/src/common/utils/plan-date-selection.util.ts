@@ -2,9 +2,10 @@ import { SubscriptionPlanSchedulingMode } from '../../generated/prisma';
 import { DateUtil } from './date.util';
 import { PlanScheduleUtil } from './plan-schedule.util';
 
-/** Hard ceiling on the selection window, independent of durationDays +
- * flexibilityDays — a runaway tenant setting (or a very long plan) must
- * never make a customer scroll a year of calendar to pick 7 dates. */
+/** Hard ceiling on how many calendar days the selection window may walk,
+ * independent of durationDays + flexibilityDays — a runaway tenant setting
+ * (or a very long plan) must never make a customer scroll a year of
+ * calendar to pick 7 dates. */
 export const MAX_SELECTION_WINDOW_DAYS = 120;
 
 interface SelectionPlan {
@@ -14,15 +15,68 @@ interface SelectionPlan {
   durationDays: number;
 }
 
-/** Every date the customer may pick from before checkout: real delivery
- * days only (never a plan off-day or a tenant holiday), spanning
- * `durationDaysSnapshot + flexibilityDays` calendar days from `startDateStr`
- * (capped at MAX_SELECTION_WINDOW_DAYS). Mirrors buildPlanCalendar's own
- * DELIVERY classification so the checkout picker and the browsing preview
- * can never disagree on which dates are pickable.
+type ClosureInfo = { name: string | null; note: string | null };
+
+export interface UnavailableSelectionDate {
+  date: string;
+  kind: 'HOLIDAY' | 'OFF_DAY';
+  /** HOLIDAY only — the closure's customer-visible name and note. */
+  holiday: ClosureInfo | null;
+}
+
+export interface SelectionWindow {
+  /** Pickable delivery dates, ascending. */
+  candidates: string[];
+  /** Every non-pickable date between startDateStr and the last candidate. */
+  unavailable: UnavailableSelectionDate[];
+}
+
+/** The customer's pre-checkout choice: exactly
+ * `durationDaysSnapshot + flexibilityDays` real delivery days walked forward
+ * from `startDateStr` — holidays and plan off-days are skipped and do NOT
+ * count towards the flexibility, so "7 extra days" always means 7 extra
+ * pickable dates. The walk stops early at MAX_SELECTION_WINDOW_DAYS calendar
+ * days. Mirrors buildPlanCalendar's own DELIVERY classification so the
+ * checkout picker and the browsing preview never disagree on a date.
  *
  * `deliveryDayKeys` is WEEKLY_FIXED-only (null/ignored for RELATIVE_DAY,
  * which has no off-day concept — every non-closed calendar day delivers). */
+export function computeSelectionWindow(
+  plan: SelectionPlan,
+  deliveryDayKeys: ReadonlySet<string> | null,
+  startDateStr: string,
+  durationDaysSnapshot: number,
+  flexibilityDays: number,
+  closures: ReadonlyMap<string, ClosureInfo>,
+): SelectionWindow {
+  const wanted = durationDaysSnapshot + flexibilityDays;
+  const candidates: string[] = [];
+  const unavailable: UnavailableSelectionDate[] = [];
+  let cursor = startDateStr;
+  for (
+    let i = 0;
+    i < MAX_SELECTION_WINDOW_DAYS && candidates.length < wanted;
+    i++
+  ) {
+    const closure = closures.get(cursor);
+    if (closure) {
+      unavailable.push({
+        date: cursor,
+        kind: 'HOLIDAY',
+        holiday: { name: closure.name, note: closure.note },
+      });
+    } else if (!isPlanDeliveryDay(plan, deliveryDayKeys, cursor)) {
+      unavailable.push({ date: cursor, kind: 'OFF_DAY', holiday: null });
+    } else {
+      candidates.push(cursor);
+    }
+    cursor = DateUtil.addDaysToDateStr(cursor, 1);
+  }
+  return { candidates, unavailable };
+}
+
+/** Just the pickable dates of computeSelectionWindow — what subscribe() and
+ * the post-purchase "move" re-derive to validate a customer's choice. */
 export function computeCandidateDeliveryDates(
   plan: SelectionPlan,
   deliveryDayKeys: ReadonlySet<string> | null,
@@ -31,74 +85,17 @@ export function computeCandidateDeliveryDates(
   flexibilityDays: number,
   closedDates: ReadonlySet<string>,
 ): string[] {
-  return windowDates(
+  const closures = new Map<string, ClosureInfo>(
+    [...closedDates].map((d) => [d, { name: null, note: null }]),
+  );
+  return computeSelectionWindow(
+    plan,
+    deliveryDayKeys,
     startDateStr,
     durationDaysSnapshot,
     flexibilityDays,
-  ).filter(
-    (date) =>
-      !closedDates.has(date) && isPlanDeliveryDay(plan, deliveryDayKeys, date),
-  );
-}
-
-export interface UnavailableSelectionDate {
-  date: string;
-  kind: 'HOLIDAY' | 'OFF_DAY';
-  /** HOLIDAY only — the closure's customer-visible name and note. */
-  holiday: { name: string | null; note: string | null } | null;
-}
-
-/** The dates inside the same selection window that are NOT pickable, and
- * why — so the picker can show a holiday or a plan off-day the same way the
- * browsing calendar does instead of a blank box. Exactly the complement of
- * computeCandidateDeliveryDates over the window. */
-export function computeUnavailableDates(
-  plan: SelectionPlan,
-  deliveryDayKeys: ReadonlySet<string> | null,
-  startDateStr: string,
-  durationDaysSnapshot: number,
-  flexibilityDays: number,
-  closedDates: ReadonlyMap<
-    string,
-    { name: string | null; note: string | null }
-  >,
-): UnavailableSelectionDate[] {
-  const result: UnavailableSelectionDate[] = [];
-  for (const date of windowDates(
-    startDateStr,
-    durationDaysSnapshot,
-    flexibilityDays,
-  )) {
-    const closure = closedDates.get(date);
-    if (closure) {
-      result.push({
-        date,
-        kind: 'HOLIDAY',
-        holiday: { name: closure.name, note: closure.note },
-      });
-    } else if (!isPlanDeliveryDay(plan, deliveryDayKeys, date)) {
-      result.push({ date, kind: 'OFF_DAY', holiday: null });
-    }
-  }
-  return result;
-}
-
-function windowDates(
-  startDateStr: string,
-  durationDaysSnapshot: number,
-  flexibilityDays: number,
-): string[] {
-  const windowDays = Math.min(
-    durationDaysSnapshot + flexibilityDays,
-    MAX_SELECTION_WINDOW_DAYS,
-  );
-  const dates: string[] = [];
-  let cursor = startDateStr;
-  for (let i = 0; i < windowDays; i++) {
-    dates.push(cursor);
-    cursor = DateUtil.addDaysToDateStr(cursor, 1);
-  }
-  return dates;
+    closures,
+  ).candidates;
 }
 
 function isPlanDeliveryDay(

@@ -44,8 +44,8 @@ import {
  * signup, see SubscriptionScheduledDate) only ever delivers on a date that
  * has a scheduled-date row — every other calendar day between startDate and
  * cycleEnd is silently a no-op, not a skip (nothing was ever promised for
- * it). Its `nextPlanDayNumber` is never advanced either: the row's own
- * `sequence` is the template-day counter instead, fixed at signup.
+ * it). Its `nextPlanDayNumber` advances only on a delivered scheduled date,
+ * so for RELATIVE_DAY a skip shifts later menus just like a contiguous plan.
  *
  * A tenant closed date that applies to subscriptions is handled lazily, on
  * the day itself, as a tenant-side skip (see materializeClosedDate) — so a
@@ -111,14 +111,12 @@ export class SubscriptionMaterializationService {
     // A date-selection subscriber only ever delivers on a date they actually
     // chose — every other day in [startDate, cycleEnd] is silently not a
     // delivery day (not a skip: nothing was ever promised for it).
-    let scheduledSequence: number | null = null;
     if (subscription.usesDateSelection) {
       const scheduled = await this.subscriptionsRepo.findScheduledDate(
         subscription.id,
         todayStr,
       );
       if (!scheduled) return;
-      scheduledSequence = scheduled.sequence;
     }
 
     // Tenant closure (holiday) that applies to subscriptions — checked after
@@ -158,7 +156,7 @@ export class SubscriptionMaterializationService {
 
     const key = PlanScheduleUtil.resolveKey(subscription.plan, {
       dateStr: todayStr,
-      relativeCounter: scheduledSequence ?? subscription.nextPlanDayNumber,
+      relativeCounter: subscription.nextPlanDayNumber,
     });
     const planDay =
       'dayNumber' in key
@@ -208,12 +206,12 @@ export class SubscriptionMaterializationService {
     // RELATIVE_DAY only — WEEKLY_FIXED derives the day purely from the
     // calendar (see PlanScheduleUtil), so nextPlanDayNumber has no meaning
     // for it and is deliberately left frozen at its default. A date-selection
-    // subscriber's counter is its scheduled row's own fixed `sequence`
-    // instead — there is no running counter to advance.
+    // subscriber advances it too, only on a delivered scheduled date — so a
+    // skipped date shifts later dates' menus exactly like a contiguous plan,
+    // instead of losing that day's menu and repeating Day 1 on the banked date.
     if (
-      !subscription.usesDateSelection &&
       subscription.plan.schedulingMode ===
-        SubscriptionPlanSchedulingMode.RELATIVE_DAY
+      SubscriptionPlanSchedulingMode.RELATIVE_DAY
     ) {
       await this.subscriptionsRepo.advanceSubscriptionDay(
         subscription.id,

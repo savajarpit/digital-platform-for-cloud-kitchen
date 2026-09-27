@@ -80,7 +80,20 @@ export function SubscriptionDayDetailsPanel({
             {day.kind === "DISRUPTED" ? "Delivery disrupted" : "Kitchen closed"}
           </p>
           <p className="mt-0.5 font-medium">{day.reason}</p>
+          {day.replacementDate && (
+            <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+              You don&apos;t lose this delivery — a replacement day is added
+              on {formatLongDate(day.replacementDate)}, at the end of your plan.
+            </p>
+          )}
         </div>
+      )}
+
+      {day.kind === "PROJECTED" && (
+        <p className="rounded-xl bg-primary-50 px-3 py-2.5 text-xs text-primary-700 dark:bg-primary-950/40 dark:text-primary-400">
+          Added to make up for a holiday in your plan. It becomes a regular
+          delivery once the holiday passes.
+        </p>
       )}
 
       {day.kind === "OFF_DAY" && (

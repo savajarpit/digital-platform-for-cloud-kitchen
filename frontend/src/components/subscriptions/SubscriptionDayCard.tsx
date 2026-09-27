@@ -5,6 +5,7 @@ import { ChevronDown, ImageOff, Lock, MapPin, SkipForward } from "lucide-react";
 import type { SubscriptionDetail, UpcomingPreviewDay } from "@/lib/api/subscriptions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { formatTime12h } from "@/lib/format/time";
+import { formatLongDate } from "@/lib/plan-calendar/month-grid";
 
 const SLOT_LABELS: Record<string, string> = {
   BREAKFAST: "Breakfast",
@@ -70,7 +71,7 @@ export function SubscriptionDayCard({
             )}
             {day.skipped && day.disruptionReason && (
               <span className="badge bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400">
-                Paused by the business
+                {day.isHoliday ? "Holiday" : "Paused by the business"}
               </span>
             )}
             {day.isOverridden && (
@@ -95,6 +96,11 @@ export function SubscriptionDayCard({
           )}
           {day.skipped && day.disruptionReason && (
             <p className="text-xs text-amber-600 dark:text-amber-400">{day.disruptionReason}</p>
+          )}
+          {day.replacementDate && (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              A replacement day is added on {formatLongDate(day.replacementDate)}, at the end of your plan.
+            </p>
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">

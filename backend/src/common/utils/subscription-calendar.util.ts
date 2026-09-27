@@ -2,6 +2,7 @@ import { SubscriptionPlanSchedulingMode } from '../../generated/prisma';
 import { DateUtil } from './date.util';
 import { PlanScheduleUtil } from './plan-schedule.util';
 import type { ClosedDateEntry } from './closed-dates.util';
+import type { HolidayProjection } from './subscription-holiday-projection.util';
 
 /** Safety cap on the walk — far past any real subscription span. */
 const MAX_SUBSCRIPTION_CALENDAR_DAYS = 400;
@@ -13,7 +14,9 @@ export type SubscriptionDayKind =
   | 'DISRUPTED'
   | 'HOLIDAY'
   | 'OFF_DAY'
-  | 'NOT_SCHEDULED';
+  | 'NOT_SCHEDULED'
+  /** Past today's cycleEnd — the day an upcoming holiday will add back. */
+  | 'PROJECTED';
 
 export interface SubscriptionCalendarMeal {
   slotType: string;
@@ -36,6 +39,8 @@ export interface SubscriptionCalendarDay {
   note: string | null;
   /** DISRUPTED/HOLIDAY only — the tenant's reason/name for that day. */
   reason: string | null;
+  /** Upcoming HOLIDAY only — the day it will add at the end of the plan. */
+  replacementDate: string | null;
   /** Too close to delivery to skip/override/move — the notice window has passed. */
   locked: boolean;
 }
@@ -92,11 +97,15 @@ interface CalendarSubscription {
  * subscriptions. A date is DELIVERED once it's in the past — materialization
  * runs nightly, so today itself is never assumed delivered yet.
  *
- * RELATIVE_DAY dayNumber: a `usesDateSelection` day uses its own stored
- * `sequence`. Otherwise it's replayed from Day 1 at the start date, advancing
- * on every non-off, non-skipped day — the exact same rule the materializer
- * itself uses, so a past date's label can be reconstructed without having
- * persisted it.
+ * RELATIVE_DAY dayNumber: replayed from Day 1 at the start date, advancing
+ * on every delivered day — never on an off, skipped, holiday or (for
+ * `usesDateSelection`) unscheduled date — the exact same rule the
+ * materializer itself uses, so a past date's label can be reconstructed
+ * without having persisted it.
+ *
+ * `projection` (optional) extends the walk past cycleEnd to the days that
+ * upcoming holidays will add back (PROJECTED), and tags each such holiday
+ * with its replacementDate — display only, see projectHolidayReplacements.
  */
 export function buildSubscriptionCalendarDays(
   subscription: CalendarSubscription,
@@ -105,7 +114,13 @@ export function buildSubscriptionCalendarDays(
   todayStr: string,
   earliestEditableDateStr: string,
   closedDates: ClosedDateEntry[],
+  projection?: HolidayProjection,
 ): SubscriptionCalendarDay[] {
+  const projectedDates = new Set(projection?.projectedDates ?? []);
+  // Walk on past cycleEnd to the last day an upcoming holiday will add.
+  const lastProjected = projection?.projectedDates.at(-1);
+  const lastDateStr =
+    lastProjected && lastProjected > cycleEndStr ? lastProjected : cycleEndStr;
   const weekly =
     subscription.plan.schedulingMode ===
     SubscriptionPlanSchedulingMode.WEEKLY_FIXED;
@@ -143,13 +158,13 @@ export function buildSubscriptionCalendarDays(
     }));
 
   const days: SubscriptionCalendarDay[] = [];
-  // RELATIVE_DAY + not usesDateSelection only — replayed from Day 1, exactly
-  // mirroring SubscriptionMaterializationService's own advance rule.
+  // RELATIVE_DAY only — replayed from Day 1, exactly mirroring
+  // SubscriptionMaterializationService's own advance rule.
   let relativeCounter = 1;
   let cursor = startDateStr;
   for (
     let i = 0;
-    i < MAX_SUBSCRIPTION_CALENDAR_DAYS && cursor <= cycleEndStr;
+    i < MAX_SUBSCRIPTION_CALENDAR_DAYS && cursor <= lastDateStr;
     i++
   ) {
     const override = overridesByDate.get(cursor);
@@ -166,7 +181,13 @@ export function buildSubscriptionCalendarDays(
     let reason: string | null = null;
     let isOffDay = false;
 
-    if (subscription.usesDateSelection && !scheduledByDate.has(cursor)) {
+    const beyondCycle = cursor > cycleEndStr;
+
+    if (
+      subscription.usesDateSelection &&
+      !scheduledByDate.has(cursor) &&
+      !projectedDates.has(cursor)
+    ) {
       kind = 'NOT_SCHEDULED';
     } else if (skip?.disruptionId) {
       kind = 'DISRUPTED';
@@ -179,12 +200,9 @@ export function buildSubscriptionCalendarDays(
       kind = 'HOLIDAY';
       reason = closure.name ?? closure.note;
     } else {
-      const scheduledSequence = subscription.usesDateSelection
-        ? scheduledByDate.get(cursor)!.sequence
-        : relativeCounter;
       const key = PlanScheduleUtil.resolveKey(subscription.plan, {
         dateStr: cursor,
-        relativeCounter: scheduledSequence,
+        relativeCounter,
       });
       const weekKey =
         'weekNumber' in key ? `${key.weekNumber}-${key.weekday}` : '';
@@ -194,7 +212,11 @@ export function buildSubscriptionCalendarDays(
       } else if (skip) {
         kind = 'SKIPPED';
       } else {
-        kind = cursor < todayStr ? 'DELIVERED' : 'UPCOMING';
+        kind = beyondCycle
+          ? 'PROJECTED'
+          : cursor < todayStr
+            ? 'DELIVERED'
+            : 'UPCOMING';
         if ('dayNumber' in key) {
           dayLabel = `Day ${key.dayNumber}`;
           meals = toMeals(byDayNumber.get(key.dayNumber));
@@ -209,8 +231,8 @@ export function buildSubscriptionCalendarDays(
     // matching SubscriptionMaterializationService exactly.
     if (
       !weekly &&
-      !subscription.usesDateSelection &&
       !isOffDay &&
+      kind !== 'NOT_SCHEDULED' &&
       kind !== 'SKIPPED' &&
       kind !== 'DISRUPTED' &&
       kind !== 'HOLIDAY'
@@ -228,7 +250,12 @@ export function buildSubscriptionCalendarDays(
       isOverridden: Boolean(override),
       note: override?.note ?? null,
       reason,
-      locked,
+      replacementDate:
+        kind === 'HOLIDAY'
+          ? (projection?.replacementByHoliday.get(cursor) ?? null)
+          : null,
+      // Not part of the subscription yet, so nothing on it can be changed.
+      locked: locked || beyondCycle,
     });
     cursor = DateUtil.addDaysToDateStr(cursor, 1);
   }

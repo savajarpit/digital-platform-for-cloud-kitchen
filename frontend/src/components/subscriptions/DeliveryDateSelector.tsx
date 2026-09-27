@@ -21,9 +21,12 @@ import { PlanPageColumns } from "./PlanPageColumns";
 import { PlanMonthGrid } from "./PlanMonthGrid";
 import { SelectedDatesList } from "./SelectedDatesList";
 import { SelectionStatusBar } from "./SelectionStatusBar";
-
-const RAIL_TAB =
-  "flex-1 cursor-pointer rounded-lg px-3 py-1.5 text-xs font-medium transition-colors";
+import {
+  DateSelectionRailCard,
+  type DateSelectionRailTab,
+} from "./DateSelectionRailCard";
+import { PlanDaysPreview } from "./PlanDaysPreview";
+import { PlanViewTabs, type PlanViewTab } from "./PlanViewTabs";
 
 function formatShort(date: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, {
@@ -60,7 +63,13 @@ export function DeliveryDateSelector({
   const [focusedDate, setFocusedDate] = useState<string | null>(
     selected[0] ?? null,
   );
-  const [railTab, setRailTab] = useState<"day" | "days">("day");
+  const [railTab, setRailTab] = useState<DateSelectionRailTab>("day");
+  // The tenant's plan view still applies: BOTH offers a List tab next to the
+  // calendar, and a list-first tenant opens on the list (the default dates
+  // are already chosen, so checkout works from either tab).
+  const [viewTab, setViewTab] = useState<PlanViewTab>(
+    plan.viewMode === "ACCORDION" ? "list" : "calendar",
+  );
   const [hint, setHint] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const isCompact = useMediaQuery("(max-width: 1023px)");
@@ -250,42 +259,27 @@ export function DeliveryDateSelector({
   return (
     <>
       <PlanPageColumns
-        main={main}
+        main={
+          plan.viewMode === "CALENDAR" ? (
+            main
+          ) : (
+            <>
+              <PlanViewTabs tab={viewTab} onChange={setViewTab} />
+              {viewTab === "list" ? <PlanDaysPreview plan={plan} /> : main}
+            </>
+          )
+        }
         rail={
           <>
             {checkout}
-            <aside className="card hidden flex-col gap-4 p-5 lg:flex">
-              <div
-                role="tablist"
-                className="flex rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800"
-              >
-                {(
-                  [
-                    { id: "day", label: "Day details" },
-                    {
-                      id: "days",
-                      label: `Your days (${selected.length}/${requiredCount})`,
-                    },
-                  ] as const
-                ).map(({ id, label }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    role="tab"
-                    aria-selected={railTab === id}
-                    onClick={() => setRailTab(id)}
-                    className={`${RAIL_TAB} ${
-                      railTab === id
-                        ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
-                        : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+            <DateSelectionRailCard
+              tab={railTab}
+              onTabChange={setRailTab}
+              selectedCount={selected.length}
+              requiredCount={requiredCount}
+            >
               {railTab === "day" ? renderDetails() : yourDays}
-            </aside>
+            </DateSelectionRailCard>
           </>
         }
       />

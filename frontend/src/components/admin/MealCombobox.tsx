@@ -190,7 +190,7 @@ export function MealCombobox({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-zinc-700 dark:text-zinc-300">{meal.name}</p>
+                  <p className="wrap-break-word text-zinc-700 dark:text-zinc-300">{meal.name}</p>
                   <p className="text-xs text-zinc-400">{formatPriceFromPaise(meal.priceInPaise)}</p>
                 </div>
                 {value === meal.id && <Check className="h-3.5 w-3.5 shrink-0 text-primary-600" />}

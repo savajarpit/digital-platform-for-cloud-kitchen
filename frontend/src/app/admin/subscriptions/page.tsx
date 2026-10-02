@@ -7,6 +7,7 @@ import {
   BarChart3,
   CalendarClock,
   ClipboardList,
+  Inbox,
   Plus,
   Settings,
   Users,
@@ -26,13 +27,16 @@ import { TodaysDeliveriesTab } from "@/components/subscriptions-admin/TodaysDeli
 import { SubscriptionSettingsTab } from "@/components/subscriptions-admin/SubscriptionSettingsTab";
 import { PlanDisplaySettingsCard } from "@/components/subscriptions-admin/PlanDisplaySettingsCard";
 import { DeliveryDateSelectionCard } from "@/components/subscriptions-admin/DeliveryDateSelectionCard";
+import { CancellationRequestsList } from "@/components/admin/CancellationRequestsList";
+import { usePendingCancellationCount } from "@/lib/hooks/usePendingCancellationCount";
 
-type Tab = "plans" | "subscribers" | "today" | "analytics" | "settings";
+type Tab = "plans" | "subscribers" | "today" | "requests" | "analytics" | "settings";
 const TABS: { key: Tab; label: string; icon: typeof CalendarClock }[] = [
   { key: "analytics", label: "Analytics", icon: BarChart3 },
   { key: "plans", label: "Plans", icon: CalendarClock },
   { key: "subscribers", label: "Subscribers", icon: Users },
   { key: "today", label: "Today's Deliveries", icon: ClipboardList },
+  { key: "requests", label: "Cancel requests", icon: Inbox },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -44,6 +48,7 @@ export default function AdminSubscriptionsPage() {
   const [planSearch, setPlanSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const pendingRequests = usePendingCancellationCount().subscriptions;
 
   return (
     <div className="flex flex-col gap-6">
@@ -84,13 +89,13 @@ export default function AdminSubscriptionsPage() {
         </div>
       </div>
 
-      <div className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="-mx-1 flex gap-1 overflow-x-auto border-b border-zinc-200 px-1 dark:border-zinc-800">
         {TABS.map((t) => (
           <button
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex shrink-0 cursor-pointer items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
               tab === t.key
                 ? "border-primary-600 text-primary-600"
                 : "border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
@@ -98,6 +103,11 @@ export default function AdminSubscriptionsPage() {
           >
             <t.icon className="h-4 w-4" />
             {t.label}
+            {t.key === "requests" && pendingRequests > 0 && (
+              <span className="rounded-full bg-amber-500 px-1.5 text-[11px] leading-5 font-semibold text-white">
+                {pendingRequests}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -117,6 +127,7 @@ export default function AdminSubscriptionsPage() {
       )}
       {tab === "subscribers" && <SubscribersTab />}
       {tab === "today" && <TodaysDeliveriesTab />}
+      {tab === "requests" && <CancellationRequestsList kind="SUBSCRIPTION" />}
       {tab === "analytics" && <SubscriptionAnalyticsTab />}
       {tab === "settings" && (
         <div className="flex flex-col gap-6">

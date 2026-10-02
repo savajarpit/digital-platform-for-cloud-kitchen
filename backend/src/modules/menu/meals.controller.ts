@@ -18,6 +18,7 @@ import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
 import { QueryMealsDto } from './dto/query-meals.dto';
 import { QueryAdminMealsDto } from './dto/query-admin-meals.dto';
+import { QueryMealStockDto } from './dto/query-meal-stock.dto';
 import { SetMealAddonGroupsDto } from '../addons/dto/set-meal-addon-groups.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -58,6 +59,21 @@ export class MealsController {
     @Query() query: QueryAdminMealsDto,
   ) {
     return this.mealsService.findAllForAdmin(tenantId, query);
+  }
+
+  @Public()
+  @Get('stock')
+  @ResponseMessage('Meal stock retrieved successfully')
+  @ApiOperation({
+    summary: 'Remaining daily stock per limited meal for a delivery date',
+  })
+  getStock(
+    @CurrentTenant('id') tenantId: string | undefined,
+    @Query() query: QueryMealStockDto,
+  ) {
+    if (!tenantId)
+      throw new NotFoundException('No tenant context for this request');
+    return this.mealsService.getStockForDate(tenantId, query.date);
   }
 
   @Public()

@@ -54,11 +54,12 @@ export function MoveDeliveryDateModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={onClose}
     >
+      {/* Header and buttons stay put; only the date list scrolls. */}
       <div
-        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-soft dark:bg-zinc-900"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-soft dark:bg-zinc-900"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-5 pb-4">
           <div>
             <h3 className="font-display text-base font-bold text-zinc-900 dark:text-zinc-100">
               Move {formatLongDate(date)}
@@ -78,43 +79,45 @@ export function MoveDeliveryDateModal({
           </button>
         </div>
 
-        {loadError ? (
-          <p className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-            Couldn&apos;t load available dates.
-          </p>
-        ) : !candidates ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {[0, 1, 2, 3, 4, 5].map((i) => (
-              <div
-                key={i}
-                className="h-14 animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-800"
-              />
-            ))}
-          </div>
-        ) : candidates.length === 0 ? (
-          <p className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-            No other dates are available to move this delivery to right now.
-          </p>
-        ) : (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {candidates.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setSelected(c)}
-                className={`cursor-pointer rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition-colors ${
-                  selected === c
-                    ? "border-primary-600 bg-primary-50 text-primary-700 dark:bg-primary-950/40 dark:text-primary-400"
-                    : "border-zinc-200 text-zinc-700 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-300"
-                }`}
-              >
-                {formatLongDate(c)}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5">
+          {loadError ? (
+            <p className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+              Couldn&apos;t load available dates.
+            </p>
+          ) : !candidates ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <div
+                  key={i}
+                  className="h-14 animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-800"
+                />
+              ))}
+            </div>
+          ) : candidates.length === 0 ? (
+            <p className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+              No other dates are available to move this delivery to right now.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {candidates.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setSelected(c)}
+                  className={`cursor-pointer rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition-colors ${
+                    selected === c
+                      ? "border-primary-600 bg-primary-50 text-primary-700 dark:bg-primary-950/40 dark:text-primary-400"
+                      : "border-zinc-200 text-zinc-700 hover:border-zinc-300 dark:border-zinc-700 dark:text-zinc-300"
+                  }`}
+                >
+                  {formatLongDate(c)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="flex shrink-0 justify-end gap-2 border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
           <button
             type="button"
             onClick={onClose}

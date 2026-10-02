@@ -54,7 +54,9 @@ export function SelectTrigger({
       id={id}
       className={`${base} flex min-w-0 cursor-pointer items-center justify-between gap-2 text-left disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >
-      <span className="min-w-0 truncate">{children}</span>
+      {/* One line with "…" once picked — the open list is where a long
+          option (an address) wraps and reads in full. */}
+      <span className="min-w-0 flex-1 truncate">{children}</span>
       <RadixSelect.Icon>
         <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400" />
       </RadixSelect.Icon>
@@ -72,7 +74,9 @@ export function SelectContent({ children }: { children: React.ReactNode }) {
       <RadixSelect.Content
         position="popper"
         sideOffset={6}
-        className="z-50 max-h-72 min-w-(--radix-select-trigger-width) overflow-hidden rounded-xl border border-zinc-100 bg-white shadow-soft dark:border-zinc-800 dark:bg-zinc-900"
+        // At least the trigger's width; at most the wider of the trigger and
+        // 18rem, never past the screen edge — long options wrap inside it.
+        className="z-50 max-h-72 max-w-[min(var(--radix-select-content-available-width),max(var(--radix-select-trigger-width),18rem))] min-w-(--radix-select-trigger-width) overflow-hidden rounded-xl border border-zinc-100 bg-white shadow-soft dark:border-zinc-800 dark:bg-zinc-900"
       >
         <RadixSelect.Viewport className="p-1">{children}</RadixSelect.Viewport>
       </RadixSelect.Content>
@@ -93,7 +97,7 @@ export function SelectItem({
     <RadixSelect.Item
       value={value === "" ? EMPTY_VALUE : value}
       disabled={disabled}
-      className="relative flex cursor-pointer items-center rounded-lg py-2 pr-8 pl-3 text-sm text-zinc-700 outline-none select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-primary-50 data-highlighted:text-primary-700 dark:text-zinc-300 dark:data-highlighted:bg-primary-950 dark:data-highlighted:text-primary-400"
+      className="relative flex cursor-pointer items-center rounded-lg py-2 pr-8 pl-3 text-sm wrap-break-word whitespace-normal text-zinc-700 outline-none select-none data-disabled:cursor-not-allowed data-disabled:opacity-50 data-highlighted:bg-primary-50 data-highlighted:text-primary-700 dark:text-zinc-300 dark:data-highlighted:bg-primary-950 dark:data-highlighted:text-primary-400"
     >
       <RadixSelect.ItemText>{children}</RadixSelect.ItemText>
       <RadixSelect.ItemIndicator className="absolute right-2 flex items-center">

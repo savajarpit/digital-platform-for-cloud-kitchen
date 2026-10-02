@@ -31,6 +31,8 @@ export interface Meal {
   weightValue: number | null;
   weightUnit: "G" | "KG" | null;
   dailyQuantityLimit: number | null;
+  // Plates left today (tenant-local) — null when the meal has no daily limit.
+  remainingToday?: number | null;
   sortOrder: number;
   category: MenuCategory | null;
   activePromotion?: ActivePromotion | null;

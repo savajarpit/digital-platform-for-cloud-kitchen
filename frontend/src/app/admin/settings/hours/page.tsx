@@ -24,6 +24,7 @@ import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { InstantDeliveryCard } from "@/components/admin/InstantDeliveryCard";
 import { ClosedDatesCard } from "@/components/admin/ClosedDatesCard";
 import { TimeInput12h } from "@/components/ui/TimeInput12h";
+import { OperatingHoursDayRow, isInvalidDayHours } from "@/components/admin/OperatingHoursDayRow";
 
 const DAYS: { key: keyof OperatingHours; label: string }[] = [
   { key: "mon", label: "Monday" },
@@ -41,6 +42,7 @@ type FormState = {
   closedDates: ClosedDateEntry[];
   isTemporarilyClosed: boolean;
   closureReason: string;
+  allowOrderCancelRequests: boolean;
 };
 
 function toForm(s: OrderAcceptanceSettings): FormState {
@@ -50,6 +52,7 @@ function toForm(s: OrderAcceptanceSettings): FormState {
     closedDates: s.closedDates ?? [],
     isTemporarilyClosed: s.isTemporarilyClosed,
     closureReason: s.closureReason ?? "",
+    allowOrderCancelRequests: s.allowOrderCancelRequests ?? false,
   };
 }
 
@@ -57,6 +60,8 @@ export default function OrderHoursPage() {
   const { showToast } = useToast();
   const canEdit = usePermission(PERMISSIONS.ORDER_HOURS_EDIT);
   const { has: hasFeature } = useFeatures();
+  // SUPER_ADMIN grants the capability; the business still chooses to offer it.
+  const canOfferOrderCancel = hasFeature("order-cancel-requests");
 
   const queryClient = useQueryClient();
   const queryKey = qk.admin("settings", "hours");
@@ -78,8 +83,9 @@ export default function OrderHoursPage() {
     });
   }
 
-  function updateDay(day: keyof OperatingHours, patch: DayHours) {
-    patchForm((f) => ({ hours: { ...f.hours, [day]: { ...f.hours[day], ...patch } } }));
+  // Replaces the day outright — switching a day off must drop its times.
+  function setDay(day: keyof OperatingHours, dayHours: DayHours) {
+    patchForm((f) => ({ hours: { ...f.hours, [day]: dayHours } }));
   }
 
   // Closed dates save on their own the moment one is added or removed — an
@@ -108,13 +114,14 @@ export default function OrderHoursPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form) return;
-    const { hours, cutoff, closedDates, isTemporarilyClosed, closureReason } = form;
+    const { hours, cutoff, closedDates, isTemporarilyClosed, closureReason, allowOrderCancelRequests } = form;
     setError(null);
     setSaving(true);
     try {
       const updated = await updateOrderAcceptance({
         operatingHours: hours,
-        dailyCutoffTime: cutoff || undefined,
+        // null, not undefined — an emptied field must clear the saved value.
+        dailyCutoffTime: cutoff || null,
         closedDates: closedDates.map((d) => ({
           date: d.date,
           name: d.name ?? undefined,
@@ -122,7 +129,8 @@ export default function OrderHoursPage() {
           appliesTo: d.appliesTo,
         })),
         isTemporarilyClosed,
-        closureReason: closureReason || undefined,
+        closureReason: closureReason.trim() || null,
+        ...(canOfferOrderCancel ? { allowOrderCancelRequests } : {}),
       });
       queryClient.setQueryData(queryKey, updated);
       queryClient.invalidateQueries({ queryKey });
@@ -144,7 +152,8 @@ export default function OrderHoursPage() {
       <OrderHoursSkeleton />
     );
   }
-  const { hours, cutoff, closedDates, isTemporarilyClosed, closureReason } = form;
+  const { hours, cutoff, closedDates, isTemporarilyClosed, closureReason, allowOrderCancelRequests } = form;
+  const hasInvalidHours = DAYS.some((day) => isInvalidDayHours(hours[day.key]));
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -170,7 +179,8 @@ export default function OrderHoursPage() {
                 Temporarily closed
               </h3>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Stop accepting new orders immediately, regardless of hours below.
+                Stop accepting new orders and new subscriptions immediately, regardless of hours below. Existing
+                subscriptions keep delivering — add a closed date to pause those.
               </p>
             </div>
             <Toggle checked={isTemporarilyClosed} onChange={(v) => patchForm(() => ({ isTemporarilyClosed: v }))} disabled={!canEdit} />
@@ -180,42 +190,67 @@ export default function OrderHoursPage() {
               type="text"
               value={closureReason}
               onChange={(e) => patchForm(() => ({ closureReason: e.target.value }))}
+              maxLength={200}
               placeholder="Reason shown to customers (optional)"
               className="input w-full"
             />
           )}
         </div>
 
+        {canOfferOrderCancel && (
+          <div className="card flex items-center justify-between gap-4 p-6">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Let customers request order cancellation
+              </h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Customers can ask to cancel a paid order until you mark it Preparing. You approve it with a refund
+                or reject it with a note — nothing is cancelled automatically.
+              </p>
+            </div>
+            <Toggle
+              checked={allowOrderCancelRequests}
+              onChange={(v) => patchForm(() => ({ allowOrderCancelRequests: v }))}
+              disabled={!canEdit}
+            />
+          </div>
+        )}
+
         <div className="card flex flex-col gap-4 p-6">
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             Operating hours
           </h3>
-          {DAYS.map((day) => {
-            const dayHours = hours[day.key] ?? {};
-            return (
-              <div key={day.key} className="flex flex-wrap items-center gap-3">
-                <span className="w-28 shrink-0 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  {day.label}
-                </span>
-                <TimeInput12h
-                  value={dayHours.open ?? ""}
-                  onChange={(v) => updateDay(day.key, { open: v })}
-                  disabled={!canEdit}
-                />
-                <span className="text-sm text-zinc-400">to</span>
-                <TimeInput12h
-                  value={dayHours.close ?? ""}
-                  onChange={(v) => updateDay(day.key, { close: v })}
-                  disabled={!canEdit}
-                />
-              </div>
-            );
-          })}
+          <p className="-mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+            Switch a day off for a weekly holiday — customers can&apos;t order for that day.
+          </p>
+          {DAYS.map((day) => (
+            <OperatingHoursDayRow
+              key={day.key}
+              label={day.label}
+              hours={hours[day.key]}
+              onChange={(dayHours) => setDay(day.key, dayHours)}
+              disabled={!canEdit}
+            />
+          ))}
           <div className="pt-2">
             <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Daily cutoff time
             </label>
-            <TimeInput12h value={cutoff} onChange={(v) => patchForm(() => ({ cutoff: v }))} disabled={!canEdit} />
+            <div className="flex flex-wrap items-center gap-3">
+              <TimeInput12h value={cutoff} onChange={(v) => patchForm(() => ({ cutoff: v }))} disabled={!canEdit} />
+              {cutoff ? (
+                <button
+                  type="button"
+                  onClick={() => patchForm(() => ({ cutoff: "" }))}
+                  disabled={!canEdit}
+                  className="btn-ghost btn-sm cursor-pointer"
+                >
+                  Remove cutoff
+                </button>
+              ) : (
+                <span className="text-sm text-zinc-400 dark:text-zinc-500">No cutoff — orders close at closing time</span>
+              )}
+            </div>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
               Orders stop being accepted after this time each day, even if still within operating hours.
             </p>
@@ -229,7 +264,7 @@ export default function OrderHoursPage() {
           subscriptionsAvailable={hasFeature("plan-calendar-view")}
         />
 
-        <button type="submit" disabled={saving} className="btn-primary w-fit">
+        <button type="submit" disabled={saving || hasInvalidHours} className="btn-primary w-fit">
           {saving ? "Saving…" : "Save changes"}
         </button>
       </fieldset>

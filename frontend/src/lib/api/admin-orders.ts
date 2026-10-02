@@ -63,6 +63,9 @@ export interface AdminOrder {
   tableLabelSnapshot: string | null;
   paymentMethod: AdminOrderPaymentMethod;
   createdByUserId: string | null;
+  /** A pending customer cancellation request (at most one) — the kitchen
+   * should hold off until it's approved or rejected. */
+  cancellationRequests?: { id: string; reason: string; note: string | null; createdAt: string }[];
 }
 
 export interface AdminOrderDetail extends AdminOrder {
@@ -88,8 +91,11 @@ export interface AdminOrderDetail extends AdminOrder {
 export function getSettableStatusesFor(
   fulfillmentType: AdminOrderFulfillmentType,
 ): typeof ADMIN_SETTABLE_STATUSES[number][] {
-  if (fulfillmentType === "DELIVERY") return [...ADMIN_SETTABLE_STATUSES];
-  return ADMIN_SETTABLE_STATUSES.filter((s) => s !== "OUT_FOR_DELIVERY");
+  // The dropdown only appears on paid orders, and cancelling a paid order
+  // must go through Cancel & Refund so the refund is always recorded.
+  const progress = ADMIN_SETTABLE_STATUSES.filter((s) => s !== "CANCELLED");
+  if (fulfillmentType === "DELIVERY") return progress;
+  return progress.filter((s) => s !== "OUT_FOR_DELIVERY");
 }
 
 const COMPLETION_LABEL: Record<AdminOrderFulfillmentType, string> = {
@@ -134,12 +140,15 @@ export function listAdminOrders(params: {
   limit?: number;
   status?: string;
   fulfillmentType?: AdminOrderFulfillmentType;
+  /** Only orders with a pending customer cancellation request. */
+  cancelRequested?: boolean;
 }): Promise<{ data: AdminOrder[]; meta?: AdminOrdersMeta }> {
   const search = new URLSearchParams();
   if (params.page) search.set("page", String(params.page));
   if (params.limit) search.set("limit", String(params.limit));
   if (params.status) search.set("status", params.status);
   if (params.fulfillmentType) search.set("fulfillmentType", params.fulfillmentType);
+  if (params.cancelRequested) search.set("cancelRequested", "true");
   const qs = search.toString();
   return proxyFetchPaginated<AdminOrder[]>(`/orders/admin${qs ? `?${qs}` : ""}`);
 }

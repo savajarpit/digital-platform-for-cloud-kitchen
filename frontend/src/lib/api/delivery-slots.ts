@@ -22,9 +22,20 @@ export interface DeliverySlotsConfig {
   storeClosedReason: string | null;
 }
 
-/** Public, client-side — drives the checkout page's day/slot pickers. */
+/** Public, client-side — drives the checkout page's day/slot pickers. A
+ * slot can be set to orders only, subscriptions only or both, so each flow
+ * asks for its own list. */
 export async function getDeliverySlots(): Promise<DeliverySlotsConfig> {
   const res = await fetch(`${PUBLIC_API_URL}/settings/delivery-slots`, {
+    headers: { "X-Tenant-Domain": window.location.host },
+  });
+  return parseOrThrow<DeliverySlotsConfig>(res);
+}
+
+/** Same, but the slots offered for subscriptions — the plan page and the
+ * manual subscription form. */
+export async function getSubscriptionDeliverySlots(): Promise<DeliverySlotsConfig> {
+  const res = await fetch(`${PUBLIC_API_URL}/settings/delivery-slots?for=subscriptions`, {
     headers: { "X-Tenant-Domain": window.location.host },
   });
   return parseOrThrow<DeliverySlotsConfig>(res);

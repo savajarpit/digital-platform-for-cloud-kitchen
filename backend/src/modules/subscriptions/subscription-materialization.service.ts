@@ -6,6 +6,9 @@ import { DateUtil } from '../../common/utils/date.util';
 import { PlanScheduleUtil } from '../../common/utils/plan-schedule.util';
 import { closedDatesAffecting } from '../../common/utils/closed-dates.util';
 import { SettingsRepository } from '../settings/settings.repository';
+
+/** Customer-visible label on a day held by a pending cancellation request. */
+export const CANCELLATION_HOLD_REASON = 'On hold — cancellation requested';
 import {
   SubscriptionOffDayHandling,
   SubscriptionPlanSchedulingMode,
@@ -129,11 +132,35 @@ export class SubscriptionMaterializationService {
       (c) => c.date === todayStr,
     );
     if (closure) {
+      // A WEEKLY_FIXED plan's own off weekday was never a delivery day (its
+      // cycleEnd already accounts for it) — a closure landing on it must not
+      // be compensated a second time.
+      if (await this.isPlanOffWeekday(subscription, todayStr)) return;
       await this.materializeClosedDate(
         { ...subscription, cycleEnd: subscription.cycleEnd },
         todayStr,
         closure.name,
       );
+      return;
+    }
+
+    // A pending cancellation request holds deliveries from its heldFromDate:
+    // record the held day (no order) so a reject/withdraw can bank exactly
+    // these days back. Checked after the closure — a closed day is already
+    // compensated on its own and must not be banked twice.
+    const hold = await this.subscriptionsRepo.findPendingCancellationHold(
+      subscription.id,
+      todayStr,
+    );
+    if (hold) {
+      await this.subscriptionsRepo.createSkip({
+        subscriptionId: subscription.id,
+        dateFrom: todayStr,
+        dateTo: todayStr,
+        bankedDays: 0,
+        reason: CANCELLATION_HOLD_REASON,
+        cancellationRequestId: hold.id,
+      });
       return;
     }
 
@@ -218,6 +245,36 @@ export class SubscriptionMaterializationService {
         subscription.nextPlanDayNumber + 1,
       );
     }
+  }
+
+  /** True when a WEEKLY_FIXED plan has no decided meals on `dateStr`'s
+   * week/weekday. RELATIVE_DAY plans deliver every calendar day. */
+  private async isPlanOffWeekday(
+    subscription: {
+      planId: string;
+      plan: {
+        durationDays: number;
+        schedulingMode: SubscriptionPlanSchedulingMode;
+        weekCount: number | null;
+        scheduleAnchorDate: string | null;
+      };
+    },
+    dateStr: string,
+  ): Promise<boolean> {
+    if (
+      subscription.plan.schedulingMode !==
+      SubscriptionPlanSchedulingMode.WEEKLY_FIXED
+    ) {
+      return false;
+    }
+    const key = PlanScheduleUtil.resolveKey(subscription.plan, {
+      dateStr,
+      relativeCounter: 1, // unused for WEEKLY_FIXED
+    });
+    if (!('weekNumber' in key)) return false;
+    const deliveryDayKeys =
+      await this.subscriptionsRepo.findPlanDeliveryDayKeys(subscription.planId);
+    return !deliveryDayKeys.has(`${key.weekNumber}-${key.weekday}`);
   }
 
   /** No order is created. A tenant-side SubscriptionSkip is recorded (which

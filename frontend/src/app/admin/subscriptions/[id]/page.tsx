@@ -21,6 +21,7 @@ import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
 import { DeclareDisruptionForm } from "@/components/admin/DeclareDisruptionForm";
 import { SubscriptionActionsForm } from "@/components/admin/SubscriptionActionsForm";
 import { CancelRefundForm } from "@/components/admin/CancelRefundForm";
+import { CANCEL_REFUND_ANCHOR, PendingCancellationBanner } from "@/components/admin/PendingCancellationBanner";
 import { RefundHistoryCard } from "@/components/admin/RefundHistoryCard";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
@@ -120,6 +121,15 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
         Back to subscriptions
       </Link>
 
+      {sub.status === "ACTIVE" && (
+        <PendingCancellationBanner
+          kind="SUBSCRIPTION"
+          targetId={sub.id}
+          canDecide={canCancelRefund}
+          onChanged={refresh}
+        />
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-display text-lg font-bold text-zinc-900 dark:text-zinc-100">
@@ -159,12 +169,14 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
             />
           )}
           {canCancelRefund && sub.status === "ACTIVE" && (
-            <CancelRefundForm
-              kind="subscription"
-              id={sub.id}
-              defaultAmountInPaise={sub.priceInPaiseSnapshot}
-              onCancelled={refresh}
-            />
+            <div id={CANCEL_REFUND_ANCHOR} className="scroll-mt-24">
+              <CancelRefundForm
+                kind="subscription"
+                id={sub.id}
+                defaultAmountInPaise={sub.priceInPaiseSnapshot}
+                onCancelled={refresh}
+              />
+            </div>
           )}
         </div>
       </div>

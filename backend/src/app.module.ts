@@ -66,6 +66,7 @@ import { PlatformPlansModule } from './modules/platform-plans/platform-plans.mod
 import { PlatformLeadsModule } from './modules/platform-leads/platform-leads.module';
 import { PlatformCancellationRequestsModule } from './modules/platform-cancellation-requests/platform-cancellation-requests.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
+import { CancellationRequestsModule } from './modules/cancellation-requests/cancellation-requests.module';
 import { HomeSectionsModule } from './modules/home-sections/home-sections.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { SocialLinksModule } from './modules/social-links/social-links.module';
@@ -174,6 +175,7 @@ import { AddonsModule } from './modules/addons/addons.module';
     PlatformLeadsModule,
     PlatformCancellationRequestsModule,
     UploadsModule,
+    CancellationRequestsModule,
     HomeSectionsModule,
     ReviewsModule,
     SocialLinksModule,

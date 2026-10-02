@@ -7,6 +7,7 @@ import {
 } from '../../common/utils/closed-dates.util';
 import { DateUtil } from '../../common/utils/date.util';
 import {
+  INSTANT_NOT_OFFERED_REASON,
   orderDayAvailability,
   orderDayClosedMessage,
   type OrderDayAvailability,
@@ -129,7 +130,7 @@ export class OrderAcceptanceService {
         available: false,
         etaMinMinutes,
         etaMaxMinutes,
-        reason: 'Instant delivery is not offered right now.',
+        reason: INSTANT_NOT_OFFERED_REASON,
       };
     }
     if (!windowStatus.isAcceptingOrders) {

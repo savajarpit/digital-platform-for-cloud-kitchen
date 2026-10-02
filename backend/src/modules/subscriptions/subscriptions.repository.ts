@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { withAddressSnapshot } from '../orders/orders.repository';
 import {
+  CancellationRequestStatus,
+  CustomerCancellationRequest,
   DeliverySlot,
   Order,
   OrderStatus,
@@ -515,7 +517,11 @@ export class SubscriptionsRepository {
     id: string,
     data: { cancelledByUserId: string; cancellationReason?: string },
     refund: CreateRefundInput,
-  ): Promise<{ subscription: Subscription; refund: Refund } | null> {
+  ): Promise<{
+    subscription: Subscription;
+    refund: Refund;
+    approvedRequest: boolean;
+  } | null> {
     return this.prisma.$transaction(async (tx) => {
       const { count } = await tx.subscription.updateMany({
         where: { id, status: { not: SubscriptionStatus.CANCELLED } },
@@ -528,10 +534,28 @@ export class SubscriptionsRepository {
       });
       if (count === 0) return null;
       const createdRefund = await tx.refund.create({ data: refund });
+      // Approves a pending customer request in the same transaction — see
+      // OrdersRepository.cancelWithRefund. Held days stay unbanked: the
+      // refund already covers every undelivered day.
+      const approved = await tx.customerCancellationRequest.updateMany({
+        where: {
+          subscriptionId: id,
+          status: CancellationRequestStatus.PENDING,
+        },
+        data: {
+          status: CancellationRequestStatus.APPROVED,
+          resolvedAt: new Date(),
+          resolvedByUserId: data.cancelledByUserId,
+        },
+      });
       const subscription = await tx.subscription.findUniqueOrThrow({
         where: { id },
       });
-      return { subscription, refund: createdRefund };
+      return {
+        subscription,
+        refund: createdRefund,
+        approvedRequest: approved.count > 0,
+      };
     });
   }
 
@@ -972,6 +996,54 @@ export class SubscriptionsRepository {
     return this.prisma.subscription.update({
       where: { id },
       data: { nextPlanDayNumber },
+    });
+  }
+
+  /** The pending cancellation request holding this subscription's
+   * deliveries on `dateStr`, if any (hold starts at heldFromDate). */
+  findPendingCancellationHold(
+    subscriptionId: string,
+    dateStr: string,
+  ): Promise<CustomerCancellationRequest | null> {
+    return this.prisma.customerCancellationRequest.findFirst({
+      where: {
+        subscriptionId,
+        status: CancellationRequestStatus.PENDING,
+        heldFromDate: { lte: dateStr },
+      },
+    });
+  }
+
+  findLatestCancellationRequest(
+    subscriptionId: string,
+  ): Promise<CustomerCancellationRequest | null> {
+    return this.prisma.customerCancellationRequest.findFirst({
+      where: { subscriptionId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  findUnbankedHeldSkips(
+    cancellationRequestId: string,
+  ): Promise<SubscriptionSkip[]> {
+    return this.prisma.subscriptionSkip.findMany({
+      where: { cancellationRequestId, bankedDays: 0 },
+    });
+  }
+
+  async markHeldSkipsBanked(ids: string[]): Promise<void> {
+    await this.prisma.subscriptionSkip.updateMany({
+      where: { id: { in: ids } },
+      data: { bankedDays: 1 },
+    });
+  }
+
+  /** Back to ACTIVE after held days were banked onto an EXPIRED plan —
+   * a long-pending request can outlast cycleEnd while deliveries are held. */
+  reactivateSubscription(id: string): Promise<Subscription> {
+    return this.prisma.subscription.update({
+      where: { id },
+      data: { status: SubscriptionStatus.ACTIVE },
     });
   }
 

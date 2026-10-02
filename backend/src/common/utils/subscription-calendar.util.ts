@@ -157,6 +157,17 @@ export function buildSubscriptionCalendarDays(
       imageUrl: slot.meal?.imageUrl ?? null,
     }));
 
+  const isPlanOffWeekday = (dateStr: string): boolean => {
+    const key = PlanScheduleUtil.resolveKey(subscription.plan, {
+      dateStr,
+      relativeCounter: 1, // unused for WEEKLY_FIXED
+    });
+    return (
+      !('weekNumber' in key) ||
+      !deliveryDayKeys.has(`${key.weekNumber}-${key.weekday}`)
+    );
+  };
+
   const days: SubscriptionCalendarDay[] = [];
   // RELATIVE_DAY only — replayed from Day 1, exactly mirroring
   // SubscriptionMaterializationService's own advance rule.
@@ -195,8 +206,14 @@ export function buildSubscriptionCalendarDays(
     } else if (skip?.reason) {
       kind = 'HOLIDAY';
       reason = skip.reason;
-    } else if (closure && cursor >= todayStr) {
-      // Declared for a future date the nightly cron hasn't reached yet.
+    } else if (
+      closure &&
+      cursor >= todayStr &&
+      !(weekly && isPlanOffWeekday(cursor))
+    ) {
+      // Declared for a future date the nightly cron hasn't reached yet. A
+      // WEEKLY_FIXED plan's own off weekday stays OFF_DAY below — the
+      // materializer doesn't treat a closure there as a holiday either.
       kind = 'HOLIDAY';
       reason = closure.name ?? closure.note;
     } else {

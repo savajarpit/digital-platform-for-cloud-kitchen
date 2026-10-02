@@ -6,6 +6,7 @@ import { getPublicConfig } from "@/lib/api/settings";
 import { getMeal } from "@/lib/api/menu";
 import { MealGallery } from "@/components/menu/MealGallery";
 import { MealPurchasePanel } from "@/components/menu/MealPurchasePanel";
+import { MealStockNote } from "@/components/menu/MealStockNote";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatMealWeight } from "@/lib/format/weight";
 
@@ -92,6 +93,8 @@ export default async function MealDetailPage({ params }: { params: Promise<{ id:
               </span>
             )}
           </div>
+
+          {meal.isAvailable && <MealStockNote remainingToday={meal.remainingToday} className="text-sm" />}
 
           {meal.description && (
             <p className="text-sm text-zinc-600 dark:text-zinc-400">{meal.description}</p>

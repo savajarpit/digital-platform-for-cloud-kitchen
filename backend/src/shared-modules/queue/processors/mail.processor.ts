@@ -1,7 +1,7 @@
 import { Processor, Process, OnQueueFailed } from '@nestjs/bull';
 import type { Job } from 'bull';
 import { Logger } from '@nestjs/common';
-import { MailService } from '../../mail/mail.service';
+import { CancellationEmailKey, MailService } from '../../mail/mail.service';
 
 export interface WelcomeEmailJob {
   email: string;
@@ -24,6 +24,13 @@ export interface AccountInviteEmailJob {
   tenantId: string;
   firstName: string;
   inviteUrl: string;
+}
+
+export interface CancellationEmailJob {
+  email: string;
+  tenantId: string;
+  key: CancellationEmailKey;
+  data: Record<string, string>;
 }
 
 export interface PlatformActivationInviteEmailJob {
@@ -110,6 +117,16 @@ export class MailProcessor {
       job.data.email,
       job.data.tenantId,
       { firstName: job.data.firstName, inviteUrl: job.data.inviteUrl },
+    );
+  }
+
+  @Process('send-cancellation-email')
+  async sendCancellationEmail(job: Job<CancellationEmailJob>) {
+    await this.mailService.sendCancellationEmail(
+      job.data.email,
+      job.data.tenantId,
+      job.data.key,
+      job.data.data,
     );
   }
 

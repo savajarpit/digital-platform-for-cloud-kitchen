@@ -103,6 +103,8 @@ export function CancelRefundForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
+        // Lets a pending cancellation request's "Approve & refund" open this form.
+        data-cancel-refund-open=""
         className="btn-outline btn-sm w-fit cursor-pointer text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
       >
         Cancel &amp; Refund

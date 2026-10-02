@@ -135,6 +135,71 @@ export const PLATFORM_EMAIL_TEMPLATE_DEFAULTS: PlatformEmailTemplateDefault[] =
       ],
     },
 
+    {
+      key: 'cancellation-request-owner',
+      name: 'Cancellation Request (Owner alert)',
+      description:
+        'Sent by the platform to the business owner when a customer asks to cancel a subscription or order — with the customer’s details and a link to review it.',
+      scope: EmailTemplateScope.CUSTOMER_DEFAULT,
+      subject: 'Cancellation request — {{customerName}} ({{itemLabel}})',
+      bodyHtml: `<p style="margin:0 0 16px;font-size:16px;"><strong>{{customerName}}</strong> has asked to cancel their {{requestKind}}.</p><p style="margin:0 0 8px;"><span style="${LABEL}">Customer</span><br/>{{customerName}}<br/>{{customerEmail}}<br/>{{customerPhone}}</p><p style="margin:0 0 8px;"><span style="${LABEL}">{{requestKindTitle}}</span><br/><strong>{{itemLabel}}</strong></p>{{detailsHtml}}<p style="margin:0 0 8px;"><span style="${LABEL}">Reason</span><br/>{{reasonLabel}}</p><p style="margin:0 0 20px;"><span style="${LABEL}">Customer’s note</span><br/>{{note}}</p><p style="margin:0 0 20px;">{{holdLine}}</p><p style="margin:0 0 16px;"><a href="{{reviewUrl}}" style="${BTN}">Review request</a></p><p style="margin:0;${LABEL}">Approve it with Cancel &amp; Refund, or reject it with a note — the customer is emailed either way.</p>`,
+      availableVars: [
+        'businessName',
+        'customerName',
+        'customerEmail',
+        'customerPhone',
+        'requestKind',
+        'requestKindTitle',
+        'itemLabel',
+        'detailsHtml',
+        'reasonLabel',
+        'note',
+        'holdLine',
+        'reviewUrl',
+      ],
+    },
+    {
+      key: 'cancellation-request-received',
+      name: 'Cancellation Request Received (Customer)',
+      description:
+        'Sent to the customer right after they ask to cancel a subscription or order.',
+      scope: EmailTemplateScope.CUSTOMER_DEFAULT,
+      subject: 'We’ve received your cancellation request — {{itemLabel}}',
+      bodyHtml: `<p style="margin:0 0 16px;font-size:16px;">Hi {{customerName}},</p><p style="margin:0 0 16px;">We’ve received your request to cancel <strong>{{itemLabel}}</strong>. {{businessName}} will review it and get back to you shortly.</p><p style="margin:0 0 16px;">{{holdLine}}</p><p style="margin:0;${LABEL}">Changed your mind? You can withdraw the request from your account while it’s pending.</p>`,
+      availableVars: ['customerName', 'itemLabel', 'holdLine', 'businessName'],
+    },
+    {
+      key: 'cancellation-request-approved',
+      name: 'Cancellation Approved (Customer)',
+      description:
+        'Sent to the customer when the business approves their cancellation request and records the refund.',
+      scope: EmailTemplateScope.CUSTOMER_DEFAULT,
+      subject: 'Your cancellation is confirmed — {{itemLabel}}',
+      bodyHtml: `<p style="margin:0 0 16px;font-size:16px;">Hi {{customerName}},</p><p style="margin:0 0 16px;">{{businessName}} has cancelled <strong>{{itemLabel}}</strong> as you requested.</p><p style="margin:0;">Refund: <strong>₹{{refundAmount}}</strong>. If you have questions about it, just reply to this email.</p>`,
+      availableVars: [
+        'customerName',
+        'itemLabel',
+        'refundAmount',
+        'businessName',
+      ],
+    },
+    {
+      key: 'cancellation-request-rejected',
+      name: 'Cancellation Declined (Customer)',
+      description:
+        'Sent to the customer when the business declines their cancellation request.',
+      scope: EmailTemplateScope.CUSTOMER_DEFAULT,
+      subject: 'Update on your cancellation request — {{itemLabel}}',
+      bodyHtml: `<p style="margin:0 0 16px;font-size:16px;">Hi {{customerName}},</p><p style="margin:0 0 16px;">{{businessName}} couldn’t cancel <strong>{{itemLabel}}</strong>.</p><p style="margin:0 0 16px;"><span style="${LABEL}">Their note</span><br/>{{resolutionNote}}</p><p style="margin:0;">{{resumeLine}}</p>`,
+      availableVars: [
+        'customerName',
+        'itemLabel',
+        'resolutionNote',
+        'resumeLine',
+        'businessName',
+      ],
+    },
+
     // ─── Platform-ops (always OkaySync-branded) ────────────
     {
       key: 'platform-activation-invite',
@@ -270,6 +335,22 @@ export const SAMPLE_TEMPLATE_DATA: Record<string, string> = {
   eventId: 'evt_sample123',
   errorMessage: 'Connection timed out',
   tenantName: 'Nutriwell Kitchen',
+  customerEmail: 'priya@example.com',
+  customerPhone: '+91 98765 43210',
+  requestKind: 'subscription',
+  requestKindTitle: 'Subscription',
+  itemLabel: '7-Day Weight Loss Plan',
+  detailsHtml:
+    '<p style="margin:0 0 8px;"><span style="color:#71717a;font-size:13px;">Plan</span><br/>3 Sep – 9 Sep · 3 of 7 days delivered · suggested refund ₹1,428.00</p>',
+  reasonLabel: 'Moving / relocating',
+  note: 'Shifting to Pune next week.',
+  holdLine: 'Deliveries are on hold from Thu, 5 Sep while this is reviewed.',
+  reviewUrl: 'https://example.com/admin/subscriptions/sample',
+  refundAmount: '1428.00',
+  resolutionNote:
+    'We’ve paused your plan for two weeks instead — call us anytime.',
+  resumeLine:
+    'Your deliveries resume as usual, and the held days have been added to the end of your plan.',
 };
 
 /**

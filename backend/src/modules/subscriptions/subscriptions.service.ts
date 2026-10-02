@@ -38,6 +38,8 @@ import { buildSubscriptionCalendarDays } from '../../common/utils/subscription-c
 import { buildUpcomingPreview } from '../../common/utils/subscription-upcoming.util';
 import { projectHolidayReplacements } from '../../common/utils/subscription-holiday-projection.util';
 import { deliversOn } from '../../common/utils/subscription-prep.util';
+import { newSubscriptionsClosedReason } from './subscription-availability.util';
+import { slotOffersFor } from '../settings/delivery-slot-rules';
 import {
   SubscriptionOffDayHandling,
   SubscriptionPlanSchedulingMode,
@@ -71,12 +73,12 @@ import {
   Role,
   Subscription,
 } from '../../generated/prisma';
+import { CancellationNotifier } from '../../shared-modules/cancellation-notifications/cancellation-notifier.service';
 
 // SUPER_ADMIN platform-level kill switch — separate from the tenant's own
 // SubscriptionSettings.isEnabled self-service toggle. Both must be on for
 // the storefront to show plans; this one only SUPER_ADMIN controls.
 const SUBSCRIPTIONS_FEATURE_KEY = 'subscriptions';
-const CANCEL_FEATURE_KEY = 'subscription-self-cancel';
 // SUPER_ADMIN opt-in — presence of the grant HIDES delivery-time selection
 // (both at signup and per-day overrides) rather than unlocking it, so a
 // brand-new tenant with no grant row keeps today's working behavior instead
@@ -102,6 +104,7 @@ export class SubscriptionsService {
     private readonly refundsRepo: RefundsRepository,
     private readonly usersRepo: UsersRepository,
     private readonly bankingService: SubscriptionBankingService,
+    private readonly cancellationNotifier: CancellationNotifier,
   ) {}
 
   // ─── Admin plan CRUD ─────────────────────────────────────
@@ -435,13 +438,23 @@ export class SubscriptionsService {
 
   /** Public: the flags/copy the storefront home page + /plans page need. */
   async getPublicSettings(tenantId: string) {
-    const [settings, featureGranted, entitlements] = await Promise.all([
-      this.subscriptionsRepo.findSettings(tenantId),
-      this.featuresService.hasFeature(tenantId, SUBSCRIPTIONS_FEATURE_KEY),
-      this.getCalendarEntitlements(tenantId),
-    ]);
+    const [settings, featureGranted, entitlements, acceptance] =
+      await Promise.all([
+        this.subscriptionsRepo.findSettings(tenantId),
+        this.featuresService.hasFeature(tenantId, SUBSCRIPTIONS_FEATURE_KEY),
+        this.getCalendarEntitlements(tenantId),
+        this.settingsRepo.findOrderAcceptanceSettings(tenantId),
+      ]);
     const defaults = defaultSubscriptionSettings();
+    const newSubscriptionsClosed = newSubscriptionsClosedReason(
+      settings,
+      acceptance,
+    );
     return {
+      // Lets the plans page show why sign-ups are paused up front, instead
+      // of the customer finding out only when they press Buy.
+      acceptingNewSubscriptions: newSubscriptionsClosed === null,
+      newSubscriptionsClosedReason: newSubscriptionsClosed,
       // Downgrade to what the tenant is actually entitled to — a stored
       // CALENDAR/BOTH (or a selection switch) never reaches the storefront
       // once SUPER_ADMIN revokes the grant.
@@ -774,19 +787,57 @@ export class SubscriptionsService {
 
   // ─── Subscribe + payment ─────────────────────────────────
 
-  async subscribe(tenantId: string, userId: string, dto: SubscribeDto) {
-    const settings = await this.subscriptionsRepo.findSettings(tenantId);
+  /** A delivery time a subscription may be given (sign-up, manual, a day's
+   * change): time selection isn't locked, and the slot exists, is switched
+   * on and is offered to subscriptions (its usage is SUBSCRIPTIONS or BOTH). */
+  private async assertSubscriptionSlotChoosable(
+    tenantId: string,
+    slotId: string,
+  ): Promise<void> {
+    const timeLocked = await this.featuresService.hasFeature(
+      tenantId,
+      TIME_LOCK_FEATURE_KEY,
+    );
+    if (timeLocked) {
+      throw new BadRequestException(
+        'Delivery time selection is disabled for subscription plans — only address changes are available.',
+      );
+    }
+    const slot = await this.subscriptionsRepo.findDeliverySlotById(
+      tenantId,
+      slotId,
+    );
+    if (
+      !slot ||
+      !slot.isActive ||
+      !slotOffersFor(slot.usage, 'SUBSCRIPTIONS')
+    ) {
+      throw new BadRequestException(
+        "That delivery time isn't available for subscriptions.",
+      );
+    }
+  }
+
+  /** Shared by the customer and manual sign-up paths: subscriptions must be
+   * on, and neither the subscription pause nor the store-wide "Temporarily
+   * closed" may be set. Returns the subscription settings for the caller. */
+  private async assertAcceptingNewSubscriptions(tenantId: string) {
+    const [settings, acceptance] = await Promise.all([
+      this.subscriptionsRepo.findSettings(tenantId),
+      this.settingsRepo.findOrderAcceptanceSettings(tenantId),
+    ]);
     if (settings && !settings.isEnabled) {
       throw new BadRequestException(
         'Subscriptions are not available for this business right now.',
       );
     }
-    if (settings && !settings.isAcceptingNewSubscriptions) {
-      throw new BadRequestException(
-        settings.closureReason ||
-          'This business is not accepting new subscriptions right now.',
-      );
-    }
+    const closedReason = newSubscriptionsClosedReason(settings, acceptance);
+    if (closedReason) throw new BadRequestException(closedReason);
+    return settings;
+  }
+
+  async subscribe(tenantId: string, userId: string, dto: SubscribeDto) {
+    const settings = await this.assertAcceptingNewSubscriptions(tenantId);
 
     // Platform plan's concurrent active-subscriber cap.
     await this.tenantLimits.assertSubscriberAllowed(tenantId);
@@ -797,25 +848,16 @@ export class SubscriptionsService {
     );
     if (!plan) throw new NotFoundException('Plan not found or not available');
 
-    // Confirms the address is real and belongs to this customer — same
-    // ownership check checkout already does for a regular order.
-    await this.addressesService.findOne(tenantId, userId, dto.addressId);
+    // Confirms the address is real, belongs to this customer and is inside
+    // the delivery area — the same checks checkout does for a regular order.
+    await this.addressesService.findDeliverableOne(
+      tenantId,
+      userId,
+      dto.addressId,
+    );
 
     if (dto.deliverySlotId) {
-      const timeLocked = await this.featuresService.hasFeature(
-        tenantId,
-        TIME_LOCK_FEATURE_KEY,
-      );
-      if (timeLocked) {
-        throw new BadRequestException(
-          'Delivery time selection is disabled for subscription plans — only address changes are available.',
-        );
-      }
-      const slot = await this.subscriptionsRepo.findDeliverySlotById(
-        tenantId,
-        dto.deliverySlotId,
-      );
-      if (!slot) throw new BadRequestException('Invalid delivery slot');
+      await this.assertSubscriptionSlotChoosable(tenantId, dto.deliverySlotId);
     }
 
     // Automatic (no-code) scheduled discount, if the tenant has one active
@@ -1092,18 +1134,7 @@ export class SubscriptionsService {
       throw new NotFoundException('Customer not found');
     }
 
-    const settings = await this.subscriptionsRepo.findSettings(tenantId);
-    if (settings && !settings.isEnabled) {
-      throw new BadRequestException(
-        'Subscriptions are not available for this business right now.',
-      );
-    }
-    if (settings && !settings.isAcceptingNewSubscriptions) {
-      throw new BadRequestException(
-        settings.closureReason ||
-          'This business is not accepting new subscriptions right now.',
-      );
-    }
+    await this.assertAcceptingNewSubscriptions(tenantId);
 
     await this.tenantLimits.assertSubscriberAllowed(tenantId);
 
@@ -1120,20 +1151,7 @@ export class SubscriptionsService {
     );
 
     if (dto.deliverySlotId) {
-      const timeLocked = await this.featuresService.hasFeature(
-        tenantId,
-        TIME_LOCK_FEATURE_KEY,
-      );
-      if (timeLocked) {
-        throw new BadRequestException(
-          'Delivery time selection is disabled for subscription plans — only address changes are available.',
-        );
-      }
-      const slot = await this.subscriptionsRepo.findDeliverySlotById(
-        tenantId,
-        dto.deliverySlotId,
-      );
-      if (!slot) throw new BadRequestException('Invalid delivery slot');
+      await this.assertSubscriptionSlotChoosable(tenantId, dto.deliverySlotId);
     }
 
     const scheduledDiscountMap =
@@ -1239,7 +1257,7 @@ export class SubscriptionsService {
     const [
       addresses,
       deliverySlots,
-      canCancel,
+      cancellationRequest,
       timeLocked,
       earliest,
       settings,
@@ -1247,8 +1265,8 @@ export class SubscriptionsService {
       closedDates,
     ] = await Promise.all([
       this.addressesService.findAll(tenantId, userId),
-      this.settingsRepo.findActiveDeliverySlots(tenantId),
-      this.featuresService.hasFeature(tenantId, CANCEL_FEATURE_KEY),
+      this.settingsRepo.findActiveDeliverySlots(tenantId, 'SUBSCRIPTIONS'),
+      this.subscriptionsRepo.findLatestCancellationRequest(subscription.id),
       this.featuresService.hasFeature(tenantId, TIME_LOCK_FEATURE_KEY),
       this.getEarliestEditableDate(tenantId, timezone),
       this.subscriptionsRepo.findSettings(tenantId),
@@ -1319,7 +1337,13 @@ export class SubscriptionsService {
       upcoming,
       addresses,
       deliverySlots,
-      canCancel,
+      // Latest request of any status (the customer sees a pending hold, or
+      // the kitchen's note on a rejection); a new one can be raised unless
+      // one is still pending.
+      cancellationRequest,
+      canRequestCancellation:
+        subscription.status === 'ACTIVE' &&
+        cancellationRequest?.status !== 'PENDING',
       canOverrideTime,
       earliestEditableDate: earliest.dateStr,
       viewMode,
@@ -1716,7 +1740,9 @@ export class SubscriptionsService {
       userId,
       id,
     );
-    return this.applyDayOverride(tenantId, subscription, dto);
+    return this.applyDayOverride(tenantId, subscription, dto, {
+      requireDeliverable: true,
+    });
   }
 
   /** Admin equivalent of setDayOverride() — see skipDayAdmin(). Address/
@@ -1728,13 +1754,18 @@ export class SubscriptionsService {
     dto: SetDayOverrideDto,
   ) {
     const subscription = await this.getTenantActiveSubscription(tenantId, id);
-    return this.applyDayOverride(tenantId, subscription, dto);
+    // Staff may pick an out-of-area address — they're vouching for it, as
+    // with a manual order or a staff-saved address.
+    return this.applyDayOverride(tenantId, subscription, dto, {
+      requireDeliverable: false,
+    });
   }
 
   private async applyDayOverride(
     tenantId: string,
     subscription: Subscription,
     dto: SetDayOverrideDto,
+    options: { requireDeliverable: boolean },
   ) {
     await this.assertWithinNoticeWindow(tenantId, dto.date);
     if (!dto.addressId && !dto.deliverySlotId && dto.note === undefined) {
@@ -1742,7 +1773,13 @@ export class SubscriptionsService {
         'Provide at least an addressId, a deliverySlotId, or a note to override',
       );
     }
-    if (dto.addressId) {
+    if (dto.addressId && options.requireDeliverable) {
+      await this.addressesService.findDeliverableOne(
+        tenantId,
+        subscription.userId,
+        dto.addressId,
+      );
+    } else if (dto.addressId) {
       await this.addressesService.findOne(
         tenantId,
         subscription.userId,
@@ -1750,20 +1787,7 @@ export class SubscriptionsService {
       );
     }
     if (dto.deliverySlotId) {
-      const timeLocked = await this.featuresService.hasFeature(
-        tenantId,
-        TIME_LOCK_FEATURE_KEY,
-      );
-      if (timeLocked) {
-        throw new BadRequestException(
-          'Delivery time selection is disabled for subscription plans — only address changes are available.',
-        );
-      }
-      const slot = await this.subscriptionsRepo.findDeliverySlotById(
-        tenantId,
-        dto.deliverySlotId,
-      );
-      if (!slot) throw new BadRequestException('Invalid delivery slot');
+      await this.assertSubscriptionSlotChoosable(tenantId, dto.deliverySlotId);
     }
     return this.subscriptionsRepo.upsertDayOverride(subscription.id, dto.date, {
       addressId: dto.addressId,
@@ -1772,18 +1796,53 @@ export class SubscriptionsService {
     });
   }
 
-  async cancel(tenantId: string, userId: string, id: string) {
-    const allowed = await this.featuresService.hasFeature(
-      tenantId,
-      CANCEL_FEATURE_KEY,
+  /** First date a new cancellation request holds deliveries from — the
+   * same notice rule as skip/pause, so the kitchen's already-planned days
+   * still go out. */
+  async getCancellationHoldStart(tenantId: string): Promise<string> {
+    const timezone = await this.getTenantTimezone(tenantId);
+    const { dateStr: todayStr } = DateUtil.getTenantNow(timezone);
+    const { dateStr } = await this.getEarliestEditableDate(tenantId, timezone);
+    return dateStr < todayStr ? todayStr : dateStr;
+  }
+
+  /**
+   * Gives back every day a now-closed (rejected/withdrawn) cancellation
+   * request held: cycleEnd moves out by that many real delivery days, the
+   * same banking a pause uses, and an EXPIRED plan (the hold outlasted it)
+   * comes back to ACTIVE. Returns how many days were banked.
+   */
+  async bankHeldDays(
+    tenantId: string,
+    subscriptionId: string,
+    cancellationRequestId: string,
+  ): Promise<number> {
+    const held = await this.subscriptionsRepo.findUnbankedHeldSkips(
+      cancellationRequestId,
     );
-    if (!allowed) {
-      throw new ForbiddenException(
-        'Self-service cancellation is not available for this business — contact them directly.',
-      );
+    if (held.length === 0) return 0;
+    const subscription = await this.subscriptionsRepo.findSubscriptionById(
+      tenantId,
+      subscriptionId,
+    );
+    if (!subscription?.cycleEnd || subscription.status === 'CANCELLED') {
+      return 0;
     }
-    await this.getOwnedActiveSubscription(tenantId, userId, id);
-    return this.subscriptionsRepo.cancelSubscription(id);
+    const newCycleEnd = await this.bankingService.bankExtraDays(
+      tenantId,
+      { ...subscription, cycleEnd: subscription.cycleEnd },
+      held.length,
+    );
+    await this.subscriptionsRepo.extendCycleEnd(
+      subscriptionId,
+      newCycleEnd,
+      held.length,
+    );
+    await this.subscriptionsRepo.markHeldSkipsBanked(held.map((s) => s.id));
+    if (subscription.status === 'EXPIRED') {
+      await this.subscriptionsRepo.reactivateSubscription(subscriptionId);
+    }
+    return held.length;
   }
 
   /**
@@ -1910,6 +1969,18 @@ export class SubscriptionsService {
     );
     if (!result) {
       throw new BadRequestException('This subscription is already cancelled.');
+    }
+    if (result.approvedRequest) {
+      await this.cancellationNotifier.notifyApproved({
+        tenantId,
+        userId: subscription.userId,
+        target: {
+          kind: 'SUBSCRIPTION',
+          id: subscription.id,
+          label: subscription.planNameSnapshot,
+        },
+        netRefundInPaise,
+      });
     }
     return result;
   }

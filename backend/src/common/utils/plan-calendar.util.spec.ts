@@ -107,6 +107,22 @@ describe('buildPlanCalendar — RELATIVE_DAY', () => {
 });
 
 describe('buildPlanCalendar — WEEKLY_FIXED', () => {
+  it("a closure on the plan's own off weekday stays OFF_DAY and adds no day", () => {
+    // Sun 27 Sep is both the plan's off day and a kitchen weekly off.
+    const cal = buildPlanCalendar(
+      weeklyPlan(SubscriptionOffDayHandling.EXTEND_TO_COMPENSATE, 3),
+      '2026-09-26',
+      [closure('2026-09-27', 'Weekly off', null)],
+    );
+
+    expect(cal.days.map((d) => [d.date, d.kind, d.holiday])).toEqual([
+      ['2026-09-26', 'DELIVERY', null],
+      ['2026-09-27', 'OFF_DAY', null],
+      ['2026-09-28', 'DELIVERY', null],
+      ['2026-09-29', 'DELIVERY', null],
+    ]);
+  });
+
   it('EXTEND_TO_COMPENSATE runs until N real deliveries, skipping the off day', () => {
     // Sat 26 Sep start, 3 deliveries: Sat, (Sun off), Mon, Tue
     const cal = buildPlanCalendar(
@@ -150,14 +166,18 @@ describe('buildPlanCalendar — WEEKLY_FIXED', () => {
     expect(cal.days[1].meals[0]).toMatchObject({ mealId: 'w3' });
   });
 
-  it('a holiday wins over an off day', () => {
+  it('an off day wins over a holiday on the same date (nothing was due)', () => {
     const cal = buildPlanCalendar(
       weeklyPlan(SubscriptionOffDayHandling.EXTEND_TO_COMPENSATE, 2),
       '2026-09-26',
       [closure('2026-09-27')], // the off Sunday is also a holiday
     );
 
-    expect(cal.days[1]).toMatchObject({ date: '2026-09-27', kind: 'HOLIDAY' });
+    expect(cal.days[1]).toMatchObject({
+      date: '2026-09-27',
+      kind: 'OFF_DAY',
+      holiday: null,
+    });
   });
 
   it('EXTEND: a holiday is not a delivery, so the span runs one day longer', () => {

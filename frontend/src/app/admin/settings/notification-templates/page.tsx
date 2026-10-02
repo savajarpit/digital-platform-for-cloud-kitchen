@@ -9,7 +9,7 @@ export default function NotificationTemplatesPage() {
           Message Templates
         </h2>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Customize the wording of your order confirmation, welcome, reset-password, and account-invite emails —
+          Customize the wording of your order confirmation, welcome, reset-password, account-invite and cancellation-request emails —
           still branded with your own logo and name. Email and WhatsApp are managed by separate
           permissions.
         </p>

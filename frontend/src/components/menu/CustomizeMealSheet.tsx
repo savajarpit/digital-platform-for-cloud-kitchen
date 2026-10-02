@@ -41,11 +41,12 @@ export function CustomizeMealSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
+      {/* Header and the price/Add bar stay put; only the add-ons scroll. */}
       <div
-        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-5 shadow-soft sm:rounded-2xl dark:bg-zinc-900"
+        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-soft sm:rounded-2xl dark:bg-zinc-900"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-5 pb-4">
           <div>
             <h3 className="font-display text-base font-bold text-zinc-900 dark:text-zinc-100">
               Customize {meal.name}
@@ -64,14 +65,16 @@ export function CustomizeMealSheet({
           </button>
         </div>
 
-        <MealCustomizerFields
-          groups={groups}
-          getSelection={getSelection}
-          distinctCount={distinctCount}
-          setItemQuantity={setItemQuantity}
-        />
+        <div className="scrollbar-hidden min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5">
+          <MealCustomizerFields
+            groups={groups}
+            getSelection={getSelection}
+            distinctCount={distinctCount}
+            setItemQuantity={setItemQuantity}
+          />
+        </div>
 
-        <div className="mt-5 flex items-center justify-between border-t border-zinc-100 pt-4 dark:border-zinc-800">
+        <div className="flex shrink-0 items-center justify-between border-t border-zinc-100 px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-zinc-800">
           {hideQuantityStepper ? (
             <span />
           ) : (

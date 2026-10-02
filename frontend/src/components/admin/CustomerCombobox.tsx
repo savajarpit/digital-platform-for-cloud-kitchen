@@ -130,10 +130,10 @@ export function CustomerCombobox({
                 }`}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-zinc-700 dark:text-zinc-300">
+                  <p className="wrap-break-word text-zinc-700 dark:text-zinc-300">
                     {customer.firstName} {customer.lastName ?? ""}
                   </p>
-                  <p className="truncate text-xs text-zinc-400">
+                  <p className="text-xs wrap-break-word text-zinc-400">
                     {customer.email}
                     {customer.phone ? ` · ${customer.phone}` : ""}
                   </p>
@@ -165,7 +165,7 @@ export function CustomerCombobox({
               className="flex w-full cursor-pointer items-center gap-2 border-t border-zinc-100 px-3 py-2.5 text-left text-sm font-medium text-primary-600 hover:bg-primary-50 dark:border-zinc-800 dark:hover:bg-primary-950"
             >
               <UserPlus className="h-4 w-4 shrink-0" />
-              <span className="truncate">{search.trim() ? `Create new customer "${search.trim()}"` : "Create new customer"}</span>
+              <span className="wrap-break-word">{search.trim() ? `Create new customer "${search.trim()}"` : "Create new customer"}</span>
             </button>
           )}
         </div>

@@ -14,6 +14,9 @@ interface AuthTokens {
   refreshToken: string;
 }
 
+/** Statuses the Fetch spec forbids a body on. */
+const NULL_BODY_STATUSES = new Set([204, 205, 304]);
+
 /**
  * Generic authenticated backend proxy for Client Components. The access
  * token lives in an httpOnly cookie (by design — no client JS access), so
@@ -75,6 +78,12 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
         await clearSessionCookies();
       }
     }
+  }
+
+  // A 204/205/304 must carry no body at all — even "" makes the Response
+  // constructor throw, which turned every successful DELETE into a 500.
+  if (NULL_BODY_STATUSES.has(res.status)) {
+    return new NextResponse(null, { status: res.status });
   }
 
   const responseText = await res.text();

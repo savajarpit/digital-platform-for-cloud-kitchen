@@ -7,6 +7,7 @@ import type { Meal } from "@/lib/api/menu";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatMealWeight } from "@/lib/format/weight";
 import { AddToCartButton } from "./AddToCartButton";
+import { MealStockNote } from "./MealStockNote";
 
 const MACRO_KEYS = ["calories", "protein", "carbs", "fat"] as const;
 const MACRO_LABELS: Record<(typeof MACRO_KEYS)[number], string> = {
@@ -109,6 +110,7 @@ export function MealCard({
               </span>
             )}
           </div>
+          <MealStockNote remainingToday={meal.remainingToday} className="mb-1" />
           {meal.description && (
             <p className="mb-3 line-clamp-2 flex-1 text-sm text-zinc-500 dark:text-zinc-400">
               {meal.description}

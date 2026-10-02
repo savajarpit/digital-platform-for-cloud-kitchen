@@ -1,7 +1,13 @@
-import type { SubscriptionDetail } from "@/lib/api/subscriptions";
+"use client";
 
-/** The pause-a-range form and (if entitled) the self-cancel card — the
- * two whole-subscription actions on the My Subscription page. */
+import { useState } from "react";
+import type { SubscriptionDetail } from "@/lib/api/subscriptions";
+import { requestSubscriptionCancellation } from "@/lib/api/cancellation-requests";
+import { CancellationRequestSheet } from "@/components/cancellations/CancellationRequestSheet";
+
+/** The pause-a-range form and the "request cancellation" card — the two
+ * whole-subscription actions on the My Subscription page. Cancelling is a
+ * request the kitchen reviews (and refunds), never an instant cancel. */
 export function SubscriptionPauseAndCancel({
   subscription,
   pauseFrom,
@@ -10,7 +16,7 @@ export function SubscriptionPauseAndCancel({
   onPauseFromChange,
   onPauseToChange,
   onPause,
-  onCancel,
+  onCancellationChanged,
 }: {
   subscription: SubscriptionDetail;
   pauseFrom: string;
@@ -19,8 +25,19 @@ export function SubscriptionPauseAndCancel({
   onPauseFromChange: (value: string) => void;
   onPauseToChange: (value: string) => void;
   onPause: (e: React.FormEvent) => void;
-  onCancel: () => void;
+  onCancellationChanged: () => void;
 }) {
+  const [requestOpen, setRequestOpen] = useState(false);
+  // earliestEditableDate is a tenant-local YYYY-MM-DD: format it in UTC so
+  // it never shifts a day in the viewer's own timezone.
+  const holdFrom = new Date(`${subscription.earliestEditableDate}T00:00:00Z`).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  const cardCopy = `Send a cancellation request to the kitchen. Deliveries go on hold from ${holdFrom} while they review it, and they'll refund your undelivered days if they approve.`;
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <form onSubmit={onPause} className="card flex flex-col gap-3 p-5">
@@ -83,23 +100,35 @@ export function SubscriptionPauseAndCancel({
         </button>
       </form>
 
-      {subscription.canCancel && (
+      {subscription.canRequestCancellation && (
         <div className="card flex flex-col gap-3 p-5">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            Cancel
+            Cancel subscription
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Stops all future deliveries for this subscription immediately.
+            {cardCopy}
           </p>
           <button
             type="button"
-            onClick={onCancel}
-            className="btn-outline btn-sm self-start text-red-600"
+            onClick={() => setRequestOpen(true)}
+            className="btn-outline btn-sm cursor-pointer self-start text-red-600"
           >
-            Cancel Subscription
+            Request cancellation
           </button>
         </div>
       )}
+
+      <CancellationRequestSheet
+        open={requestOpen}
+        onClose={() => setRequestOpen(false)}
+        title="Request cancellation"
+        explainer={`Deliveries go on hold from ${holdFrom} while the kitchen reviews your request. If they approve, they'll refund your undelivered days; if not, your held days are added to the end of your plan.`}
+        onSubmit={(input) => requestSubscriptionCancellation(subscription.id, input)}
+        onSubmitted={() => {
+          setRequestOpen(false);
+          onCancellationChanged();
+        }}
+      />
     </div>
   );
 }

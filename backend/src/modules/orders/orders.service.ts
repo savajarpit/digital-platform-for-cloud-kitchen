@@ -29,6 +29,8 @@ import { QueryOverviewDto } from './dto/query-overview.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { AddressesService } from '../addresses/addresses.service';
 import { MealsService } from '../menu/meals.service';
+import { MealStockService } from '../menu/meal-stock.service';
+import { StockLimitedMeal } from '../menu/meal-stock.util';
 import { OrderAcceptanceService } from '../settings/order-acceptance.service';
 import { SettingsRepository } from '../settings/settings.repository';
 import { PromotionsService, CartMeal } from '../promotions/promotions.service';
@@ -36,6 +38,8 @@ import { UsersRepository } from '../users/users.repository';
 import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-client.service';
 import { PaginationService } from '../../common/services/pagination.service';
 import { DateUtil } from '../../common/utils/date.util';
+import { instantDeliveryUnavailableMessage } from '../../common/utils/order-day-availability.util';
+import { slotOffersFor } from '../settings/delivery-slot-rules';
 import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 import { FeaturesService } from '../features/features.service';
 import { RefundsRepository } from '../../shared-modules/refunds/refunds.repository';
@@ -55,6 +59,8 @@ import {
   Role,
 } from '../../generated/prisma';
 import { mealsOverQuantityLimit } from '../../common/utils/order-quantity.util';
+import { assertStatusChangeAllowed } from './order-status-rules';
+import { CancellationNotifier } from '../../shared-modules/cancellation-notifications/cancellation-notifier.service';
 import {
   MAX_ITEM_QUANTITY,
   MIN_ONLINE_PAYMENT_IN_PAISE,
@@ -79,6 +85,9 @@ interface PricingResult {
   discountInPaise: number;
   couponId?: string;
   resolvedCouponCode?: string;
+  /** The cart's meals, for the per-date daily-stock check the callers run
+   * once they know the delivery date. */
+  stockMeals: StockLimitedMeal[];
 }
 
 @Injectable()
@@ -99,6 +108,8 @@ export class OrdersService {
     private readonly diningTablesService: DiningTablesService,
     private readonly waitlistService: WaitlistService,
     private readonly addonGroupsService: AddonGroupsService,
+    private readonly mealStock: MealStockService,
+    private readonly cancellationNotifier: CancellationNotifier,
   ) {}
 
   /**
@@ -236,6 +247,7 @@ export class OrdersService {
       discountInPaise: Math.min(discountInPaise, subtotalInPaise),
       couponId,
       resolvedCouponCode,
+      stockMeals: meals,
     };
   }
 
@@ -487,6 +499,11 @@ export class OrdersService {
     if (order.paymentStatus === PaymentStatus.PAID) {
       return order;
     }
+    if (order.status === 'CANCELLED') {
+      throw new BadRequestException(
+        'This order was cancelled — it can no longer be marked as paid.',
+      );
+    }
     const isDineIn =
       order.fulfillmentType === OrderFulfillmentType.DINE_IN ||
       order.fulfillmentType === OrderFulfillmentType.TAKEAWAY;
@@ -549,6 +566,7 @@ export class OrdersService {
       dto.items ?? [],
       undefined,
     );
+    await this.assertStockForToday(tenantId, pricing);
     const totalInPaise = Math.max(
       0,
       pricing.subtotalInPaise - pricing.discountInPaise,
@@ -589,6 +607,21 @@ export class OrdersService {
     return order!;
   }
 
+  /** Dine-in/takeaway is served now, so it draws on today's stock. */
+  private async assertStockForToday(
+    tenantId: string,
+    pricing: PricingResult,
+  ): Promise<void> {
+    if (pricing.items.length === 0) return;
+    const today = await this.mealStock.getTenantToday(tenantId);
+    await this.mealStock.assertAvailable(
+      tenantId,
+      pricing.stockMeals,
+      pricing.items,
+      today,
+    );
+  }
+
   /** Appends another round of items to a still-open DINE_IN/TAKEAWAY order. */
   async addItemsToDineInOrder(
     tenantId: string,
@@ -602,6 +635,7 @@ export class OrdersService {
       dto.items,
       undefined,
     );
+    await this.assertStockForToday(tenantId, pricing);
     return this.ordersRepo.addItems(
       id,
       pricing.items,
@@ -861,8 +895,7 @@ export class OrdersService {
         await this.orderAcceptanceService.getInstantDeliveryStatus(tenantId);
       if (!instantStatus.available) {
         throw new BadRequestException(
-          instantStatus.reason ??
-            'Instant delivery is not available right now.',
+          instantDeliveryUnavailableMessage(instantStatus.reason),
         );
       }
       deliveryDate = new Date(`${todayStr}T00:00:00.000Z`);
@@ -879,7 +912,9 @@ export class OrdersService {
         tenantId,
         dto.deliverySlotId!,
       );
-      if (!slot || !slot.isActive) {
+      // A subscriptions-only slot is never offered to orders (manual ones
+      // included) — even after the subscriptions feature is revoked.
+      if (!slot || !slot.isActive || !slotOffersFor(slot.usage, 'ORDERS')) {
         throw new BadRequestException(
           'Selected delivery slot is not available.',
         );
@@ -912,6 +947,15 @@ export class OrdersService {
       deliveryWindowStart = slot.startTime;
       deliveryWindowEnd = slot.endTime;
     }
+
+    // Daily stock is per delivery date, so it can only be checked here,
+    // once the date is settled — free promo items come out of it too.
+    await this.mealStock.assertAvailable(
+      tenantId,
+      pricing.stockMeals,
+      pricing.items,
+      dto.isInstant ? todayStr : dto.deliveryDate!,
+    );
 
     const totalInPaise = effectiveSubtotalInPaise + deliveryFeeInPaise;
     const orderNumber = generateOrderNumber();
@@ -973,6 +1017,7 @@ export class OrdersService {
       query.limit,
       query.status,
       query.fulfillmentType,
+      query.cancelRequested,
     );
     return {
       data,
@@ -987,11 +1032,7 @@ export class OrdersService {
   ): Promise<OrderWithAdminDetails> {
     const order = await this.ordersRepo.findByIdForTenant(tenantId, id);
     if (!order) throw new NotFoundException('Order not found');
-    if (order.paymentStatus !== 'PAID') {
-      throw new BadRequestException(
-        'Cannot update the status of an order that has not been paid yet.',
-      );
-    }
+    assertStatusChangeAllowed(order, dto.status);
 
     await this.ordersRepo.updateStatus(id, dto.status);
     return { ...order, status: dto.status };
@@ -1077,6 +1118,18 @@ export class OrdersService {
     );
     if (!result) {
       throw new BadRequestException('This order is already cancelled.');
+    }
+    if (result.approvedRequest && order.userId) {
+      await this.cancellationNotifier.notifyApproved({
+        tenantId,
+        userId: order.userId,
+        target: {
+          kind: 'ORDER',
+          id: order.id,
+          label: `Order ${order.orderNumber}`,
+        },
+        netRefundInPaise,
+      });
     }
     return result;
   }

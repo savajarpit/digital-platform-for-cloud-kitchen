@@ -14,7 +14,7 @@ import {
   verifySubscriptionPayment,
 } from "@/lib/api/subscriptions";
 import type { Address } from "@/lib/api/addresses";
-import { getDeliverySlots } from "@/lib/api/delivery-slots";
+import { getSubscriptionDeliverySlots } from "@/lib/api/delivery-slots";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { qk, STALE } from "@/lib/query/keys";
 import { useAddresses } from "@/lib/query/addresses";
@@ -58,8 +58,8 @@ export default function PlanDetailPage({
   const razorpayBranding = useRazorpayBranding();
   const addressesQuery = useAddresses();
   const { data: slotsConfig } = useQuery({
-    queryKey: qk.checkout.slots,
-    queryFn: getDeliverySlots,
+    queryKey: qk.checkout.subscriptionSlots,
+    queryFn: getSubscriptionDeliverySlots,
     staleTime: STALE.short,
   });
   const { data: mySubscriptions } = useQuery({
@@ -130,7 +130,7 @@ export default function PlanDetailPage({
   }
 
   async function doSubscribe() {
-    if (!plan || !selectedAddressId || datesMissing > 0) return;
+    if (!plan || !selectedAddressId || datesMissing > 0 || pageSettings?.newSubscriptionsClosedReason) return;
     setIsSubscribing(true);
     try {
       const { subscriptionId, razorpayOrderId, razorpayKeyId, amountInPaise } =
@@ -222,6 +222,7 @@ export default function PlanDetailPage({
       datesMissing={datesMissing}
       isSubscribing={isSubscribing}
       onSubscribeClick={handleSubscribeClick}
+      closedReason={pageSettings?.newSubscriptionsClosedReason}
     />
   );
 

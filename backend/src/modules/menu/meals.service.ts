@@ -11,12 +11,17 @@ import { AddonGroupWithItems } from '../addons/addon-groups.repository';
 import { FeaturesService } from '../features/features.service';
 import { MENU_ADDONS_FEATURE_KEY } from '../addons/addons.constants';
 import { PaginationService } from '../../common/services/pagination.service';
+import { MealStockService } from './meal-stock.service';
 
 export type MealWithPromotion = Meal & {
   activePromotion: { promotionName: string; discountPercentage: number } | null;
 };
 
 export type MealWithAddons = Meal & { addonGroups?: AddonGroupWithItems[] };
+
+/** Plates left today (tenant-local) — null when the meal has no daily
+ * limit. The storefront badges "Only N left" / "Sold out today" from it. */
+type WithRemainingToday<T> = T & { remainingToday: number | null };
 
 @Injectable()
 export class MealsService {
@@ -26,6 +31,7 @@ export class MealsService {
     private readonly addonGroupsService: AddonGroupsService,
     private readonly featuresService: FeaturesService,
     private readonly pagination: PaginationService,
+    private readonly mealStock: MealStockService,
   ) {}
 
   async findAllForAdmin(tenantId: string, query: QueryAdminMealsDto) {
@@ -56,9 +62,11 @@ export class MealsService {
           data.map((m) => m.id),
         )
       : null;
+    const remainingToday = await this.remainingToday(tenantId, data);
     return {
       data: data.map((meal) => ({
         ...meal,
+        remainingToday: remainingToday.get(meal.id) ?? null,
         addonGroupIds: attachedByMeal
           ? (attachedByMeal.get(meal.id) ?? []).map((g) => g.id)
           : undefined,
@@ -71,7 +79,9 @@ export class MealsService {
     tenantId: string,
     query: QueryMealsDto,
     onlyAvailable: boolean,
-  ): Promise<Meal[] | MealWithPromotion[] | MealWithAddons[]> {
+  ): Promise<
+    Meal[] | WithRemainingToday<MealWithPromotion | MealWithAddons>[]
+  > {
     const meals = await this.menuRepo.findMeals(tenantId, {
       ...query,
       onlyAvailable,
@@ -80,16 +90,18 @@ export class MealsService {
     // listing (onlyAvailable: false) doesn't need either.
     if (!onlyAvailable) return meals;
 
-    const [promoMap, addonsByMeal] = await Promise.all([
+    const [promoMap, addonsByMeal, remainingToday] = await Promise.all([
       this.promotionsService.getActiveScheduledDiscountsForMeals(
         tenantId,
         meals,
       ),
       this.getAddonGroupsForMeals(tenantId, meals),
+      this.remainingToday(tenantId, meals),
     ]);
     return meals.map((meal) => ({
       ...meal,
       activePromotion: promoMap.get(meal.id) ?? null,
+      remainingToday: remainingToday.get(meal.id) ?? null,
       ...(addonsByMeal ? { addonGroups: addonsByMeal.get(meal.id) ?? [] } : {}),
     }));
   }
@@ -97,23 +109,61 @@ export class MealsService {
   async findOne(
     tenantId: string,
     id: string,
-  ): Promise<Meal | MealWithPromotion | MealWithAddons> {
+  ): Promise<WithRemainingToday<MealWithPromotion | MealWithAddons>> {
     const meal = await this.menuRepo.findMealById(tenantId, id);
     if (!meal) throw new NotFoundException('Meal not found');
     // Public single-meal fetch backs the customer detail page, so it needs
     // the same discount badge/price the grid already computes — findAll's
     // onlyAvailable path and this one must never disagree on price.
-    const [promoMap, addonsByMeal] = await Promise.all([
+    const [promoMap, addonsByMeal, remainingToday] = await Promise.all([
       this.promotionsService.getActiveScheduledDiscountsForMeals(tenantId, [
         meal,
       ]),
       this.getAddonGroupsForMeals(tenantId, [meal]),
+      this.remainingToday(tenantId, [meal]),
     ]);
     return {
       ...meal,
       activePromotion: promoMap.get(meal.id) ?? null,
+      remainingToday: remainingToday.get(meal.id) ?? null,
       ...(addonsByMeal ? { addonGroups: addonsByMeal.get(meal.id) ?? [] } : {}),
     };
+  }
+
+  /** Checkout's per-date view of the same stock — every available meal
+   * that has a daily limit, with what's left for `dateStr`. */
+  async getStockForDate(
+    tenantId: string,
+    dateStr: string,
+  ): Promise<{ date: string; meals: { mealId: string; remaining: number }[] }> {
+    const meals = await this.menuRepo.findMeals(tenantId, {
+      onlyAvailable: true,
+    });
+    const remaining = await this.mealStock.getRemaining(
+      tenantId,
+      meals,
+      dateStr,
+    );
+    return {
+      date: dateStr,
+      meals: [...remaining].map(([mealId, left]) => ({
+        mealId,
+        remaining: left,
+      })),
+    };
+  }
+
+  /** Skips the timezone lookup and order query entirely when no meal in
+   * the list has a daily limit — the common case. */
+  private async remainingToday(
+    tenantId: string,
+    meals: Meal[],
+  ): Promise<Map<string, number>> {
+    if (meals.every((meal) => meal.dailyQuantityLimit === null)) {
+      return new Map();
+    }
+    const today = await this.mealStock.getTenantToday(tenantId);
+    return this.mealStock.getRemaining(tenantId, meals, today);
   }
 
   /** Never fetches (or returns) anything unless the tenant actually has the

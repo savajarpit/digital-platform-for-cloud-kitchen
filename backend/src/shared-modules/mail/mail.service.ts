@@ -33,6 +33,19 @@ type Audience = 'TENANT_USER' | 'TENANT_ADMIN';
 
 const TENANT_ADMIN_ROLES = new Set(['OWNER', 'SUPER_ADMIN']);
 
+export type CancellationEmailKey =
+  | 'cancellation-request-owner'
+  | 'cancellation-request-received'
+  | 'cancellation-request-approved'
+  | 'cancellation-request-rejected';
+
+/** Only the owner alert goes platform → business; the rest reach the
+ * customer from the tenant's own email. `detailsHtml` is the one value the
+ * server builds as markup (from already-escaped parts). */
+const CANCELLATION_OWNER_KEY: CancellationEmailKey =
+  'cancellation-request-owner';
+const CANCELLATION_HTML_KEYS = ['detailsHtml'];
+
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
@@ -93,6 +106,7 @@ export class MailService {
     key: string,
     data: Record<string, string>,
     audience: Audience,
+    htmlKeys: string[] = [],
   ): Promise<void> {
     const branding = await getTenantEmailBranding(this.prisma, tenantId);
     const raw = { ...data, businessName: branding.businessName };
@@ -101,7 +115,10 @@ export class MailService {
     // phishing links into a kitchen-branded email. The subject is a plain
     // text header, so it keeps the raw values ("Tom & Jerry", not "&amp;").
     const escaped = Object.fromEntries(
-      Object.entries(raw).map(([k, v]) => [k, escapeHtml(v)]),
+      Object.entries(raw).map(([k, v]) => [
+        k,
+        htmlKeys.includes(k) ? v : escapeHtml(v),
+      ]),
     );
     const render = (values: Record<string, string>) =>
       audience === 'TENANT_USER'
@@ -201,6 +218,22 @@ export class MailService {
       'account-invite',
       { firstName: data.firstName, inviteUrl: data.inviteUrl },
       'TENANT_USER',
+    );
+  }
+
+  async sendCancellationEmail(
+    to: string,
+    tenantId: string,
+    key: CancellationEmailKey,
+    data: Record<string, string>,
+  ): Promise<void> {
+    await this.sendCustomerFacing(
+      to,
+      tenantId,
+      key,
+      data,
+      key === CANCELLATION_OWNER_KEY ? 'TENANT_ADMIN' : 'TENANT_USER',
+      CANCELLATION_HTML_KEYS,
     );
   }
 

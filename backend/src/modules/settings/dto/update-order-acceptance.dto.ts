@@ -105,10 +105,14 @@ export class UpdateOrderAcceptanceDto {
   @Type(() => OperatingHoursDto)
   operatingHours?: OperatingHoursDto;
 
-  @ApiPropertyOptional({ example: '18:00' })
+  @ApiPropertyOptional({
+    example: '18:00',
+    nullable: true,
+    description: 'null removes the cutoff',
+  })
   @IsOptional()
   @Matches(HHMM, { message: 'dailyCutoffTime must be HH:mm' })
-  dailyCutoffTime?: string;
+  dailyCutoffTime?: string | null;
 
   @ApiPropertyOptional({ type: [ClosedDateDto] })
   @IsOptional()
@@ -123,8 +127,21 @@ export class UpdateOrderAcceptanceDto {
   @IsBoolean()
   isTemporarilyClosed?: boolean;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    maxLength: 200,
+    nullable: true,
+    description: 'null or blank removes the reason',
+  })
   @IsOptional()
   @IsString()
-  closureReason?: string;
+  @MaxLength(200, {
+    message: 'Closure reason can be at most 200 characters.',
+  })
+  closureReason?: string | null;
+
+  // Only has an effect while SUPER_ADMIN grants `order-cancel-requests`.
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  allowOrderCancelRequests?: boolean;
 }

@@ -15,7 +15,15 @@ import {
 import {
   ClosedDateEntry,
   normalizeClosedDates,
+  withWeeklyOffClosures,
 } from '../../common/utils/closed-dates.util';
+import { DateUtil } from '../../common/utils/date.util';
+import { type SlotFlow, usagesFor } from './delivery-slot-rules';
+
+/** Weekly-off expansion window around today: far enough back for recent
+ * subscription calendars, far enough ahead for any plan plus extensions. */
+const WEEKLY_OFF_PAST_DAYS = 180;
+const WEEKLY_OFF_FUTURE_DAYS = 400;
 
 @Injectable()
 export class SettingsRepository {
@@ -65,11 +73,21 @@ export class SettingsRepository {
     });
   }
 
-  /** Closed dates in the current object shape (legacy bare dates upgraded),
-   * [] when the tenant has no order-acceptance row yet. */
+  /** Closed dates for subscription scheduling, in the current object shape
+   * (legacy bare dates upgraded), [] when the tenant has no order-acceptance
+   * row yet. Weekly-off days from operating hours are included as
+   * SUBSCRIPTIONS closures across a window wide enough for any live
+   * subscription (see withWeeklyOffClosures). Only subscription code reads
+   * this — the admin editor reads the raw settings row. */
   async findClosedDates(tenantId: string): Promise<ClosedDateEntry[]> {
     const settings = await this.findOrderAcceptanceSettings(tenantId);
-    return normalizeClosedDates(settings?.closedDates);
+    const today = new Date().toISOString().slice(0, 10);
+    return withWeeklyOffClosures(
+      normalizeClosedDates(settings?.closedDates),
+      settings?.operatingHours,
+      DateUtil.addDaysToDateStr(today, -WEEKLY_OFF_PAST_DAYS),
+      DateUtil.addDaysToDateStr(today, WEEKLY_OFF_FUTURE_DAYS),
+    );
   }
 
   upsertOrderAcceptanceSettings(
@@ -136,9 +154,13 @@ export class SettingsRepository {
     });
   }
 
-  findActiveDeliverySlots(tenantId: string): Promise<DeliverySlot[]> {
+  /** Active slots offered in `flow` (its own usage or BOTH). */
+  findActiveDeliverySlots(
+    tenantId: string,
+    flow: SlotFlow,
+  ): Promise<DeliverySlot[]> {
     return this.prisma.deliverySlot.findMany({
-      where: { tenantId, isActive: true },
+      where: { tenantId, isActive: true, usage: { in: usagesFor(flow) } },
       orderBy: { sortOrder: 'asc' },
     });
   }
@@ -173,6 +195,64 @@ export class SettingsRepository {
 
   deleteDeliverySlot(id: string): Promise<DeliverySlot> {
     return this.prisma.deliverySlot.delete({ where: { id } });
+  }
+
+  /** Another slot of this tenant with the same name, ignoring case. */
+  findDeliverySlotByName(
+    tenantId: string,
+    name: string,
+    excludeId?: string,
+  ): Promise<DeliverySlot | null> {
+    return this.prisma.deliverySlot.findFirst({
+      where: {
+        tenantId,
+        name: { equals: name, mode: 'insensitive' },
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+    });
+  }
+
+  /** What still depends on a slot from `todayStr` on: live subscriptions
+   * that chose it as their time, day changes moved onto it, and open
+   * orders not yet delivered. Deleting the slot would null all of these
+   * (the FKs are SET NULL), silently dropping a customer's chosen time. */
+  async countDeliverySlotUsage(
+    tenantId: string,
+    slotId: string,
+    todayStr: string,
+  ): Promise<{ subscriptions: number; dayChanges: number; orders: number }> {
+    const [subscriptions, dayChanges, orders] = await Promise.all([
+      this.prisma.subscription.count({
+        where: {
+          tenantId,
+          deliverySlotId: slotId,
+          status: { in: ['ACTIVE', 'PENDING_PAYMENT'] },
+        },
+      }),
+      this.prisma.subscriptionDayOverride.count({
+        where: {
+          deliverySlotId: slotId,
+          date: { gte: todayStr },
+          subscription: { tenantId, status: 'ACTIVE' },
+        },
+      }),
+      this.prisma.order.count({
+        where: {
+          tenantId,
+          deliverySlotId: slotId,
+          deliveryDate: { gte: new Date(`${todayStr}T00:00:00.000Z`) },
+          status: {
+            in: [
+              'PENDING_PAYMENT',
+              'CONFIRMED',
+              'PREPARING',
+              'OUT_FOR_DELIVERY',
+            ],
+          },
+        },
+      }),
+    ]);
+    return { subscriptions, dayChanges, orders };
   }
 
   findAllServiceablePincodes(tenantId: string): Promise<ServiceablePincode[]> {

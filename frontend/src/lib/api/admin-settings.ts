@@ -149,6 +149,7 @@ export interface OrderAcceptanceSettings {
   closedDates: ClosedDateEntry[];
   isTemporarilyClosed: boolean;
   closureReason: string | null;
+  allowOrderCancelRequests: boolean;
 }
 
 /** The PATCH takes optional name/note/appliesTo (null is not accepted). */
@@ -161,10 +162,13 @@ export interface ClosedDateInput {
 
 export interface UpdateOrderAcceptanceInput {
   operatingHours?: OperatingHours;
-  dailyCutoffTime?: string;
+  /** null removes the cutoff. */
+  dailyCutoffTime?: string | null;
   closedDates?: ClosedDateInput[];
   isTemporarilyClosed?: boolean;
-  closureReason?: string;
+  /** null (or blank) removes the reason. */
+  closureReason?: string | null;
+  allowOrderCancelRequests?: boolean;
 }
 
 export function getOrderAcceptance(): Promise<OrderAcceptanceSettings> {
@@ -322,6 +326,9 @@ export function deleteServiceablePincode(id: string): Promise<void> {
 
 // ── Delivery slots ──────────────────────────────────────────────
 
+/** Which flows offer a slot. Anything but BOTH needs the subscriptions feature. */
+export type DeliverySlotUsage = "ORDERS" | "SUBSCRIPTIONS" | "BOTH";
+
 export interface DeliverySlot {
   id: string;
   name: string;
@@ -329,6 +336,7 @@ export interface DeliverySlot {
   endTime: string;
   isActive: boolean;
   sortOrder: number;
+  usage: DeliverySlotUsage;
 }
 
 export interface DeliverySlotInput {
@@ -337,6 +345,7 @@ export interface DeliverySlotInput {
   endTime: string;
   isActive?: boolean;
   sortOrder?: number;
+  usage?: DeliverySlotUsage;
 }
 
 export function listAllDeliverySlots(): Promise<DeliverySlot[]> {

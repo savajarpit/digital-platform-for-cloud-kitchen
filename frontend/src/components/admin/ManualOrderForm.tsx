@@ -23,6 +23,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { closedReasonFor, defaultDeliveryDate, openSlotsFor } from "@/lib/orders/delivery-schedule";
 
 interface CartRow {
   mealId: string;
@@ -40,7 +41,9 @@ export function ManualOrderForm() {
 
   const [cart, setCart] = useState<CartRow[]>([{ mealId: "", quantity: 1 }]);
 
-  const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().slice(0, 10));
+  // null until the admin picks a date — until then the first open day with a
+  // slot left (tenant timezone) is used, never the browser's UTC date.
+  const [dateOverride, setDateOverride] = useState<string | null>(null);
   const [slotOverride, setSlotOverride] = useState<string | null>(null);
 
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "UPI">("CASH");
@@ -62,7 +65,19 @@ export function ManualOrderForm() {
     staleTime: STALE.list,
   });
   const slots = slotsConfig?.slots ?? [];
-  const deliverySlotId = slotOverride ?? slots[0]?.id ?? "";
+  const todayStr = slotsConfig?.todayStr ?? "";
+  const deliveryDate = dateOverride ?? (slotsConfig ? defaultDeliveryDate(slotsConfig) : "");
+  // Same rule as checkout: today only offers slots that haven't started yet.
+  const availableSlots = slotsConfig
+    ? openSlotsFor(deliveryDate, slots, slotsConfig.todayStr, slotsConfig.nowMinutes)
+    : [];
+  // Derived: an earlier pick that isn't valid for the current date falls back
+  // to the first remaining slot instead of silently submitting a started one.
+  const deliverySlotId = availableSlots.some((s) => s.id === slotOverride)
+    ? (slotOverride as string)
+    : (availableSlots[0]?.id ?? "");
+  const closedReason = slotsConfig && deliveryDate ? closedReasonFor(slotsConfig, deliveryDate) : null;
+  const maxDate = slotsConfig?.days.at(-1)?.date;
 
   // Same key as the customer detail page. Switching customer is a discrete
   // user action handled in the combobox's onChange: it drops the previous
@@ -152,7 +167,11 @@ export function ManualOrderForm() {
       void invalidateOrderAreas(queryClient);
       router.push(`/admin/orders/${order.id}`);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't create the order.");
+      const message = err instanceof ApiError ? err.message : "Couldn't create the order.";
+      setError(message);
+      // The banner sits at the top of a long form — the toast makes sure the
+      // admin sees why the button they just pressed didn't work.
+      showToast(message, "error");
     } finally {
       setSubmitting(false);
     }
@@ -270,25 +289,37 @@ export function ManualOrderForm() {
           <input
             type="date"
             value={deliveryDate}
-            min={new Date().toISOString().slice(0, 10)}
-            onChange={(e) => setDeliveryDate(e.target.value)}
+            min={todayStr || undefined}
+            max={maxDate}
+            onChange={(e) => setDateOverride(e.target.value)}
             className="input"
           />
+          {closedReason && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">Closed on this date: {closedReason}</p>
+          )}
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Delivery slot</label>
-          <Select value={deliverySlotId} onValueChange={setSlotOverride}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {slots.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name} ({s.startTime}–{s.endTime})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {slotsConfig && availableSlots.length === 0 ? (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400">
+              {deliveryDate === todayStr
+                ? "All of today's slots have started — pick another date."
+                : "No delivery slots are set up — add one under Delivery Zones."}
+            </p>
+          ) : (
+            <Select value={deliverySlotId} onValueChange={setSlotOverride}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableSlots.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name} ({s.startTime}–{s.endTime})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
         <div className="flex flex-col gap-1">
           <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Payment method</label>

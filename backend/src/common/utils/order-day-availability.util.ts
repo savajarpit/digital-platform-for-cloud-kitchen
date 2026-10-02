@@ -93,6 +93,20 @@ export function orderDayAvailability(
   return { open: true };
 }
 
+/** Reason given while the owner has instant delivery switched off. */
+export const INSTANT_NOT_OFFERED_REASON =
+  'Instant delivery is not offered right now.';
+
+/** The error an instant order is rejected with: the "not offered" reason as
+ * is, anything else (the kitchen being closed) framed like a scheduled
+ * order's closed message. */
+export function instantDeliveryUnavailableMessage(reason?: string): string {
+  if (!reason || reason === INSTANT_NOT_OFFERED_REASON) {
+    return INSTANT_NOT_OFFERED_REASON;
+  }
+  return `Instant delivery isn't available right now — ${reason.replace(/\.$/, '')}.`;
+}
+
 /** The error an order for a closed day is rejected with. */
 export function orderDayClosedMessage(
   dateStr: string,
@@ -111,5 +125,5 @@ export function orderDayClosedMessage(
   if (availability.reason === 'Past date') {
     return 'That delivery date has already passed.';
   }
-  return `We're closed on ${dateStr} (${availability.reason}) — please pick another date.`;
+  return `We're closed on ${DateUtil.formatDateStrShort(dateStr)} (${availability.reason}) — please pick another date.`;
 }

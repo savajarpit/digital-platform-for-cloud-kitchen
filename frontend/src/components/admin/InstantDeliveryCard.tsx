@@ -19,6 +19,20 @@ const FALLBACK_SETTINGS: InstantDeliverySettings = {
   etaMaxMinutes: 45,
 };
 
+/** Same limit the API enforces — beyond 4 hours it isn't "ASAP". */
+const MAX_ETA_MINUTES = 240;
+
+/** Why the ready-in range can't be saved, or null. An emptied box is NaN. */
+function etaRangeError(min: number, max: number): string | null {
+  const valid = (n: number) => Number.isInteger(n) && n >= 1 && n <= MAX_ETA_MINUTES;
+  if (!valid(min) || !valid(max)) return `Enter whole minutes between 1 and ${MAX_ETA_MINUTES}.`;
+  if (min > max) return "The first time can't be later than the second.";
+  return null;
+}
+
+/** Number input value → number, keeping an emptied box empty (NaN) instead of 0. */
+const toMinutes = (value: string) => (value === "" ? Number.NaN : Number(value));
+
 export function InstantDeliveryCard({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
@@ -71,6 +85,9 @@ export function InstantDeliveryCard({ canEdit }: { canEdit: boolean }) {
     );
   }
 
+  // Only matters while instant is on — the range is hidden otherwise.
+  const rangeError = settings.isEnabled ? etaRangeError(settings.etaMinMinutes, settings.etaMaxMinutes) : null;
+
   return (
     <fieldset disabled={!canEdit} className="card flex flex-col gap-3 p-6 disabled:opacity-70">
       <div className="flex items-center justify-between">
@@ -93,26 +110,31 @@ export function InstantDeliveryCard({ canEdit }: { canEdit: boolean }) {
           <input
             type="number"
             min={1}
-            value={settings.etaMinMinutes}
+            max={MAX_ETA_MINUTES}
+            value={Number.isNaN(settings.etaMinMinutes) ? "" : settings.etaMinMinutes}
             onChange={(e) =>
-              setSettings({ ...settings, etaMinMinutes: Number(e.target.value) })
+              setSettings({ ...settings, etaMinMinutes: toMinutes(e.target.value) })
             }
+            aria-invalid={Boolean(rangeError)}
             className="input w-24"
           />
           <span className="text-sm text-zinc-400">to</span>
           <input
             type="number"
             min={1}
-            value={settings.etaMaxMinutes}
+            max={MAX_ETA_MINUTES}
+            value={Number.isNaN(settings.etaMaxMinutes) ? "" : settings.etaMaxMinutes}
             onChange={(e) =>
-              setSettings({ ...settings, etaMaxMinutes: Number(e.target.value) })
+              setSettings({ ...settings, etaMaxMinutes: toMinutes(e.target.value) })
             }
+            aria-invalid={Boolean(rangeError)}
             className="input w-24"
           />
           <span className="text-sm text-zinc-400">minutes</span>
         </div>
       )}
-      <button type="button" onClick={handleSave} disabled={saving} className="btn-primary w-fit">
+      {rangeError && <p className="text-xs text-red-600 dark:text-red-400">{rangeError}</p>}
+      <button type="button" onClick={handleSave} disabled={saving || Boolean(rangeError)} className="btn-primary w-fit">
         {saving ? "Saving…" : "Save changes"}
       </button>
     </fieldset>

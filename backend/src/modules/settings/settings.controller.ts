@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -34,6 +35,7 @@ import { UpdateDeliveryZonesDto } from './dto/update-delivery-zones.dto';
 import { CreateServiceablePincodeDto } from './dto/create-serviceable-pincode.dto';
 import { UpdateServiceablePincodeDto } from './dto/update-serviceable-pincode.dto';
 import { CreateKitchenZoneDto } from './dto/create-kitchen-zone.dto';
+import { QueryDeliverySlotsDto } from './dto/query-delivery-slots.dto';
 import { UpdateKitchenZoneDto } from './dto/update-kitchen-zone.dto';
 import { CreateDeliverySlotDto } from './dto/create-delivery-slot.dto';
 import { UpdateDeliverySlotDto } from './dto/update-delivery-slot.dto';
@@ -78,11 +80,20 @@ export class SettingsController {
   @Public()
   @Get('delivery-slots')
   @ResponseMessage('Delivery slots retrieved successfully')
-  @ApiOperation({ summary: 'List the active delivery slots for checkout' })
-  getDeliverySlots(@CurrentTenant('id') tenantId: string | undefined) {
+  @ApiOperation({
+    summary:
+      'List the active delivery slots for checkout (or, with for=subscriptions, for plan sign-up)',
+  })
+  getDeliverySlots(
+    @CurrentTenant('id') tenantId: string | undefined,
+    @Query() query: QueryDeliverySlotsDto,
+  ) {
     if (!tenantId)
       throw new NotFoundException('No tenant context for this request');
-    return this.settingsService.getDeliverySlots(tenantId);
+    return this.settingsService.getDeliverySlots(
+      tenantId,
+      query.for === 'subscriptions' ? 'SUBSCRIPTIONS' : 'ORDERS',
+    );
   }
 
   @Public()

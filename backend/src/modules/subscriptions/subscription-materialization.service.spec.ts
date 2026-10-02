@@ -6,11 +6,13 @@ import {
 
 const mockRepo = {
   findSkipForDate: jest.fn(),
+  findPendingCancellationHold: jest.fn(),
   findScheduledDate: jest.fn(),
   findDayOverride: jest.fn(),
   findDeliverySlotById: jest.fn(),
   findPlanDayWithSlots: jest.fn(),
   findPlanDayByWeekAndWeekday: jest.fn(),
+  findPlanDeliveryDayKeys: jest.fn(),
   createSkip: jest.fn(),
   extendCycleEnd: jest.fn(),
   createMaterializedOrder: jest.fn(),
@@ -87,11 +89,51 @@ describe('SubscriptionMaterializationService — tenant closed dates', () => {
     mockBanking.bankExtraDays.mockResolvedValue(
       new Date('2026-10-01T00:00:00.000Z'),
     );
+    // WEEKLY_FIXED plans deliver Mon–Sat of week 1 ("week-weekday" keys);
+    // TODAY is a Tuesday, key "1-2".
+    mockRepo.findPlanDeliveryDayKeys.mockResolvedValue(
+      new Set(['1-1', '1-2', '1-3', '1-4', '1-5', '1-6']),
+    );
   });
 
   afterEach(() => {
     jest.useRealTimers();
     jest.resetAllMocks();
+  });
+
+  it("WEEKLY_FIXED: a closure on the plan's own off weekday is not compensated again", async () => {
+    mockSettingsRepo.findClosedDates.mockResolvedValue([
+      closure(TODAY, 'SUBSCRIPTIONS', 'Weekly off'),
+    ]);
+    mockRepo.findPlanDeliveryDayKeys.mockResolvedValue(
+      new Set(['1-1', '1-3', '1-4', '1-5', '1-6']),
+    );
+
+    await service.materializeOne(
+      subscription({
+        schedulingMode: SubscriptionPlanSchedulingMode.WEEKLY_FIXED,
+        offDayHandling: SubscriptionOffDayHandling.EXTEND_TO_COMPENSATE,
+      }),
+    );
+
+    expect(mockRepo.createSkip).not.toHaveBeenCalled();
+    expect(mockBanking.bankExtraDays).not.toHaveBeenCalled();
+    expect(mockRepo.extendCycleEnd).not.toHaveBeenCalled();
+    expect(mockRepo.createMaterializedOrder).not.toHaveBeenCalled();
+  });
+
+  it('RELATIVE_DAY: a weekly-off closure is skipped and banked like a holiday', async () => {
+    mockSettingsRepo.findClosedDates.mockResolvedValue([
+      closure(TODAY, 'SUBSCRIPTIONS', 'Weekly off'),
+    ]);
+
+    await service.materializeOne(subscription());
+
+    expect(mockRepo.createSkip).toHaveBeenCalledWith(
+      expect.objectContaining({ bankedDays: 1, reason: 'Weekly off' }),
+    );
+    expect(mockRepo.extendCycleEnd).toHaveBeenCalledTimes(1);
+    expect(mockRepo.findPlanDeliveryDayKeys).not.toHaveBeenCalled();
   });
 
   it('delivers normally when there is no closure', async () => {
@@ -102,6 +144,41 @@ describe('SubscriptionMaterializationService — tenant closed dates', () => {
     expect(mockRepo.createMaterializedOrder).toHaveBeenCalledTimes(1);
     expect(mockRepo.createSkip).not.toHaveBeenCalled();
     expect(mockRepo.advanceSubscriptionDay).toHaveBeenCalledWith('sub1', 4);
+  });
+
+  it('a pending cancellation request holds the day: a linked skip, no order, no advance', async () => {
+    mockSettingsRepo.findClosedDates.mockResolvedValue([]);
+    mockRepo.findPendingCancellationHold.mockResolvedValue({ id: 'req1' });
+
+    await service.materializeOne(subscription());
+
+    expect(mockRepo.findPendingCancellationHold).toHaveBeenCalledWith(
+      'sub1',
+      TODAY,
+    );
+    expect(mockRepo.createSkip).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dateFrom: TODAY,
+        dateTo: TODAY,
+        bankedDays: 0,
+        cancellationRequestId: 'req1',
+      }),
+    );
+    expect(mockRepo.createMaterializedOrder).not.toHaveBeenCalled();
+    expect(mockRepo.advanceSubscriptionDay).not.toHaveBeenCalled();
+    expect(mockBanking.bankExtraDays).not.toHaveBeenCalled();
+  });
+
+  it('a closure on a held day is compensated as a closure, never also held', async () => {
+    mockSettingsRepo.findClosedDates.mockResolvedValue([closure(TODAY)]);
+    mockRepo.findPendingCancellationHold.mockResolvedValue({ id: 'req1' });
+
+    await service.materializeOne(subscription());
+
+    expect(mockRepo.createSkip).toHaveBeenCalledTimes(1);
+    expect(mockRepo.createSkip).not.toHaveBeenCalledWith(
+      expect.objectContaining({ cancellationRequestId: 'req1' }),
+    );
   });
 
   it('an ORDERS-only closure does not stop the subscription delivery', async () => {

@@ -27,6 +27,8 @@ import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
 import { ShareOrderDetailsButton } from "@/components/ui/ShareOrderDetailsButton";
 import { OrderStatusStepper, type OrderStatus } from "@/components/ui/OrderStatusStepper";
 import { CancelRefundForm } from "@/components/admin/CancelRefundForm";
+import { CancelUnpaidOrderButton } from "@/components/admin/CancelUnpaidOrderButton";
+import { CANCEL_REFUND_ANCHOR, PendingCancellationBanner } from "@/components/admin/PendingCancellationBanner";
 import { RefundHistoryCard } from "@/components/admin/RefundHistoryCard";
 import { DineInOrderPanel } from "@/components/admin/DineInOrderPanel";
 import { ORDER_STATUS_STYLES as STATUS_STYLES } from "@/lib/format/status-styles";
@@ -165,7 +167,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             Placed {new Date(order.createdAt).toLocaleString()}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {order.paymentMethod !== "RAZORPAY" && (
             <span className="badge bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
               {order.paymentMethod}
@@ -176,7 +178,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           >
             {order.paymentStatus}
           </span>
-          {canRecordPayment && order.paymentMethod !== "RAZORPAY" && !isPaid && (
+          {canRecordPayment && order.paymentMethod !== "RAZORPAY" && !isPaid && order.status !== "CANCELLED" && (
             <>
               {isDineInLike && (
                 <Select value={dineInPaymentMethod} onValueChange={(v) => setDineInPaymentMethod(v as "CASH" | "UPI")}>
@@ -193,11 +195,14 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                 type="button"
                 onClick={handleMarkPaid}
                 disabled={markingPaid}
-                className="btn-primary btn-sm cursor-pointer"
+                className="btn-primary btn-sm cursor-pointer whitespace-nowrap"
               >
                 {markingPaid ? "Marking…" : "Mark Paid"}
               </button>
             </>
+          )}
+          {canEdit && order.paymentMethod !== "RAZORPAY" && !isPaid && order.status !== "CANCELLED" && (
+            <CancelUnpaidOrderButton orderId={order.id} orderNumber={order.orderNumber} onCancelled={refresh} />
           )}
           {canEdit && isPaid && !isFinal ? (
             <Select value={order.status} onValueChange={handleStatusChange}>
@@ -225,8 +230,19 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
         </div>
       </div>
 
+      {order.status !== "CANCELLED" && (
+        <PendingCancellationBanner
+          kind="ORDER"
+          targetId={order.id}
+          canDecide={canCancelRefund}
+          onChanged={refresh}
+        />
+      )}
+
       {canCancelRefund && isPaid && order.status !== "CANCELLED" && (
-        <CancelRefundForm kind="order" id={order.id} defaultAmountInPaise={order.totalInPaise} onCancelled={refresh} />
+        <div id={CANCEL_REFUND_ANCHOR} className="scroll-mt-24">
+          <CancelRefundForm kind="order" id={order.id} defaultAmountInPaise={order.totalInPaise} onCancelled={refresh} />
+        </div>
       )}
 
       <RefundHistoryCard

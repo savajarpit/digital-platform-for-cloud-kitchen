@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CancellationNotificationsModule } from '../../shared-modules/cancellation-notifications/cancellation-notifications.module';
 import { BullModule } from '@nestjs/bull';
 import { SubscriptionsController } from './subscriptions.controller';
 import { SubscriptionsService } from './subscriptions.service';
@@ -19,6 +20,7 @@ import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
+    CancellationNotificationsModule,
     AddressesModule,
     PromotionsModule,
     SettingsModule,

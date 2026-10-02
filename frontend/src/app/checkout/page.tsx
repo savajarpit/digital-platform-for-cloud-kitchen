@@ -8,6 +8,7 @@ import { MapPin } from "lucide-react";
 import { useCartStore, useCartSubtotal } from "@/lib/store/cart-store";
 import { useCartAvailability } from "@/lib/hooks/useCartAvailability";
 import { useCheckoutData } from "@/lib/hooks/useCheckoutData";
+import { useCartStock } from "@/lib/hooks/useCartStock";
 import { ApiError, checkServiceability } from "@/lib/api/addresses";
 import { createOrder } from "@/lib/api/orders";
 import { verifyPayment } from "@/lib/api/payments";
@@ -22,6 +23,7 @@ import { PaymentConfirmingScreen } from "@/components/checkout/PaymentConfirming
 import { CheckoutSkeleton } from "@/components/checkout/CheckoutSkeleton";
 import { CheckoutAddressSection } from "@/components/checkout/CheckoutAddressSection";
 import { CheckoutSlotSection } from "@/components/checkout/CheckoutSlotSection";
+import { CheckoutStockNotice } from "@/components/checkout/CheckoutStockNotice";
 import { CheckoutSummaryCard, type AppliedCoupon } from "@/components/checkout/CheckoutSummaryCard";
 import { useToast } from "@/context/ToastContext";
 
@@ -159,6 +161,10 @@ export default function CheckoutPage() {
     ? slotChoice
     : (visibleSlots[0]?.id ?? "");
 
+  // Daily stock is per delivery date: instant orders draw on today's.
+  const stockDate = isInstant ? todayStr : selectedDay;
+  const stockShortfalls = useCartStock(items, stockDate || null);
+
   const couponDiscountInPaise = appliedCoupon?.discountInPaise ?? 0;
   const effectiveSubtotal = Math.max(0, subtotal - couponDiscountInPaise);
   const qualifiesForFreeDelivery = Boolean(
@@ -188,6 +194,7 @@ export default function CheckoutPage() {
         isPickup,
         address: selectedAddress,
         schedule: isInstant ? "instant" : { date: selectedDay },
+        stockDate,
       });
       if (!check.ok) {
         for (const p of check.prune ?? []) updateItemAddons(p.lineKey, p.addons);
@@ -400,6 +407,8 @@ export default function CheckoutPage() {
             onSlotChange={setSlotChoice}
           />
 
+          <CheckoutStockNotice shortfalls={stockShortfalls} date={stockDate} />
+
           <section className="card flex flex-col gap-4 p-6">
             <div>
               <label htmlFor="prepNotes" className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -466,7 +475,8 @@ export default function CheckoutPage() {
             belowMinOrder ||
             (!isPickup && serviceability?.serviceable === false) ||
             checkingAvailability ||
-            hasUnavailableItems
+            hasUnavailableItems ||
+            stockShortfalls.length > 0
           }
         />
       </div>

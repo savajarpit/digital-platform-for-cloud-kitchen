@@ -23,7 +23,11 @@ import { qk, STALE } from "@/lib/query/keys";
 import { invalidateOrderAreas } from "@/lib/query/admin-invalidation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
+import { usePendingCancellationCount } from "@/lib/hooks/usePendingCancellationCount";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+
+/** Not an order status — a filter for orders whose customer asked to cancel. */
+const CANCEL_REQUESTED = "CANCEL_REQUESTED";
 
 const ALL_STATUSES = [
   "CONFIRMED",
@@ -62,6 +66,7 @@ export default function AdminOrdersPage() {
   const [status, setStatus] = useState<string>("");
   const [fulfillmentType, setFulfillmentType] = useState<string>("");
   const [page, setPage] = useState(1);
+  const pendingCancelRequests = usePendingCancellationCount().orders;
 
   return (
     <div className="flex flex-col gap-6">
@@ -107,6 +112,9 @@ export default function AdminOrdersPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="">All statuses</SelectItem>
+              <SelectItem value={CANCEL_REQUESTED}>
+                Cancel requested{pendingCancelRequests > 0 ? ` (${pendingCancelRequests})` : ""}
+              </SelectItem>
               {ALL_STATUSES.map((s) => (
                 <SelectItem key={s} value={s}>
                   {s.replace(/_/g, " ")}
@@ -154,7 +162,8 @@ function OrdersTable({
     queryFn: () =>
       listAdminOrders({
         page,
-        status: status || undefined,
+        status: status && status !== CANCEL_REQUESTED ? status : undefined,
+        cancelRequested: status === CANCEL_REQUESTED,
         fulfillmentType: (fulfillmentType || undefined) as AdminOrderFulfillmentType | undefined,
       }),
     staleTime: STALE.short,
@@ -220,6 +229,11 @@ function OrdersTable({
                   >
                     {order.orderNumber}
                   </Link>
+                  {(order.cancellationRequests?.length ?? 0) > 0 && (
+                    <span className="badge mt-1 block w-fit bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                      Cancel requested
+                    </span>
+                  )}
                   <p className="mt-0.5 text-xs text-zinc-400">
                     {new Date(order.createdAt).toLocaleDateString()}
                   </p>

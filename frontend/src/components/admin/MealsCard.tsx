@@ -209,7 +209,7 @@ export function MealsCard({ categories, canEdit }: { categories: Category[]; can
                     isPopular: meal.isPopular,
                     weightValue: meal.weightValue ?? undefined,
                     weightUnit: meal.weightUnit ?? undefined,
-                    dailyQuantityLimit: meal.dailyQuantityLimit ?? undefined,
+                    dailyQuantityLimit: meal.dailyQuantityLimit,
                   }}
                   initialAddonGroupIds={meal.addonGroupIds}
                   onCancel={() => setEditingId(null)}

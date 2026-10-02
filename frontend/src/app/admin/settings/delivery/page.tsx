@@ -5,19 +5,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapPin, Plus, Trash2 } from "lucide-react";
 import {
   ApiError,
-  createDeliverySlot,
   createServiceablePincode,
-  deleteDeliverySlot,
   deleteServiceablePincode,
   getBusinessProfile,
   listAllDeliverySlots,
   listKitchenZones,
   listServiceablePincodes,
   updateDeliveryZones,
-  updateDeliverySlot,
   updateServiceablePincode,
   type BusinessProfile,
-  type DeliverySlot,
   type ServiceablePincode,
   type UpdateDeliveryZonesInput,
 } from "@/lib/api/admin-settings";
@@ -31,8 +27,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { DeliveryZonesSkeleton } from "@/components/admin/skeletons/DeliveryZonesSkeleton";
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { KitchenZonesCard } from "@/components/admin/KitchenZonesCard";
-import { TimeInput12h } from "@/components/ui/TimeInput12h";
-import { formatTime12h } from "@/lib/format/time";
+import { DeliverySlotsCard } from "@/components/admin/DeliverySlotsCard";
 
 const rupeesToPaise = (rupees: string): number | undefined =>
   rupees === "" ? undefined : Math.round(Number(rupees) * 100);
@@ -97,7 +92,7 @@ export default function DeliveryZonesPage() {
         canEdit={canEdit}
         onSaved={(p) => commit(profileKey, p)}
       />
-      <SlotsCard slots={slots} canEdit={canEdit} onChange={(sl) => commit(slotsKey, sl)} />
+      <DeliverySlotsCard slots={slots} canEdit={canEdit} onChange={(sl) => commit(slotsKey, sl)} />
     </div>
   );
 }
@@ -300,145 +295,6 @@ function PincodesCard({
             />
           </div>
           <button type="button" onClick={handleAdd} disabled={adding || !newPincode} className="btn-outline btn-sm">
-            <Plus className="h-4 w-4" />
-            Add
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SlotsCard({
-  slots,
-  canEdit,
-  onChange,
-}: {
-  slots: DeliverySlot[];
-  canEdit: boolean;
-  onChange: (s: DeliverySlot[]) => void;
-}) {
-  const { showToast } = useToast();
-  const confirm = useConfirm();
-  const [newSlot, setNewSlot] = useState({ name: "", startTime: "", endTime: "" });
-  const [adding, setAdding] = useState(false);
-
-  async function handleAdd() {
-    if (!newSlot.name || !newSlot.startTime || !newSlot.endTime) return;
-    setAdding(true);
-    try {
-      const created = await createDeliverySlot(newSlot);
-      onChange([...slots, created].sort((a, b) => a.sortOrder - b.sortOrder));
-      setNewSlot({ name: "", startTime: "", endTime: "" });
-      showToast("Delivery slot added", "success");
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't add slot.", "error");
-    } finally {
-      setAdding(false);
-    }
-  }
-
-  async function handleToggleActive(slot: DeliverySlot) {
-    try {
-      const updated = await updateDeliverySlot(slot.id, { isActive: !slot.isActive });
-      onChange(slots.map((s) => (s.id === slot.id ? updated : s)));
-      showToast(`Delivery slot ${updated.isActive ? "activated" : "deactivated"}`, "success");
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't update slot.", "error");
-    }
-  }
-
-  function handleDelete(id: string) {
-    confirm({
-      message: "Remove this delivery slot?",
-      confirmLabel: "Remove",
-      processingLabel: "Removing…",
-      variant: "danger",
-      onConfirm: async () => {
-        try {
-          await deleteDeliverySlot(id);
-          onChange(slots.filter((s) => s.id !== id));
-          showToast("Delivery slot removed", "success");
-        } catch (err) {
-          showToast(err instanceof ApiError ? err.message : "Couldn't remove slot.", "error");
-        }
-      },
-    });
-  }
-
-  return (
-    <div className="card flex flex-col gap-4 p-6">
-      <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Delivery slots</h3>
-
-      <div className="flex flex-col gap-2">
-        {slots.map((slot) => (
-          <div
-            key={slot.id}
-            className="flex items-center justify-between gap-3 rounded-lg border border-zinc-100 px-3.5 py-2.5 dark:border-zinc-800"
-          >
-            <div>
-              <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{slot.name}</span>
-              <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
-                {formatTime12h(slot.startTime)}–{formatTime12h(slot.endTime)}
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Toggle checked={slot.isActive} onChange={() => handleToggleActive(slot)} disabled={!canEdit} />
-              <button
-                type="button"
-                onClick={() => handleDelete(slot.id)}
-                disabled={!canEdit}
-                className="text-zinc-400 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
-                aria-label={`Remove ${slot.name}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        ))}
-        {slots.length === 0 && (
-          <EmptyState compact title="No delivery slots configured yet." />
-        )}
-      </div>
-
-      {canEdit && (
-        <div className="flex flex-wrap items-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              Name
-            </label>
-            <input
-              type="text"
-              value={newSlot.name}
-              onChange={(e) => setNewSlot((s) => ({ ...s, name: e.target.value }))}
-              placeholder="Lunch"
-              className="input w-32"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              Start
-            </label>
-            <TimeInput12h
-              value={newSlot.startTime}
-              onChange={(v) => setNewSlot((s) => ({ ...s, startTime: v }))}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              End
-            </label>
-            <TimeInput12h
-              value={newSlot.endTime}
-              onChange={(v) => setNewSlot((s) => ({ ...s, endTime: v }))}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={handleAdd}
-            disabled={adding || !newSlot.name || !newSlot.startTime || !newSlot.endTime}
-            className="btn-outline btn-sm"
-          >
             <Plus className="h-4 w-4" />
             Add
           </button>

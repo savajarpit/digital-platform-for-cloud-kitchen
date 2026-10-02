@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -7,6 +8,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { DeliverySlotUsage } from '../../../generated/prisma';
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
@@ -33,4 +35,16 @@ export class CreateDeliverySlotDto {
   @IsOptional()
   @IsInt()
   sortOrder?: number;
+
+  @ApiPropertyOptional({
+    enum: DeliverySlotUsage,
+    default: DeliverySlotUsage.BOTH,
+    description:
+      'Which flows offer this slot. ORDERS/SUBSCRIPTIONS need the subscriptions feature.',
+  })
+  @IsOptional()
+  @IsEnum(DeliverySlotUsage, {
+    message: 'Used for must be Orders, Subscriptions or Both.',
+  })
+  usage?: DeliverySlotUsage;
 }

@@ -14,6 +14,9 @@ export const TENANT_EDITABLE_EMAIL_KEYS = [
   'welcome',
   'reset-password',
   'account-invite',
+  'cancellation-request-received',
+  'cancellation-request-approved',
+  'cancellation-request-rejected',
 ] as const;
 
 const CUSTOM_TEMPLATES_FEATURE_KEY = 'custom-notification-templates';

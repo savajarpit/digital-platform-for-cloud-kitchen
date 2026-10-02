@@ -115,17 +115,19 @@ export function buildPlanCalendar(
     let meals: PlanCalendarMeal[] = [];
     let dayLabel: string | null = null;
 
-    if (closure) {
+    // A WEEKLY_FIXED plan's own off weekday stays OFF_DAY even when a
+    // closure lands on it — nothing was due that day, so nothing is
+    // compensated (same rule as the materializer).
+    const weekKey = weekly ? resolveWeekKey(plan, cursor) : '';
+    const planOffDay = weekly && !deliveryDayKeys.has(weekKey);
+
+    if (planOffDay) {
+      kind = 'OFF_DAY';
+    } else if (closure) {
       kind = 'HOLIDAY';
     } else if (weekly) {
-      const key = PlanScheduleUtil.resolveKey(plan, {
-        dateStr: cursor,
-        relativeCounter: 1, // unused for WEEKLY_FIXED
-      });
-      const weekKey =
-        'weekNumber' in key ? `${key.weekNumber}-${key.weekday}` : '';
-      kind = deliveryDayKeys.has(weekKey) ? 'DELIVERY' : 'OFF_DAY';
-      if (kind === 'DELIVERY') meals = toMeals(byWeekWeekday.get(weekKey));
+      kind = 'DELIVERY';
+      meals = toMeals(byWeekWeekday.get(weekKey));
     } else {
       kind = 'DELIVERY';
       const key = PlanScheduleUtil.resolveKey(plan, {
@@ -141,7 +143,10 @@ export function buildPlanCalendar(
     days.push({
       date: cursor,
       kind,
-      holiday: closure ? { name: closure.name, note: closure.note } : null,
+      holiday:
+        kind === 'HOLIDAY' && closure
+          ? { name: closure.name, note: closure.note }
+          : null,
       dayLabel,
       meals,
     });
@@ -155,6 +160,15 @@ export function buildPlanCalendar(
   }
 
   return { startDate: startDateStr, endDate: days[days.length - 1].date, days };
+}
+
+/** WEEKLY_FIXED: the "week-weekday" key a date resolves to. */
+function resolveWeekKey(plan: CalendarPlan, dateStr: string): string {
+  const key = PlanScheduleUtil.resolveKey(plan, {
+    dateStr,
+    relativeCounter: 1, // unused for WEEKLY_FIXED
+  });
+  return 'weekNumber' in key ? `${key.weekNumber}-${key.weekday}` : '';
 }
 
 /** WEEKLY_FIXED only: each given date's menu, resolved from the calendar

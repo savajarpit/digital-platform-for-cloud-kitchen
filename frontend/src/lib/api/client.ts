@@ -14,6 +14,8 @@ export class ApiError extends Error {
 }
 
 export async function parseOrThrow<T>(res: Response): Promise<T> {
+  // DELETEs answer 204 No Content — there's no JSON envelope to read.
+  if (res.status === 204) return undefined as T;
   const body = (await res.json()) as ApiResponse<T> | ApiErrorResponse;
   if (!res.ok || !body.success) {
     const err = body as ApiErrorResponse;

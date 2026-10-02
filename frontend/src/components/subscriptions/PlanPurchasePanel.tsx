@@ -42,6 +42,7 @@ export function PlanPurchasePanel({
   datesMissing,
   isSubscribing,
   onSubscribeClick,
+  closedReason,
 }: {
   plan: PlanDetail;
   addresses: Address[] | null | undefined;
@@ -57,6 +58,8 @@ export function PlanPurchasePanel({
   datesMissing: number;
   isSubscribing: boolean;
   onSubscribeClick: () => void;
+  /** Set while new sign-ups are paused — shown here, and Subscribe is off. */
+  closedReason?: string | null;
 }) {
   const discountPercentage = plan.activePromotion?.discountPercentage ?? 0;
   const discountedPriceInPaise = planPayableInPaise(plan);
@@ -84,6 +87,14 @@ export function PlanPurchasePanel({
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         One-time payment for the full {plan.durationDays}-day plan.
       </p>
+      {closedReason && (
+        <p
+          role="status"
+          className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+        >
+          {closedReason}
+        </p>
+      )}
 
       {addresses === undefined ? (
         <PlanPurchaseFieldsSkeleton />
@@ -173,7 +184,12 @@ export function PlanPurchasePanel({
           <button
             type="button"
             onClick={onSubscribeClick}
-            disabled={isSubscribing || !selectedAddressId || datesMissing > 0}
+            disabled={
+              isSubscribing ||
+              !selectedAddressId ||
+              datesMissing > 0 ||
+              Boolean(closedReason)
+            }
             className="btn-primary w-full"
           >
             {isSubscribing ? "Starting…" : "Subscribe & Pay"}

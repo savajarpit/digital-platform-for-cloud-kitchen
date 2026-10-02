@@ -24,6 +24,9 @@ const KEY_LABEL: Record<string, string> = {
   welcome: "Welcome Email",
   "reset-password": "Reset Password",
   "account-invite": "Account Invite (customer added by staff)",
+  "cancellation-request-received": "Cancellation Request Received",
+  "cancellation-request-approved": "Cancellation Approved (with refund)",
+  "cancellation-request-rejected": "Cancellation Declined",
 };
 
 export function EmailTemplatesCard() {

@@ -43,3 +43,14 @@ export async function fetchMealsOrThrow(params: MenuSearchParams = {}): Promise<
   const body = (await res.json()) as ApiResponse<Meal[]>;
   return body.data ?? [];
 }
+
+/** Plates left for one delivery date, per meal that has a daily limit —
+ * meals without a limit are simply absent (unlimited). */
+export async function fetchMealStock(date: string): Promise<Map<string, number>> {
+  const res = await fetch(`${PUBLIC_API_URL}/menu/meals/stock?date=${encodeURIComponent(date)}`, {
+    headers: { "X-Tenant-Domain": window.location.host },
+  });
+  if (!res.ok) throw new Error(`Stock request failed (${res.status})`);
+  const body = (await res.json()) as ApiResponse<{ meals: { mealId: string; remaining: number }[] }>;
+  return new Map((body.data?.meals ?? []).map((m) => [m.mealId, m.remaining]));
+}

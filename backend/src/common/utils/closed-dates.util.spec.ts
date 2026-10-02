@@ -1,7 +1,85 @@
 import {
   closedDatesAffecting,
   normalizeClosedDates,
+  subscriptionClosedDateSet,
+  weeklyOffWeekdays,
+  withWeeklyOffClosures,
 } from './closed-dates.util';
+
+const OPEN = { open: '09:00', close: '21:00' };
+// Sunday off; Saturday has an open time but no close — also off.
+const HOURS = {
+  mon: OPEN,
+  tue: OPEN,
+  wed: OPEN,
+  thu: OPEN,
+  fri: OPEN,
+  sat: { open: '09:00' },
+  sun: {},
+};
+
+describe('weeklyOffWeekdays', () => {
+  it('returns weekdays with no complete hours (0=Sun)', () => {
+    expect([...weeklyOffWeekdays(HOURS)].sort()).toEqual([0, 6]);
+  });
+
+  it('treats no configured hours as open every day', () => {
+    expect(weeklyOffWeekdays({}).size).toBe(0);
+    expect(weeklyOffWeekdays(null).size).toBe(0);
+  });
+});
+
+describe('withWeeklyOffClosures', () => {
+  // 2026-10-03 is a Saturday, 2026-10-04 a Sunday.
+  it('adds a SUBSCRIPTIONS "Weekly off" closure for each off date in range', () => {
+    const result = withWeeklyOffClosures([], HOURS, '2026-10-01', '2026-10-07');
+    expect(result).toEqual([
+      {
+        date: '2026-10-03',
+        name: 'Weekly off',
+        note: null,
+        appliesTo: 'SUBSCRIPTIONS',
+      },
+      {
+        date: '2026-10-04',
+        name: 'Weekly off',
+        note: null,
+        appliesTo: 'SUBSCRIPTIONS',
+      },
+    ]);
+    expect(subscriptionClosedDateSet(result).has('2026-10-04')).toBe(true);
+  });
+
+  it('keeps an explicit holiday on the same date instead of duplicating it', () => {
+    const diwali = {
+      date: '2026-10-04',
+      name: 'Diwali',
+      note: null,
+      appliesTo: 'ORDERS' as const,
+    };
+    const result = withWeeklyOffClosures(
+      [diwali],
+      HOURS,
+      '2026-10-04',
+      '2026-10-04',
+    );
+    expect(result).toEqual([diwali]);
+  });
+
+  it('returns the entries untouched when no day is off', () => {
+    const entries = [
+      {
+        date: '2026-10-04',
+        name: null,
+        note: null,
+        appliesTo: 'BOTH' as const,
+      },
+    ];
+    expect(withWeeklyOffClosures(entries, {}, '2026-10-01', '2026-10-31')).toBe(
+      entries,
+    );
+  });
+});
 
 describe('normalizeClosedDates', () => {
   it('returns [] for non-array input', () => {

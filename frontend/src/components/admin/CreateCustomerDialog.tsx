@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { MailCheck } from "lucide-react";
 import { ApiError } from "@/lib/api/client";
@@ -12,6 +12,7 @@ import {
 import { qk } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { SheetActions } from "@/components/ui/SheetActions";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { AddressForm } from "@/components/addresses/AddressForm";
 
@@ -39,6 +40,7 @@ export function CreateCustomerDialog({
 }) {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+  const formId = useId();
   const [step, setStep] = useState<Step>("details");
   const [created, setCreated] = useState<Customer | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -96,9 +98,11 @@ export function CreateCustomerDialog({
       title={step === "details" ? "Add customer" : "Add delivery address"}
     >
       {step === "details" ? (
-        <form onSubmit={handleCreate} className="flex flex-col gap-4">
+        <form id={formId} onSubmit={handleCreate} className="flex flex-col gap-4">
           {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
+            <p
+              ref={(el) => el?.scrollIntoView({ block: "nearest" })}
+              className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950 dark:text-red-400">
               {error}
             </p>
           )}
@@ -153,9 +157,10 @@ export function CreateCustomerDialog({
               </span>
             </span>
           </label>
-          <div className="flex gap-3">
+          <SheetActions>
             <button
               type="submit"
+              form={formId}
               disabled={submitting}
               className="btn-primary cursor-pointer"
             >
@@ -168,7 +173,7 @@ export function CreateCustomerDialog({
             >
               Cancel
             </button>
-          </div>
+          </SheetActions>
         </form>
       ) : (
         created && (

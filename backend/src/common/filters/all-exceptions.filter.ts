@@ -57,7 +57,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       : {};
 
     this.logger.error(
-      `[${request.headers['x-request-id']}] ${request.method} ${request.url} → ${status}`,
+      `[${String(request.headers['x-request-id'])}] ${request.method} ${request.url} → ${status}`,
       exception instanceof Error ? exception.stack : String(exception),
     );
 

@@ -10,6 +10,7 @@ import {
   IsString,
   IsUUID,
   MaxLength,
+  Max,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -92,11 +93,16 @@ export class CreateMealDto {
   @IsEnum(MealWeightUnit)
   weightUnit?: MealWeightUnit;
 
-  @ApiPropertyOptional({ example: 50 })
+  // Plates per delivery date (Petpooja-style daily stock, see
+  // MealStockService). null clears it back to unlimited.
+  @ApiPropertyOptional({ example: 50, nullable: true })
   @IsOptional()
   @IsInt()
-  @Min(0)
-  dailyQuantityLimit?: number;
+  @Min(1, {
+    message: 'Daily limit must be at least 1 — leave it blank for unlimited.',
+  })
+  @Max(100000)
+  dailyQuantityLimit?: number | null;
 
   @ApiPropertyOptional({ example: 0 })
   @IsOptional()

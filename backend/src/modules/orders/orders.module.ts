@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CancellationNotificationsModule } from '../../shared-modules/cancellation-notifications/cancellation-notifications.module';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { OrdersRepository } from './orders.repository';
@@ -17,6 +18,7 @@ import { AddonsModule } from '../addons/addons.module';
 
 @Module({
   imports: [
+    CancellationNotificationsModule,
     AddressesModule,
     MenuModule,
     SettingsModule,

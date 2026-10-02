@@ -696,16 +696,7 @@ export class SubscriptionsController {
       dto.newDate,
     );
   }
-
-  @Post('mine/:id/cancel')
-  @ApiBearerAuth('access-token')
-  @ResponseMessage('Subscription cancelled')
-  @ApiOperation({ summary: 'Cancel a subscription' })
-  cancel(
-    @CurrentTenantId() tenantId: string,
-    @CurrentUser('userId') userId: string,
-    @Param('id') id: string,
-  ) {
-    return this.subscriptionsService.cancel(tenantId, userId, id);
-  }
+  // Instant self-cancel was replaced by the cancellation-request flow (see
+  // CancellationRequestsController) — a customer now asks, the kitchen
+  // decides and records the refund.
 }

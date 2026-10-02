@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { checkServiceability, type Address } from "@/lib/api/addresses";
-import { fetchMealsOrThrow } from "@/lib/api/menu-client";
+import { fetchMealStock, fetchMealsOrThrow } from "@/lib/api/menu-client";
+import { cartStockShortfalls, describeShortfall } from "@/lib/checkout/stock";
 import { getOrderWindowStatus } from "@/lib/api/order-window";
 import { getDeliverySlots } from "@/lib/api/delivery-slots";
 import { qk } from "@/lib/query/keys";
@@ -36,6 +37,7 @@ export async function runCheckoutPreflight({
   isPickup,
   address,
   schedule,
+  stockDate,
 }: {
   queryClient: QueryClient;
   items: CartItem[];
@@ -43,10 +45,12 @@ export async function runCheckoutPreflight({
   address: Pick<Address, "pincode" | "lat" | "lng"> | undefined;
   /** Instant needs the kitchen open right now; a scheduled order needs its own day open. */
   schedule: "instant" | { date: string };
+  /** The delivery date whose daily stock the cart draws on (today for instant). */
+  stockDate?: string;
 }): Promise<PreflightResult> {
   const fresh = { staleTime: 0 } as const;
 
-  const [windowStatus, slotsConfig, meals, serviceability] = await Promise.all([
+  const [windowStatus, slotsConfig, meals, serviceability, stock] = await Promise.all([
     schedule === "instant"
       ? queryClient
           .fetchQuery({ queryKey: qk.checkout.orderWindow, queryFn: getOrderWindowStatus, ...fresh })
@@ -70,6 +74,11 @@ export async function runCheckoutPreflight({
               }),
             ...fresh,
           })
+          .catch(() => null)
+      : Promise.resolve(null),
+    stockDate
+      ? queryClient
+          .fetchQuery({ queryKey: qk.meals.stock(stockDate), queryFn: () => fetchMealStock(stockDate), ...fresh })
           .catch(() => null)
       : Promise.resolve(null),
   ]);
@@ -119,6 +128,13 @@ export async function runCheckoutPreflight({
         prune,
         message: `Add-ons are no longer available for ${names.join(", ")}. We've removed them - please review your total.`,
       };
+    }
+  }
+
+  if (stock && stockDate) {
+    const shortfalls = cartStockShortfalls(items, stock);
+    if (shortfalls.length > 0) {
+      return { ok: false, message: `${describeShortfall(shortfalls[0], stockDate)}. Pick another date or update your cart.` };
     }
   }
 

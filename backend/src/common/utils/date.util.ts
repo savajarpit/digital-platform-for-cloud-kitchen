@@ -144,4 +144,27 @@ export class DateUtil {
     const [y, m, d] = dateStr.split('-').map(Number);
     return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
   }
+
+  /** True only for a real calendar date in `YYYY-MM-DD` form — a regex
+   * alone lets "2026-02-30" through. */
+  static isValidDateStr(dateStr: string): boolean {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d));
+    return (
+      date.getUTCFullYear() === y &&
+      date.getUTCMonth() === m - 1 &&
+      date.getUTCDate() === d
+    );
+  }
+
+  /** Customer-facing short date for a `YYYY-MM-DD` string — "Sat, 3 Oct". */
+  static formatDateStrShort(dateStr: string): string {
+    return new Date(`${dateStr}T00:00:00.000Z`).toLocaleDateString('en-IN', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      timeZone: 'UTC',
+    });
+  }
 }

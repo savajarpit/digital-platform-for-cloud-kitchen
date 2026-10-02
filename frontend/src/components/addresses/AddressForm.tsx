@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery } from "@tanstack/react-query";
 import { getMyProfile } from "@/lib/api/users";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/api/addresses";
 import { useToast } from "@/context/ToastContext";
 import { PhoneInput } from "@/components/ui/PhoneInput";
+import { SheetActions } from "@/components/ui/SheetActions";
 import { AddressLocationPicker, type PickedAddress } from "@/components/maps/AddressLocationPicker";
 
 const LABEL_PRESETS = ["Home", "Office"] as const;
@@ -44,6 +45,7 @@ export function AddressForm({
 }) {
   const t = useTranslations("address");
   const { showToast } = useToast();
+  const formId = useId();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [label, setLabel] = useState(address?.label ?? "");
   const [lat, setLat] = useState<number | null>(address?.lat ?? null);
@@ -123,7 +125,7 @@ export function AddressForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <form id={formId} onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
           {t("pickOnMap")} <span className="text-red-500">*</span>
@@ -220,9 +222,10 @@ export function AddressForm({
         {t("setDefault")}
       </label>
 
-      <div className="flex gap-3">
+      <SheetActions inlineClassName="flex gap-3">
         <button
           type="submit"
+          form={formId}
           disabled={isSubmitting || checkingServiceability || notServiceable}
           className="btn-primary"
         >
@@ -233,7 +236,7 @@ export function AddressForm({
             {cancelLabel ?? t("cancel")}
           </button>
         )}
-      </div>
+      </SheetActions>
     </form>
   );
 }

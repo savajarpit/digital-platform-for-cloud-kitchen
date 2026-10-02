@@ -12,6 +12,7 @@ import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
 import { ORDER_STATUS_STYLES } from "@/lib/format/status-styles";
 import { OrderStatusStepper, type OrderStatus } from "@/components/ui/OrderStatusStepper";
+import { OrderCancellationSection } from "@/components/orders/OrderCancellationSection";
 import { OrderDetailSkeleton } from "@/components/orders/OrderDetailSkeleton";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -225,6 +226,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </Link>
         </div>
       </div>
+      <OrderCancellationSection orderId={order.id} />
     </main>
   );
 }

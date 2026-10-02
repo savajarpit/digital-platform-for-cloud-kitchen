@@ -11,6 +11,10 @@ const CALENDAR = 'plan-calendar-view';
 const SELECTION = 'delivery-date-selection';
 
 const mockRepo = {
+  findLatestCancellationRequest: jest.fn(),
+  findUnbankedHeldSkips: jest.fn(),
+  markHeldSkipsBanked: jest.fn(),
+  reactivateSubscription: jest.fn(),
   findSettings: jest.fn(),
   upsertSettings: jest.fn(),
   createSkip: jest.fn(),
@@ -33,6 +37,7 @@ const mockRepo = {
   countActiveSubscriptionsAffectedByDate: jest.fn(),
 };
 const mockSettingsRepo = {
+  findOrderAcceptanceSettings: jest.fn(),
   findClosedDates: jest.fn(),
   findBusinessProfile: jest.fn(),
   findActiveDeliverySlots: jest.fn(),
@@ -45,10 +50,15 @@ const mockPromotions = {
 };
 const mockFeatures = { hasFeature: jest.fn() };
 const mockBanking = { bankExtraDays: jest.fn() };
-const mockAddresses = { findOne: jest.fn(), findAll: jest.fn() };
+const mockAddresses = {
+  findOne: jest.fn(),
+  findDeliverableOne: jest.fn(),
+  findAll: jest.fn(),
+};
 const mockTenantLimits = { assertSubscriberAllowed: jest.fn() };
 const mockRazorpay = { createOrder: jest.fn() };
 const mockMaterialization = { materializeOne: jest.fn() };
+const mockNotifier = { notifyApproved: jest.fn() };
 
 /** Only the two collaborators the settings/entitlement logic touches are
  * real mocks — the rest of the constructor args are never reached. */
@@ -67,6 +77,7 @@ function build(): SubscriptionsService {
     unused,
     unused,
     mockBanking as never,
+    mockNotifier as never,
   );
 }
 
@@ -87,6 +98,7 @@ function buildForSubscribe(): SubscriptionsService {
     unused,
     unused,
     mockBanking as never,
+    mockNotifier as never,
   );
 }
 
@@ -304,6 +316,31 @@ describe('SubscriptionsService — calendar settings', () => {
         dateSelectionEnabled: false,
         selectionFlexibilityDays: 7,
         allowDateChangeAfterPurchase: false,
+      });
+    });
+
+    it('tells the storefront when sign-ups are paused, and why', async () => {
+      mockRepo.findSettings.mockResolvedValue({
+        ...stored,
+        isAcceptingNewSubscriptions: true,
+      });
+      grant('subscriptions');
+
+      const open = await service.getPublicSettings('t1');
+      expect(open).toMatchObject({
+        acceptingNewSubscriptions: true,
+        newSubscriptionsClosedReason: null,
+      });
+
+      mockSettingsRepo.findOrderAcceptanceSettings.mockResolvedValue({
+        isTemporarilyClosed: true,
+        closureReason: null,
+      });
+      const closed = await service.getPublicSettings('t1');
+      expect(closed).toMatchObject({
+        acceptingNewSubscriptions: false,
+        newSubscriptionsClosedReason:
+          "We're not taking new orders or subscriptions right now — Temporarily closed.",
       });
     });
   });
@@ -655,7 +692,7 @@ describe('SubscriptionsService.subscribe — delivery date selection', () => {
     });
     mockTenantLimits.assertSubscriberAllowed.mockResolvedValue(undefined);
     mockRepo.findPlanForSubscribe.mockResolvedValue(plan);
-    mockAddresses.findOne.mockResolvedValue({ id: 'addr1' });
+    mockAddresses.findDeliverableOne.mockResolvedValue({ id: 'addr1' });
     mockPromotions.getActiveScheduledDiscountsForPlans.mockResolvedValue(
       new Map(),
     );
@@ -687,6 +724,44 @@ describe('SubscriptionsService.subscribe — delivery date selection', () => {
         deliveryDates: ['2026-09-23', '2026-09-24', '2026-09-25'],
       } as never),
     ).rejects.toThrow(BadRequestException);
+    expect(mockRepo.createSubscription).not.toHaveBeenCalled();
+  });
+
+  it('rejects a new subscription while the store is temporarily closed', async () => {
+    grant('subscriptions');
+    mockSettingsRepo.findOrderAcceptanceSettings.mockResolvedValue({
+      isTemporarilyClosed: true,
+      closureReason: 'Renovation',
+    });
+
+    await expect(
+      service.subscribe('t1', 'u1', {
+        planId: 'p1',
+        addressId: 'addr1',
+      } as never),
+    ).rejects.toThrow(
+      "We're not taking new orders or subscriptions right now — Renovation.",
+    );
+    expect(mockRepo.createSubscription).not.toHaveBeenCalled();
+  });
+
+  it('rejects an address outside the delivery area before creating anything', async () => {
+    grant('subscriptions');
+    mockAddresses.findDeliverableOne.mockRejectedValue(
+      new BadRequestException("We don't currently deliver to pincode 380009"),
+    );
+
+    await expect(
+      service.subscribe('t1', 'u1', {
+        planId: 'p1',
+        addressId: 'addr-far',
+      } as never),
+    ).rejects.toThrow("We don't currently deliver to pincode 380009");
+    expect(mockAddresses.findDeliverableOne).toHaveBeenCalledWith(
+      't1',
+      'u1',
+      'addr-far',
+    );
     expect(mockRepo.createSubscription).not.toHaveBeenCalled();
   });
 
@@ -1153,5 +1228,66 @@ describe('SubscriptionsService.countSubscribersAffectedByDate', () => {
     expect(
       mockRepo.countActiveSubscriptionsAffectedByDate,
     ).toHaveBeenCalledWith('t1', '2026-09-26');
+  });
+});
+
+describe('bankHeldDays (cancellation request rejected/withdrawn)', () => {
+  const cycleEnd = new Date('2026-10-05T00:00:00.000Z');
+  const newCycleEnd = new Date('2026-10-07T00:00:00.000Z');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockBanking.bankExtraDays.mockResolvedValue(newCycleEnd);
+  });
+
+  it('banks exactly the held days and marks them banked', async () => {
+    mockRepo.findUnbankedHeldSkips.mockResolvedValue([
+      { id: 'k1' },
+      { id: 'k2' },
+    ]);
+    mockRepo.findSubscriptionById.mockResolvedValue({
+      id: 's1',
+      status: 'ACTIVE',
+      cycleEnd,
+    });
+
+    await expect(build().bankHeldDays('t1', 's1', 'r1')).resolves.toBe(2);
+
+    expect(mockBanking.bankExtraDays).toHaveBeenCalledWith(
+      't1',
+      expect.objectContaining({ id: 's1', cycleEnd }),
+      2,
+    );
+    expect(mockRepo.extendCycleEnd).toHaveBeenCalledWith('s1', newCycleEnd, 2);
+    expect(mockRepo.markHeldSkipsBanked).toHaveBeenCalledWith(['k1', 'k2']);
+    expect(mockRepo.reactivateSubscription).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when no day was held yet', async () => {
+    mockRepo.findUnbankedHeldSkips.mockResolvedValue([]);
+    await expect(build().bankHeldDays('t1', 's1', 'r1')).resolves.toBe(0);
+    expect(mockBanking.bankExtraDays).not.toHaveBeenCalled();
+  });
+
+  it('brings a plan that expired during the hold back to ACTIVE', async () => {
+    mockRepo.findUnbankedHeldSkips.mockResolvedValue([{ id: 'k1' }]);
+    mockRepo.findSubscriptionById.mockResolvedValue({
+      id: 's1',
+      status: 'EXPIRED',
+      cycleEnd,
+    });
+    await build().bankHeldDays('t1', 's1', 'r1');
+    expect(mockRepo.reactivateSubscription).toHaveBeenCalledWith('s1');
+  });
+
+  it('never banks onto a cancelled subscription', async () => {
+    mockRepo.findUnbankedHeldSkips.mockResolvedValue([{ id: 'k1' }]);
+    mockRepo.findSubscriptionById.mockResolvedValue({
+      id: 's1',
+      status: 'CANCELLED',
+      cycleEnd,
+    });
+    await expect(build().bankHeldDays('t1', 's1', 'r1')).resolves.toBe(0);
+    expect(mockRepo.extendCycleEnd).not.toHaveBeenCalled();
   });
 });

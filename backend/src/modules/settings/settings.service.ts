@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -15,8 +16,13 @@ import {
 } from '../../common/utils/closed-dates.util';
 import { orderDayAvailability } from '../../common/utils/order-day-availability.util';
 import {
+  type DayHoursInput,
+  operatingHoursError,
+} from '../../common/utils/operating-hours.util';
+import {
   BusinessProfile,
   DeliverySlot,
+  DeliverySlotUsage,
   HomePageContent,
   InstantDeliverySettings,
   KitchenZone,
@@ -45,6 +51,13 @@ import { UpdateServiceablePincodeDto } from './dto/update-serviceable-pincode.dt
 import { CreateKitchenZoneDto } from './dto/create-kitchen-zone.dto';
 import { UpdateKitchenZoneDto } from './dto/update-kitchen-zone.dto';
 import { CreateDeliverySlotDto } from './dto/create-delivery-slot.dto';
+import {
+  deliverySlotInUseMessage,
+  type SlotFlow,
+  slotOffersFor,
+  subscriptionSlotInUseMessage,
+  deliverySlotTimesError,
+} from './delivery-slot-rules';
 import { UpdateDeliverySlotDto } from './dto/update-delivery-slot.dto';
 import { UpdateNotificationSettingsDto } from './dto/update-notification-settings.dto';
 import { UpdatePaymentSettingsDto } from './dto/update-payment-settings.dto';
@@ -79,6 +92,7 @@ function toOrderAcceptanceView(
 }
 
 const PLAN_CALENDAR_FEATURE_KEY = 'plan-calendar-view';
+const SUBSCRIPTIONS_FEATURE_KEY = 'subscriptions';
 
 @Injectable()
 export class SettingsService {
@@ -188,7 +202,10 @@ export class SettingsService {
     });
   }
 
-  async getDeliverySlots(tenantId: string): Promise<{
+  async getDeliverySlots(
+    tenantId: string,
+    flow: SlotFlow = 'ORDERS',
+  ): Promise<{
     maxAdvanceOrderDays: number;
     slots: DeliverySlot[];
     todayStr: string;
@@ -200,7 +217,7 @@ export class SettingsService {
   }> {
     const [profile, slots, acceptance] = await Promise.all([
       this.settingsRepo.findBusinessProfile(tenantId),
-      this.settingsRepo.findActiveDeliverySlots(tenantId),
+      this.settingsRepo.findActiveDeliverySlots(tenantId, flow),
       this.settingsRepo.findOrderAcceptanceSettings(tenantId),
     ]);
     // The checkout day-picker must anchor to "today" in the tenant's
@@ -348,7 +365,14 @@ export class SettingsService {
     tenantId: string,
     dto: UpdateOrderAcceptanceDto,
   ): Promise<OrderAcceptanceView> {
-    const { operatingHours, closedDates, ...rest } = dto;
+    const { operatingHours, closedDates, closureReason, ...rest } = dto;
+
+    if (operatingHours) {
+      const hoursError = operatingHoursError(
+        operatingHours as Record<string, DayHoursInput | undefined>,
+      );
+      if (hoursError) throw new BadRequestException(hoursError);
+    }
 
     let closedDatesJson: Prisma.InputJsonValue | undefined;
     if (closedDates) {
@@ -366,6 +390,14 @@ export class SettingsService {
       ) {
         throw new ForbiddenException(
           'Closing subscription deliveries needs the calendar plan view feature, which is not enabled for your account.',
+        );
+      }
+      const impossible = closedDates.find(
+        (d) => !DateUtil.isValidDateStr(d.date),
+      );
+      if (impossible) {
+        throw new BadRequestException(
+          `${impossible.date} isn't a real date — please pick it from the calendar.`,
         );
       }
       const byDate = new Map<string, ClosedDateEntry>();
@@ -386,6 +418,11 @@ export class SettingsService {
       tenantId,
       {
         ...rest,
+        // Blank clears it (null), so customers see the default
+        // "Temporarily closed" rather than an empty reason.
+        ...(closureReason !== undefined
+          ? { closureReason: closureReason?.trim() || null }
+          : {}),
         ...(closedDatesJson ? { closedDates: closedDatesJson } : {}),
         ...(operatingHours
           ? {
@@ -412,6 +449,18 @@ export class SettingsService {
     tenantId: string,
     dto: UpdateInstantDeliverySettingsDto,
   ): Promise<InstantDeliveryView> {
+    // A PATCH may carry only one end of the range — compare against the
+    // saved other end so "min ≤ max" holds for the stored pair.
+    const current = this.toInstantDeliveryView(
+      await this.settingsRepo.findInstantDeliverySettings(tenantId),
+    );
+    const etaMin = dto.etaMinMinutes ?? current.etaMinMinutes;
+    const etaMax = dto.etaMaxMinutes ?? current.etaMaxMinutes;
+    if (etaMin > etaMax) {
+      throw new BadRequestException(
+        `The earliest ready-in time (${etaMin} min) can't be later than the latest (${etaMax} min).`,
+      );
+    }
     const saved = await this.settingsRepo.upsertInstantDeliverySettings(
       tenantId,
       dto,
@@ -523,11 +572,30 @@ export class SettingsService {
     return this.settingsRepo.findAllDeliverySlots(tenantId);
   }
 
-  createDeliverySlot(
+  async createDeliverySlot(
     tenantId: string,
     dto: CreateDeliverySlotDto,
   ): Promise<DeliverySlot> {
-    return this.settingsRepo.createDeliverySlot(tenantId, dto);
+    const name = await this.assertDeliverySlotValid(tenantId, {
+      name: dto.name,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+    });
+    await this.assertSlotUsageAllowed(tenantId, dto.usage);
+    // A new slot goes to the end of the list unless placed explicitly.
+    const sortOrder =
+      dto.sortOrder ??
+      Math.max(
+        0,
+        ...(await this.settingsRepo.findAllDeliverySlots(tenantId)).map(
+          (s) => s.sortOrder,
+        ),
+      ) + 1;
+    return this.settingsRepo.createDeliverySlot(tenantId, {
+      ...dto,
+      name,
+      sortOrder,
+    });
   }
 
   async updateDeliverySlot(
@@ -537,13 +605,96 @@ export class SettingsService {
   ): Promise<DeliverySlot> {
     const existing = await this.settingsRepo.findDeliverySlotById(tenantId, id);
     if (!existing) throw new NotFoundException('Delivery slot not found');
-    return this.settingsRepo.updateDeliverySlot(id, dto);
+    // Validate the slot as it will be saved — a PATCH may change one field.
+    const name = await this.assertDeliverySlotValid(
+      tenantId,
+      {
+        name: dto.name ?? existing.name,
+        startTime: dto.startTime ?? existing.startTime,
+        endTime: dto.endTime ?? existing.endTime,
+      },
+      id,
+    );
+    if (dto.usage !== undefined && dto.usage !== existing.usage) {
+      await this.assertSlotUsageAllowed(tenantId, dto.usage);
+      // Taking a slot away from subscriptions would strand its subscribers.
+      if (
+        slotOffersFor(existing.usage, 'SUBSCRIPTIONS') &&
+        !slotOffersFor(dto.usage, 'SUBSCRIPTIONS')
+      ) {
+        const inUse = subscriptionSlotInUseMessage(
+          await this.settingsRepo.countDeliverySlotUsage(
+            tenantId,
+            id,
+            await this.getTenantTodayStr(tenantId),
+          ),
+        );
+        if (inUse) throw new ConflictException(inUse);
+      }
+    }
+    return this.settingsRepo.updateDeliverySlot(id, {
+      ...dto,
+      ...(dto.name !== undefined ? { name } : {}),
+    });
+  }
+
+  /** Orders-only / subscriptions-only slots are a subscriptions-feature
+   * setting; without the feature every slot stays BOTH. */
+  private async assertSlotUsageAllowed(
+    tenantId: string,
+    usage: DeliverySlotUsage | undefined,
+  ): Promise<void> {
+    if (usage === undefined || usage === DeliverySlotUsage.BOTH) return;
+    const hasSubscriptions = await this.featuresService.hasFeature(
+      tenantId,
+      SUBSCRIPTIONS_FEATURE_KEY,
+    );
+    if (!hasSubscriptions) {
+      throw new ForbiddenException(
+        'Splitting slots between orders and subscriptions needs the subscriptions feature, which is not enabled for your account.',
+      );
+    }
+  }
+
+  private async getTenantTodayStr(tenantId: string): Promise<string> {
+    const profile = await this.settingsRepo.findBusinessProfile(tenantId);
+    return DateUtil.getTenantNow(profile?.timezone ?? 'Asia/Kolkata').dateStr;
   }
 
   async deleteDeliverySlot(tenantId: string, id: string): Promise<void> {
     const existing = await this.settingsRepo.findDeliverySlotById(tenantId, id);
     if (!existing) throw new NotFoundException('Delivery slot not found');
+    const inUse = deliverySlotInUseMessage(
+      await this.settingsRepo.countDeliverySlotUsage(
+        tenantId,
+        id,
+        await this.getTenantTodayStr(tenantId),
+      ),
+    );
+    if (inUse) throw new ConflictException(inUse);
     await this.settingsRepo.deleteDeliverySlot(id);
+  }
+
+  /** Trimmed non-blank name, unique per tenant (ignoring case), and a
+   * window that ends after it starts. Returns the trimmed name. */
+  private async assertDeliverySlotValid(
+    tenantId: string,
+    slot: { name: string; startTime: string; endTime: string },
+    excludeId?: string,
+  ): Promise<string> {
+    const name = slot.name.trim();
+    if (!name) throw new BadRequestException('Give the slot a name.');
+    const timesError = deliverySlotTimesError(slot.startTime, slot.endTime);
+    if (timesError) throw new BadRequestException(timesError);
+    const duplicate = await this.settingsRepo.findDeliverySlotByName(
+      tenantId,
+      name,
+      excludeId,
+    );
+    if (duplicate) {
+      throw new ConflictException(`There's already a slot named "${name}".`);
+    }
+    return name;
   }
 
   // ── Notifications ──────────────────────────────────────────

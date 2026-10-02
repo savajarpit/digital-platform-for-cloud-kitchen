@@ -30,9 +30,15 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
   },
   {
     key: 'subscription-self-cancel',
-    name: 'Self-Service Subscription Cancellation',
+    name: 'Self-Service Subscription Cancellation (retired)',
     description:
-      'Lets a customer cancel their own subscription — no automatic refund, stops future deliveries only',
+      'No longer used — every customer can now request a cancellation, and the business approves it with a refund or rejects it',
+  },
+  {
+    key: 'order-cancel-requests',
+    name: 'Order Cancellation Requests',
+    description:
+      'Lets customers ask to cancel a one-time order before the kitchen starts preparing it — the business also has to switch it on in Order Hours settings, then approves with a refund or rejects',
   },
   {
     key: 'subscription-plan-time-lock',

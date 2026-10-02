@@ -61,6 +61,8 @@ export interface Meal {
   weightValue: number | null;
   weightUnit: MealWeightUnit | null;
   dailyQuantityLimit: number | null;
+  /** Plates left today (tenant-local); null when the meal has no daily limit. */
+  remainingToday?: number | null;
   sortOrder: number;
   /** Present only when the tenant has the menu-addons feature — which
    * add-on groups this meal currently offers. */
@@ -83,7 +85,8 @@ export interface MealInput {
   isPopular?: boolean;
   weightValue?: number;
   weightUnit?: MealWeightUnit;
-  dailyQuantityLimit?: number;
+  /** null clears the limit (unlimited). */
+  dailyQuantityLimit?: number | null;
   sortOrder?: number;
 }
 

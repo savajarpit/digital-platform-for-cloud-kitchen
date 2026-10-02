@@ -146,17 +146,23 @@ export function MealForm({
         />
         <input
           type="number"
-          min={0}
+          min={1}
+          step={1}
+          aria-label="Daily limit"
           value={form.dailyQuantityLimit ?? ""}
           onChange={(e) =>
             setForm((f) => ({
               ...f,
-              dailyQuantityLimit: e.target.value ? Number(e.target.value) : undefined,
+              dailyQuantityLimit: e.target.value ? Number(e.target.value) : null,
             }))
           }
           placeholder="Daily limit (optional)"
           className="input w-full"
         />
+        <p className="text-xs text-zinc-500 sm:col-span-2 dark:text-zinc-400">
+          Daily limit = plates you can make per delivery day. Orders count down from it and it resets every day on its
+          own; leave blank for unlimited. Subscription meals don&apos;t count.
+        </p>
       </div>
       <div>
         <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">

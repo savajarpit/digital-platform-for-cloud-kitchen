@@ -8,6 +8,7 @@ export const qk = {
     all: ["orders"] as const,
     list: (page: number) => ["orders", "list", page] as const,
     detail: (id: string) => ["orders", "detail", id] as const,
+    cancellation: (id: string) => ["orders", "cancellation", id] as const,
   },
   addresses: {
     all: ["addresses"] as const,
@@ -35,9 +36,12 @@ export const qk = {
   meals: {
     all: ["meals"] as const,
     list: (filters: unknown) => ["meals", "list", filters] as const,
+    stock: (date: string) => ["meals", "stock", date] as const,
   },
   checkout: {
     slots: ["checkout", "slots"] as const,
+    /** The subscription flow's own slot list (a slot can be orders-only). */
+    subscriptionSlots: ["checkout", "slots", "subscriptions"] as const,
     config: ["checkout", "config"] as const,
     orderWindow: ["checkout", "order-window"] as const,
     pickup: ["checkout", "pickup"] as const,

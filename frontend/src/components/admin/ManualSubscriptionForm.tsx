@@ -10,7 +10,7 @@ import {
   type CreateManualSubscriptionInput,
 } from "@/lib/api/admin-subscriptions";
 import { getCustomer, type Customer } from "@/lib/api/admin-customers";
-import { getDeliverySlots } from "@/lib/api/delivery-slots";
+import { getSubscriptionDeliverySlots } from "@/lib/api/delivery-slots";
 import { qk, STALE } from "@/lib/query/keys";
 import { invalidateSubscriptionAreas } from "@/lib/query/subscription-invalidation";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -42,7 +42,7 @@ export function ManualSubscriptionForm() {
 
   const slotsQuery = useQuery({
     queryKey: qk.admin("subscriptions", "manual-delivery-slots"),
-    queryFn: getDeliverySlots,
+    queryFn: getSubscriptionDeliverySlots,
     staleTime: STALE.short,
   });
   const slots = slotsQuery.data?.slots ?? [];

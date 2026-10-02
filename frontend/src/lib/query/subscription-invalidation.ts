@@ -14,5 +14,6 @@ export function invalidateSubscriptionAreas(qc: QueryClient): Promise<unknown> {
     qc.invalidateQueries({ queryKey: qk.admin("customers") }),
     qc.invalidateQueries({ queryKey: qk.subscriptions.all }),
     qc.invalidateQueries({ queryKey: ["plans"] }),
+    qc.invalidateQueries({ queryKey: qk.admin("cancellation-requests") }),
   ]);
 }

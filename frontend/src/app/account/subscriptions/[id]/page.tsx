@@ -7,7 +7,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, ChevronLeft, FileText } from "lucide-react";
 import {
   ApiError,
-  cancelSubscription,
   getMySubscription,
   moveDeliveryDate,
   pauseSubscription,
@@ -22,6 +21,7 @@ import { UpcomingDaysList } from "@/components/subscriptions/UpcomingDaysList";
 import { SubscriptionCalendarSection } from "@/components/subscriptions/SubscriptionCalendarSection";
 import { MoveDeliveryDateModal } from "@/components/subscriptions/MoveDeliveryDateModal";
 import { SubscriptionPauseAndCancel } from "@/components/subscriptions/SubscriptionPauseAndCancel";
+import { CancellationRequestStatusNote } from "@/components/cancellations/CancellationRequestStatusNote";
 import { SubscriptionDetailSkeleton } from "@/components/subscriptions/SubscriptionDetailSkeleton";
 import { PlanViewTabs, type PlanViewTab } from "@/components/subscriptions/PlanViewTabs";
 import { formatPriceFromPaise } from "@/lib/format/currency";
@@ -162,25 +162,6 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
     }
   }
 
-  function handleCancel() {
-    confirm({
-      message: "Cancel this subscription? This cannot be undone.",
-      confirmLabel: "Cancel Subscription",
-      cancelLabel: "Keep subscription",
-      processingLabel: "Cancelling…",
-      variant: "danger",
-      onConfirm: async () => {
-        try {
-          await cancelSubscription(id);
-          showToast("Subscription cancelled.", "success");
-          await refresh();
-        } catch (err) {
-          showToast(err instanceof ApiError ? err.message : "Couldn't cancel.", "error");
-        }
-      },
-    });
-  }
-
   if (!subscription) {
     if (isPending || unauthorized) return <SubscriptionDetailSkeleton />;
     return (
@@ -237,6 +218,15 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
         </Link>
       </div>
 
+      {subscription.cancellationRequest && (
+        <div className="mt-6">
+          <CancellationRequestStatusNote
+            request={subscription.cancellationRequest}
+            onChanged={() => void refresh()}
+          />
+        </div>
+      )}
+
       {isActive && (
         <div className="mt-6 flex flex-col gap-6">
           {subscription.viewMode === "BOTH" && (
@@ -272,7 +262,7 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
             onPauseFromChange={setPauseFrom}
             onPauseToChange={setPauseTo}
             onPause={handlePause}
-            onCancel={handleCancel}
+            onCancellationChanged={() => void refresh()}
           />
         </div>
       )}

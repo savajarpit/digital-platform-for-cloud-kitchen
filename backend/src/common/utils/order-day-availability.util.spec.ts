@@ -1,4 +1,6 @@
 import {
+  INSTANT_NOT_OFFERED_REASON,
+  instantDeliveryUnavailableMessage,
   orderDayAvailability,
   orderDayClosedMessage,
   type OrderDaySettings,
@@ -123,6 +125,28 @@ describe('orderDayAvailability', () => {
   });
 });
 
+describe('instantDeliveryUnavailableMessage', () => {
+  it('keeps the "not offered" reason as is', () => {
+    expect(instantDeliveryUnavailableMessage(INSTANT_NOT_OFFERED_REASON)).toBe(
+      INSTANT_NOT_OFFERED_REASON,
+    );
+    expect(instantDeliveryUnavailableMessage(undefined)).toBe(
+      INSTANT_NOT_OFFERED_REASON,
+    );
+  });
+
+  it('frames a closure reason, without a doubled full stop', () => {
+    expect(instantDeliveryUnavailableMessage('Renovation')).toBe(
+      "Instant delivery isn't available right now — Renovation.",
+    );
+    expect(
+      instantDeliveryUnavailableMessage('Kitchen is currently closed.'),
+    ).toBe(
+      "Instant delivery isn't available right now — Kitchen is currently closed.",
+    );
+  });
+});
+
 describe('orderDayClosedMessage', () => {
   it('explains each kind of closure', () => {
     expect(
@@ -139,7 +163,7 @@ describe('orderDayClosedMessage', () => {
     ).toContain('Orders for today are closed');
     expect(
       orderDayClosedMessage('2026-09-29', { open: false, reason: 'Diwali' }),
-    ).toBe("We're closed on 2026-09-29 (Diwali) — please pick another date.");
+    ).toBe("We're closed on Tue, 29 Sept (Diwali) — please pick another date.");
     expect(
       orderDayClosedMessage('2026-09-29', {
         open: false,

@@ -46,6 +46,17 @@ export function MealListItem({
             {categoryName} · {formatPriceFromPaise(meal.priceInPaise)}
             {meal.nutrition?.calories ? ` · ${meal.nutrition.calories} cal` : ""}
           </p>
+          {meal.dailyQuantityLimit != null && meal.remainingToday != null && (
+            <p
+              className={`mt-0.5 text-xs font-medium ${
+                meal.remainingToday === 0 ? "text-red-600 dark:text-red-400" : "text-zinc-500 dark:text-zinc-400"
+              }`}
+            >
+              {meal.remainingToday === 0
+                ? `Sold out today (${meal.dailyQuantityLimit}/day)`
+                : `Today: ${meal.remainingToday} of ${meal.dailyQuantityLimit} left`}
+            </p>
+          )}
         </div>
         <div className="mt-2 flex items-center gap-3">
           <Toggle checked={meal.isAvailable} onChange={onToggleAvailable} disabled={!canEdit} />

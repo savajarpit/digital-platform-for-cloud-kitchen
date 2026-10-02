@@ -30,6 +30,8 @@
     "search": "Search meals",
     "addToCart": "Add to cart",
     "outOfStock": "Out of stock",
+    "soldOutToday": "Sold out for today",
+    "onlyLeftToday": "Only {count} left today",
     "discountOff": "{percent}% OFF"
   },
   "cart": {

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import {
   Address,
+  CancellationRequestStatus,
   Order,
   OrderFulfillmentType,
   PaymentMethod,
@@ -117,6 +118,11 @@ const ORDER_ADMIN_INCLUDE = {
   table: true,
   user: { select: { firstName: true, lastName: true, email: true } },
   refunds: { orderBy: { createdAt: 'desc' } },
+  // A pending customer "please cancel" — drives the admin/kitchen badge.
+  cancellationRequests: {
+    where: { status: CancellationRequestStatus.PENDING },
+    select: { id: true, reason: true, note: true, createdAt: true },
+  },
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithAdminDetails = Prisma.OrderGetPayload<{
@@ -397,11 +403,19 @@ export class OrdersRepository {
     take: number,
     status?: OrderStatus,
     fulfillmentType?: OrderFulfillmentType,
+    cancelRequested?: boolean,
   ): Promise<[OrderWithAdminDetails[], number]> {
-    const where = {
+    const where: Prisma.OrderWhereInput = {
       tenantId,
       status: status ?? { not: OrderStatus.PENDING_PAYMENT },
       ...(fulfillmentType ? { fulfillmentType } : {}),
+      ...(cancelRequested
+        ? {
+            cancellationRequests: {
+              some: { status: CancellationRequestStatus.PENDING },
+            },
+          }
+        : {}),
     };
     const [data, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
@@ -439,7 +453,11 @@ export class OrdersRepository {
     id: string,
     data: { cancelledByUserId: string; cancellationReason?: string },
     refund: CreateRefundInput,
-  ): Promise<{ order: OrderWithAdminDetails; refund: Refund } | null> {
+  ): Promise<{
+    order: OrderWithAdminDetails;
+    refund: Refund;
+    approvedRequest: boolean;
+  } | null> {
     return this.prisma.$transaction(async (tx) => {
       const { count } = await tx.order.updateMany({
         where: { id, status: { not: OrderStatus.CANCELLED } },
@@ -453,11 +471,26 @@ export class OrdersRepository {
       });
       if (count === 0) return null;
       const createdRefund = await tx.refund.create({ data: refund });
+      // A pending customer request for this order is answered by this very
+      // cancel — closed in the same transaction so it can't stay "pending"
+      // on a cancelled order.
+      const approved = await tx.customerCancellationRequest.updateMany({
+        where: { orderId: id, status: CancellationRequestStatus.PENDING },
+        data: {
+          status: CancellationRequestStatus.APPROVED,
+          resolvedAt: new Date(),
+          resolvedByUserId: data.cancelledByUserId,
+        },
+      });
       const order = await tx.order.findUniqueOrThrow({
         where: { id },
         include: ORDER_ADMIN_INCLUDE,
       });
-      return { order: withAddressSnapshot(order), refund: createdRefund };
+      return {
+        order: withAddressSnapshot(order),
+        refund: createdRefund,
+        approvedRequest: approved.count > 0,
+      };
     });
   }
 

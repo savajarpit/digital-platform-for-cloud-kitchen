@@ -9,6 +9,7 @@ export function invalidateOrderAreas(qc: QueryClient): Promise<unknown> {
     qc.invalidateQueries({ queryKey: qk.admin("overview") }),
     qc.invalidateQueries({ queryKey: qk.admin("customers") }),
     qc.invalidateQueries({ queryKey: qk.admin("dine-in") }),
+    qc.invalidateQueries({ queryKey: qk.admin("cancellation-requests") }),
     qc.invalidateQueries({ queryKey: qk.orders.all }),
   ]);
 }

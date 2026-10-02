@@ -258,51 +258,52 @@ model Tenant {
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
-  users                       User[]
-  businessProfile             BusinessProfile?
-  orderAcceptanceSettings     OrderAcceptanceSettings?
-  notificationSettings        NotificationSettings?
-  paymentSettings             PaymentSettings?
-  serviceablePincodes         ServiceablePincode[]
-  kitchenZones                KitchenZone[]
-  rolePermissions             RolePermission[]
-  tenantFeatures              TenantFeature[]
-  categories                  Category[]
-  meals                       Meal[]
-  addresses                   Address[]
-  orders                      Order[]
-  refunds                     Refund[]
-  deliverySlots               DeliverySlot[]
-  notificationLogs            NotificationLog[]
-  coupons                     Coupon[]
-  couponRedemptions           CouponRedemption[]
-  planCouponRedemptions       PlanCouponRedemption[]
-  promotions                  Promotion[]
-  subscriptionPlans           SubscriptionPlan[]
-  subscriptions               Subscription[]
-  subscriptionInvoices        SubscriptionInvoice[]
-  subscriptionDisruptions     SubscriptionDisruption[]
-  subscriptionSettings        SubscriptionSettings?
-  instantDeliverySettings     InstantDeliverySettings?
-  staticPages                 StaticPage[]
-  platformTermsAcceptances    PlatformTermsAcceptance[]
-  platformSubscription        PlatformSubscription?
-  activationInvites           TenantActivationInvite[]
-  platformInvoices            PlatformInvoice[]
-  tenantLimits                TenantLimits?
-  platformLeads               PlatformLead[]
-  cancellationRequests        PlatformCancellationRequest[]
-  homeSections                HomeSection[]
-  reviews                     Review[]
-  socialLinks                 SocialLink[]
-  homePageContent             HomePageContent?
-  planFeatures                PlanFeature[]
-  planFaqs                    PlanFaq[]
-  tenantNotificationTemplates TenantNotificationTemplate[]
-  diningTables                DiningTable[]
-  waitlistEntries             WaitlistEntry[]
-  addonGroups                 AddonGroup[]
-  addonItems                  AddonItem[]
+  users                        User[]
+  businessProfile              BusinessProfile?
+  orderAcceptanceSettings      OrderAcceptanceSettings?
+  notificationSettings         NotificationSettings?
+  paymentSettings              PaymentSettings?
+  serviceablePincodes          ServiceablePincode[]
+  kitchenZones                 KitchenZone[]
+  rolePermissions              RolePermission[]
+  tenantFeatures               TenantFeature[]
+  categories                   Category[]
+  meals                        Meal[]
+  addresses                    Address[]
+  orders                       Order[]
+  refunds                      Refund[]
+  deliverySlots                DeliverySlot[]
+  notificationLogs             NotificationLog[]
+  coupons                      Coupon[]
+  couponRedemptions            CouponRedemption[]
+  planCouponRedemptions        PlanCouponRedemption[]
+  promotions                   Promotion[]
+  subscriptionPlans            SubscriptionPlan[]
+  subscriptions                Subscription[]
+  subscriptionInvoices         SubscriptionInvoice[]
+  subscriptionDisruptions      SubscriptionDisruption[]
+  subscriptionSettings         SubscriptionSettings?
+  instantDeliverySettings      InstantDeliverySettings?
+  staticPages                  StaticPage[]
+  platformTermsAcceptances     PlatformTermsAcceptance[]
+  platformSubscription         PlatformSubscription?
+  activationInvites            TenantActivationInvite[]
+  platformInvoices             PlatformInvoice[]
+  tenantLimits                 TenantLimits?
+  platformLeads                PlatformLead[]
+  cancellationRequests         PlatformCancellationRequest[]
+  homeSections                 HomeSection[]
+  reviews                      Review[]
+  socialLinks                  SocialLink[]
+  homePageContent              HomePageContent?
+  planFeatures                 PlanFeature[]
+  planFaqs                     PlanFaq[]
+  tenantNotificationTemplates  TenantNotificationTemplate[]
+  diningTables                 DiningTable[]
+  waitlistEntries              WaitlistEntry[]
+  addonGroups                  AddonGroup[]
+  addonItems                   AddonItem[]
+  customerCancellationRequests CustomerCancellationRequest[]
 
   @@map("tenants")
 }
@@ -332,13 +333,14 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
+  tenant                   Tenant                        @relation(fields: [tenantId], references: [id])
   refreshTokens            RefreshToken[]
   addresses                Address[]
   orders                   Order[]
   subscriptions            Subscription[]
   platformTermsAcceptances PlatformTermsAcceptance[]
   refundsRecorded          Refund[]
+  cancellationRequests     CustomerCancellationRequest[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -459,15 +461,19 @@ model SocialLink {
 }
 
 model OrderAcceptanceSettings {
-  id                  String   @id @default(uuid())
-  tenantId            String   @unique
-  operatingHours      Json     @default("{}")
-  dailyCutoffTime     String?
-  closedDates         Json     @default("[]")
-  isTemporarilyClosed Boolean  @default(false)
-  closureReason       String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                       String   @id @default(uuid())
+  tenantId                 String   @unique
+  operatingHours           Json     @default("{}")
+  dailyCutoffTime          String?
+  closedDates              Json     @default("[]")
+  isTemporarilyClosed      Boolean  @default(false)
+  closureReason            String?
+  // Tenant's own switch for "Request cancellation" on one-time orders —
+  // only takes effect while SUPER_ADMIN has also granted the
+  // `order-cancel-requests` Feature (both gates, same as other opt-ins).
+  allowOrderCancelRequests Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
@@ -585,15 +591,26 @@ model WaitlistEntry {
   @@map("waitlist_entries")
 }
 
+// Which flows a delivery slot is offered in. BOTH (default) keeps every
+// slot exactly as before; ORDERS / SUBSCRIPTIONS split them, e.g. a fixed
+// plan-route window apart from the wider a-la-carte one. Only editable
+// while the tenant has the subscriptions feature.
+enum DeliverySlotUsage {
+  ORDERS
+  SUBSCRIPTIONS
+  BOTH
+}
+
 model DeliverySlot {
-  id        String   @id @default(uuid())
+  id        String            @id @default(uuid())
   tenantId  String
   name      String
   startTime String
   endTime   String
-  isActive  Boolean  @default(true)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+  isActive  Boolean           @default(true)
+  sortOrder Int               @default(0)
+  usage     DeliverySlotUsage @default(BOTH)
+  createdAt DateTime          @default(now())
   updatedAt DateTime @updatedAt
 
   tenant                   Tenant                    @relation(fields: [tenantId], references: [id])
@@ -1229,19 +1246,20 @@ model Order {
   createdAt                   DateTime             @default(now())
   updatedAt                   DateTime             @updatedAt
 
-  tenant            Tenant            @relation(fields: [tenantId], references: [id])
-  user              User?             @relation(fields: [userId], references: [id])
-  address           Address?          @relation(fields: [addressId], references: [id])
-  pickupKitchenZone KitchenZone?      @relation("OrderPickupZone", fields: [pickupKitchenZoneId], references: [id])
-  dineInKitchenZone KitchenZone?      @relation("OrderDineInZone", fields: [dineInKitchenZoneId], references: [id])
-  table             DiningTable?      @relation(fields: [tableId], references: [id])
-  waitlistEntry     WaitlistEntry?
-  deliverySlot      DeliverySlot?     @relation(fields: [deliverySlotId], references: [id])
-  subscription      Subscription?     @relation(fields: [subscriptionId], references: [id])
-  items             OrderItem[]
-  notificationLogs  NotificationLog[]
-  couponRedemption  CouponRedemption?
-  refunds           Refund[]
+  tenant               Tenant                        @relation(fields: [tenantId], references: [id])
+  user                 User?                         @relation(fields: [userId], references: [id])
+  address              Address?                      @relation(fields: [addressId], references: [id])
+  pickupKitchenZone    KitchenZone?                  @relation("OrderPickupZone", fields: [pickupKitchenZoneId], references: [id])
+  dineInKitchenZone    KitchenZone?                  @relation("OrderDineInZone", fields: [dineInKitchenZoneId], references: [id])
+  table                DiningTable?                  @relation(fields: [tableId], references: [id])
+  waitlistEntry        WaitlistEntry?
+  deliverySlot         DeliverySlot?                 @relation(fields: [deliverySlotId], references: [id])
+  subscription         Subscription?                 @relation(fields: [subscriptionId], references: [id])
+  items                OrderItem[]
+  notificationLogs     NotificationLog[]
+  couponRedemption     CouponRedemption?
+  refunds              Refund[]
+  cancellationRequests CustomerCancellationRequest[]
 
   @@unique([tenantId, orderNumber])
   @@index([tenantId])
@@ -1617,18 +1635,19 @@ model Subscription {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant             Tenant                      @relation(fields: [tenantId], references: [id])
-  user               User                        @relation(fields: [userId], references: [id])
-  plan               SubscriptionPlan            @relation(fields: [planId], references: [id])
-  address            Address                     @relation(fields: [addressId], references: [id])
-  deliverySlot       DeliverySlot?               @relation(fields: [deliverySlotId], references: [id])
-  skips              SubscriptionSkip[]
-  invoices           SubscriptionInvoice[]
-  couponRedemption   PlanCouponRedemption?
-  dayOverrides       SubscriptionDayOverride[]
-  scheduledDates     SubscriptionScheduledDate[]
-  materializedOrders Order[]
-  refunds            Refund[]
+  tenant               Tenant                        @relation(fields: [tenantId], references: [id])
+  user                 User                          @relation(fields: [userId], references: [id])
+  plan                 SubscriptionPlan              @relation(fields: [planId], references: [id])
+  address              Address                       @relation(fields: [addressId], references: [id])
+  deliverySlot         DeliverySlot?                 @relation(fields: [deliverySlotId], references: [id])
+  skips                SubscriptionSkip[]
+  invoices             SubscriptionInvoice[]
+  couponRedemption     PlanCouponRedemption?
+  dayOverrides         SubscriptionDayOverride[]
+  scheduledDates       SubscriptionScheduledDate[]
+  materializedOrders   Order[]
+  refunds              Refund[]
+  cancellationRequests CustomerCancellationRequest[]
 
   @@index([tenantId])
   @@index([tenantId, userId])
@@ -1637,28 +1656,34 @@ model Subscription {
 }
 
 model SubscriptionSkip {
-  id             String   @id @default(uuid())
-  subscriptionId String
+  id                    String   @id @default(uuid())
+  subscriptionId        String
   // YYYY-MM-DD, tenant-local — same "never round-trip a date range through
   // a Date object" principle as the overview chart's bucket boundaries.
   // dateFrom == dateTo for a single-day skip; a wider range is a pause.
-  dateFrom       String
-  dateTo         String
-  bankedDays     Int
+  dateFrom              String
+  dateTo                String
+  bankedDays            Int
   // Set only for a tenant-declared disruption (never a customer's own
   // skip/pause) — customer-visible, shown in place of the plain "Skipped"
   // label. disruptionId links back to the audit row it was generated from;
   // SetNull (not Cascade) so deleting that audit row can never resurrect a
   // day this skip already gated out of materialization.
-  reason         String?
-  disruptionId   String?
-  createdAt      DateTime @default(now())
+  reason                String?
+  disruptionId          String?
+  // Set for a day the materializer held back because a cancellation
+  // request was pending (bankedDays 0 at first) — a rejected or withdrawn
+  // request banks exactly these days back onto cycleEnd.
+  cancellationRequestId String?
+  createdAt             DateTime @default(now())
 
-  subscription Subscription            @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  disruption   SubscriptionDisruption? @relation(fields: [disruptionId], references: [id], onDelete: SetNull)
+  subscription        Subscription                 @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  disruption          SubscriptionDisruption?      @relation(fields: [disruptionId], references: [id], onDelete: SetNull)
+  cancellationRequest CustomerCancellationRequest? @relation(fields: [cancellationRequestId], references: [id], onDelete: SetNull)
 
   @@index([subscriptionId])
   @@index([disruptionId])
+  @@index([cancellationRequestId])
   @@map("subscription_skips")
 }
 
@@ -1689,6 +1714,63 @@ model SubscriptionDisruption {
   @@index([tenantId])
   @@index([tenantId, planId])
   @@map("subscription_disruptions")
+}
+
+enum CancellationRequestStatus {
+  PENDING
+  // Closed by the admin's Cancel & Refund, in the same transaction.
+  APPROVED
+  REJECTED
+  // Customer took it back while it was still pending.
+  WITHDRAWN
+}
+
+/**
+ * A customer's "please cancel this" ask, for a subscription or a one-time
+ * order (exactly one of subscriptionId/orderId is set) — never a
+ * cancellation by itself. The kitchen reviews it and either approves (via
+ * the existing Cancel & Refund, which records the refund) or rejects it
+ * with a note. Same "request, then a human decides" shape real meal-plan
+ * services use, so refunds are always recorded and retention calls happen.
+ * For a subscription, deliveries are held from `heldFromDate` (the first
+ * date outside the notice window at submit time) while PENDING: the
+ * materializer records each held day as a SubscriptionSkip linked here.
+ * On REJECTED/WITHDRAWN those days are banked back onto cycleEnd, so the
+ * customer loses nothing. At most one PENDING request per subscription or
+ * order, enforced in the service.
+ */
+model CustomerCancellationRequest {
+  id               String                    @id @default(uuid())
+  tenantId         String
+  userId           String
+  subscriptionId   String?
+  orderId          String?
+  // One of CANCELLATION_REASONS (validated in the DTO), kept as text so a
+  // new reason never needs a migration.
+  reason           String
+  note             String?
+  status           CancellationRequestStatus @default(PENDING)
+  // YYYY-MM-DD, tenant-local. Subscriptions only.
+  heldFromDate     String?
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  // Admin's note on a rejection — shown to the customer.
+  resolutionNote   String?
+  // How many held days were banked back on reject/withdraw.
+  bankedDays       Int                       @default(0)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  user         User               @relation(fields: [userId], references: [id])
+  subscription Subscription?      @relation(fields: [subscriptionId], references: [id])
+  order        Order?             @relation(fields: [orderId], references: [id])
+  heldDays     SubscriptionSkip[]
+
+  @@index([tenantId, status])
+  @@index([subscriptionId])
+  @@index([orderId])
+  @@map("customer_cancellation_requests")
 }
 
 /**

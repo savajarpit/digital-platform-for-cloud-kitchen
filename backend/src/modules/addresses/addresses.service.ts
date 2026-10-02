@@ -61,6 +61,24 @@ export class AddressesService {
     return address;
   }
 
+  /** findOne, plus the same "inside the delivery area right now" rule
+   * checkout applies — for a customer choosing where something is delivered
+   * (a subscription, a day's address change). A saved address can fall out
+   * of the area when the tenant edits its zones, so it's checked each time. */
+  async findDeliverableOne(
+    tenantId: string,
+    userId: string,
+    id: string,
+  ): Promise<Address> {
+    const address = await this.findOne(tenantId, userId, id);
+    await this.assertServiceable(tenantId, {
+      pincode: address.pincode,
+      lat: address.lat ?? undefined,
+      lng: address.lng ?? undefined,
+    });
+    return address;
+  }
+
   async create(
     tenantId: string,
     userId: string,

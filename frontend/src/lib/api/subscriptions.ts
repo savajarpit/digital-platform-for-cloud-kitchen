@@ -1,6 +1,7 @@
 import { ApiError, proxyFetch } from "@/lib/api/client";
 import type { Address } from "@/lib/api/addresses";
 import type { DeliverySlot } from "@/lib/api/delivery-slots";
+import type { CancellationRequest } from "@/lib/api/cancellation-requests";
 
 export { ApiError };
 
@@ -188,7 +189,10 @@ export interface SubscriptionDetail extends SubscriptionSummary {
   upcoming: UpcomingPreviewDay[];
   addresses: Address[];
   deliverySlots: DeliverySlot[];
-  canCancel: boolean;
+  /** Latest cancellation request of any status (pending hold, or the kitchen's note on a rejection). */
+  cancellationRequest: CancellationRequest | null;
+  /** Active and no request pending — the "Request cancellation" button shows. */
+  canRequestCancellation: boolean;
   /** False when the SUPER_ADMIN has locked delivery-time selection for this tenant's plans — only address changes remain available. */
   canOverrideTime: boolean;
   /** The earliest date (YYYY-MM-DD) a skip/pause/override can still target — anything before this is within the notice window and should show as locked, not be submitted and rejected. */
@@ -226,6 +230,9 @@ export interface PlanPageSettings {
   isEnabled: boolean;
   /** The plan page will show a calendar (so its loading skeleton should too). */
   usesCalendar: boolean;
+  /** Set while new sign-ups are paused (subscription pause or the store
+   * being temporarily closed) — shown on the plan page, Buy disabled. */
+  newSubscriptionsClosedReason: string | null;
 }
 
 /** Client-safe read of the public subscription settings a plan detail page
@@ -235,9 +242,11 @@ export function getPlanPageSettings(): Promise<PlanPageSettings> {
     isEnabled: boolean;
     planViewMode: PlanViewMode;
     dateSelectionEnabled: boolean;
+    newSubscriptionsClosedReason?: string | null;
   }>("/subscriptions/settings/public").then((s) => ({
     isEnabled: s.isEnabled,
     usesCalendar: s.dateSelectionEnabled || s.planViewMode !== "ACCORDION",
+    newSubscriptionsClosedReason: s.newSubscriptionsClosedReason ?? null,
   }));
 }
 
@@ -324,12 +333,6 @@ export function setDayOverride(
   return proxyFetch(`/subscriptions/mine/${id}/day-override`, {
     method: "POST",
     body: JSON.stringify(input),
-  });
-}
-
-export function cancelSubscription(id: string): Promise<SubscriptionSummary> {
-  return proxyFetch<SubscriptionSummary>(`/subscriptions/mine/${id}/cancel`, {
-    method: "POST",
   });
 }
 

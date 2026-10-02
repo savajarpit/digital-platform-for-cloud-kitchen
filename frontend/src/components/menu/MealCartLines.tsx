@@ -1,5 +1,6 @@
 "use client";
 
+import { MAX_ITEM_QUANTITY } from "@/lib/constants/order-limits";
 import Link from "next/link";
 import { ShoppingCart } from "lucide-react";
 import { cartLineUnitPrice, useCartStore, type CartItem } from "@/lib/store/cart-store";
@@ -15,6 +16,7 @@ import { QuantityStepper } from "./QuantityStepper";
  */
 export function MealCartLines({ mealName, lines }: { mealName: string; lines: CartItem[] }) {
   const updateQuantity = useCartStore((s) => s.updateQuantity);
+  const atLimit = lines.reduce((sum, l) => sum + l.quantity, 0) >= MAX_ITEM_QUANTITY;
 
   return (
     <section className="rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
@@ -39,6 +41,7 @@ export function MealCartLines({ mealName, lines }: { mealName: string; lines: Ca
             <QuantityStepper
               quantity={line.quantity}
               label={mealName}
+              atLimit={atLimit}
               onDecrement={() => updateQuantity(line.lineKey, line.quantity - 1)}
               onIncrement={() => updateQuantity(line.lineKey, line.quantity + 1)}
             />

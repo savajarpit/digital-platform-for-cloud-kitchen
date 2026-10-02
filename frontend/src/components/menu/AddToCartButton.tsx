@@ -1,5 +1,6 @@
 "use client";
 
+import { MAX_ITEM_QUANTITY } from "@/lib/constants/order-limits";
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Plus } from "lucide-react";
@@ -94,6 +95,7 @@ export function AddToCartButton({
           quantity={inCart}
           label={meal.name}
           incrementDisabled={disabled}
+          atLimit={inCart >= MAX_ITEM_QUANTITY}
           onDecrement={() => updateQuantity(lastLine.lineKey, lastLine.quantity - 1)}
           onIncrement={() =>
             hasAddonGroups

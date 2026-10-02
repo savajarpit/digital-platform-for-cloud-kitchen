@@ -1,9 +1,14 @@
-/** Formats an integer paise amount (e.g. 24900) as a localized currency string. */
+/** Formats an integer paise amount (e.g. 24900) as a localized currency string.
+ * Whole rupees stay clean ("₹249"); anything with paise shows them exactly
+ * ("₹244.10") — rounding would show the customer a different amount than
+ * Razorpay actually charges (e.g. after a 10% discount on ₹249). */
 export function formatPriceFromPaise(priceInPaise: number, currency = "INR"): string {
+  const digits = Math.round(priceInPaise) % 100 === 0 ? 0 : 2;
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   }).format(priceInPaise / 100);
 }
 

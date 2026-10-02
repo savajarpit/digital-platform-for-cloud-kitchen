@@ -8,7 +8,9 @@ import {
   OrderStatus,
   PaymentStatus,
   Prisma,
+  Refund,
 } from '../../generated/prisma';
+import { CreateRefundInput } from '../../shared-modules/refunds/refunds.repository';
 
 export interface OrderItemAddonInput {
   addonItemId: string;
@@ -303,11 +305,16 @@ export class OrdersRepository {
     });
   }
 
-  markFailed(id: string): Promise<Order> {
-    return this.prisma.order.update({
-      where: { id },
+  /** Never downgrades a PAID order: Razorpay can deliver a stale
+   * `payment.failed` (an earlier attempt) after a retry already captured,
+   * since webhooks arrive out of order and get retried. Returns whether
+   * anything changed. */
+  async markFailed(id: string): Promise<boolean> {
+    const { count } = await this.prisma.order.updateMany({
+      where: { id, paymentStatus: { not: PaymentStatus.PAID } },
       data: { paymentStatus: PaymentStatus.FAILED },
     });
+    return count > 0;
   }
 
   /** Confirms a manually-created (CASH/UPI) order once payment is actually
@@ -424,22 +431,34 @@ export class OrdersRepository {
     return this.prisma.order.update({ where: { id }, data: { status } });
   }
 
+  /** Cancels and records the refund in one transaction, and only if the
+   * order isn't already cancelled — a double-clicked (or concurrent) cancel
+   * must never record two refunds. Returns null when it was already
+   * cancelled. */
   async cancelWithRefund(
     id: string,
     data: { cancelledByUserId: string; cancellationReason?: string },
-  ): Promise<OrderWithAdminDetails> {
-    const order = await this.prisma.order.update({
-      where: { id },
-      data: {
-        status: OrderStatus.CANCELLED,
-        paymentStatus: PaymentStatus.REFUNDED,
-        cancelledAt: new Date(),
-        cancelledByUserId: data.cancelledByUserId,
-        cancellationReason: data.cancellationReason,
-      },
-      include: ORDER_ADMIN_INCLUDE,
+    refund: CreateRefundInput,
+  ): Promise<{ order: OrderWithAdminDetails; refund: Refund } | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.order.updateMany({
+        where: { id, status: { not: OrderStatus.CANCELLED } },
+        data: {
+          status: OrderStatus.CANCELLED,
+          paymentStatus: PaymentStatus.REFUNDED,
+          cancelledAt: new Date(),
+          cancelledByUserId: data.cancelledByUserId,
+          cancellationReason: data.cancellationReason,
+        },
+      });
+      if (count === 0) return null;
+      const createdRefund = await tx.refund.create({ data: refund });
+      const order = await tx.order.findUniqueOrThrow({
+        where: { id },
+        include: ORDER_ADMIN_INCLUDE,
+      });
+      return { order: withAddressSnapshot(order), refund: createdRefund };
     });
-    return withAddressSnapshot(order);
   }
 
   // ── Overview dashboard aggregates ─────────────────────────

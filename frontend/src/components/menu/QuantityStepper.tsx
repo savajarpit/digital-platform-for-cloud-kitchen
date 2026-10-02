@@ -1,5 +1,6 @@
 "use client";
 
+import { MAX_ITEM_QUANTITY } from "@/lib/constants/order-limits";
 import { Minus, Plus } from "lucide-react";
 
 /**
@@ -13,6 +14,7 @@ export function QuantityStepper({
   onDecrement,
   onIncrement,
   incrementDisabled,
+  atLimit,
   label,
   size = "sm",
 }: {
@@ -20,6 +22,8 @@ export function QuantityStepper({
   onDecrement: () => void;
   onIncrement: () => void;
   incrementDisabled?: boolean;
+  /** The meal already has the per-order maximum in the cart. */
+  atLimit?: boolean;
   label: string;
   size?: "sm" | "md";
 }) {
@@ -48,8 +52,9 @@ export function QuantityStepper({
       <button
         type="button"
         onClick={onIncrement}
-        disabled={incrementDisabled}
-        aria-label={`Increase ${label}`}
+        disabled={incrementDisabled || atLimit}
+        title={atLimit ? `Max ${MAX_ITEM_QUANTITY} per order` : undefined}
+        aria-label={atLimit ? `${label}: maximum ${MAX_ITEM_QUANTITY} per order reached` : `Increase ${label}`}
         className={`${box} flex cursor-pointer items-center justify-center rounded-r-lg text-primary-700 transition-colors hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-primary-400 dark:hover:bg-primary-950`}
       >
         <Plus className={icon} />

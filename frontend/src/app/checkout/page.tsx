@@ -73,8 +73,18 @@ export default function CheckoutPage() {
 
   // Empty cart on arrival: nothing to check out. Mount-only on purpose — a
   // successful payment clears the cart and navigates to the order itself.
+  // Reads the store directly once persist has rehydrated: during hydration
+  // `items` is still the server snapshot (always empty), so trusting it sent
+  // every direct /checkout visit to /cart even with a full cart.
   useEffect(() => {
-    if (items.length === 0) router.replace("/cart");
+    const redirectIfEmpty = () => {
+      if (useCartStore.getState().items.length === 0) router.replace("/cart");
+    };
+    if (useCartStore.persist.hasHydrated()) {
+      redirectIfEmpty();
+      return;
+    }
+    return useCartStore.persist.onFinishHydration(redirectIfEmpty);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

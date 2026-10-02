@@ -1,5 +1,6 @@
 "use client";
 
+import { MAX_ITEM_QUANTITY } from "@/lib/constants/order-limits";
 import { useState } from "react";
 import Link from "next/link";
 import { Minus, Plus, SlidersHorizontal } from "lucide-react";
@@ -51,6 +52,8 @@ export function MealPurchasePanel({
     canAdd,
   } = useMealCustomization(meal);
   const [quantity, setQuantity] = useState(1);
+  // Units still allowed for this meal once what's already in the cart counts.
+  const remainingForMeal = Math.max(1, MAX_ITEM_QUANTITY - totalQuantity(cartLines));
 
   const hasCustomization = groups.some((g) => g.isActive && g.items.some((i) => i.isAvailable));
   const unitTotalInPaise = priceInPaise + addonTotalInPaise;
@@ -111,6 +114,7 @@ export function MealPurchasePanel({
             size="md"
             quantity={totalQuantity(cartLines)}
             label={meal.name}
+            atLimit={totalQuantity(cartLines) >= MAX_ITEM_QUANTITY}
             onDecrement={() => updateQuantity(plainLine.lineKey, plainLine.quantity - 1)}
             onIncrement={() => updateQuantity(plainLine.lineKey, plainLine.quantity + 1)}
           />
@@ -133,8 +137,10 @@ export function MealPurchasePanel({
           </span>
           <button
             type="button"
-            onClick={() => setQuantity((q) => q + 1)}
-            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+            onClick={() => setQuantity((q) => Math.min(q + 1, remainingForMeal))}
+            disabled={quantity >= remainingForMeal}
+            title={quantity >= remainingForMeal ? `Max ${MAX_ITEM_QUANTITY} per order` : undefined}
+            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
           >
             <Plus className="h-4 w-4" />
           </button>

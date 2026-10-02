@@ -183,6 +183,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <span>-{formatPriceFromPaise(order.discountInPaise)}</span>
             </div>
           )}
+          {order.deliveryFeeInPaise > 0 && (
+            <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
+              <span>Delivery fee</span>
+              <span>{formatPriceFromPaise(order.deliveryFeeInPaise)}</span>
+            </div>
+          )}
           <div className="mt-2 flex justify-between border-t border-zinc-200 pt-2 font-bold text-zinc-900 dark:border-zinc-700 dark:text-zinc-100">
             <span>Total</span>
             <span>{formatPriceFromPaise(order.totalInPaise)}</span>

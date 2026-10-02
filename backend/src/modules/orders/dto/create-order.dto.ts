@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsBoolean,
@@ -8,6 +9,7 @@ import {
   IsString,
   IsUUID,
   Matches,
+  Max,
   Min,
   MaxLength,
   ValidateIf,
@@ -16,15 +18,23 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrderFulfillmentType } from '../../../generated/prisma';
+import {
+  MAX_ADDON_QUANTITY,
+  MAX_CART_LINES,
+  MAX_ITEM_QUANTITY,
+} from '../../../common/constants/order-limits.constant';
 
 export class OrderItemAddonInputDto {
   @ApiProperty({ example: 'b3f1c2a0-...' })
   @IsUUID()
   addonItemId: string;
 
-  @ApiProperty({ example: 2 })
+  @ApiProperty({ example: 2, minimum: 1, maximum: MAX_ADDON_QUANTITY })
   @IsInt()
   @Min(1)
+  @Max(MAX_ADDON_QUANTITY, {
+    message: `An add-on can be added at most ${MAX_ADDON_QUANTITY} times per item.`,
+  })
   quantity: number;
 }
 
@@ -33,9 +43,12 @@ export class OrderItemInputDto {
   @IsUUID()
   mealId: string;
 
-  @ApiProperty({ example: 2 })
+  @ApiProperty({ example: 2, minimum: 1, maximum: MAX_ITEM_QUANTITY })
   @IsInt()
   @Min(1)
+  @Max(MAX_ITEM_QUANTITY, {
+    message: `You can order at most ${MAX_ITEM_QUANTITY} of an item at a time.`,
+  })
   quantity: number;
 
   @ApiPropertyOptional({
@@ -78,6 +91,9 @@ export class CreateOrderDto {
   @ApiProperty({ type: [OrderItemInputDto] })
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_CART_LINES, {
+    message: `An order can have at most ${MAX_CART_LINES} different lines.`,
+  })
   @ValidateNested({ each: true })
   @Type(() => OrderItemInputDto)
   items: OrderItemInputDto[];

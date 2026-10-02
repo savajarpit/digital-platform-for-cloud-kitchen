@@ -85,13 +85,22 @@ export class PromotionsRepository {
     });
   }
 
+  /** Only redemptions whose order went past checkout count toward usage
+   * limits — the row is written when the order is created, before payment,
+   * so an abandoned or failed payment must not burn a one-per-customer (or
+   * limited-quantity) coupon. */
   countCouponRedemptions(
     tenantId: string,
     couponId: string,
     userId?: string,
   ): Promise<number> {
     return this.prisma.couponRedemption.count({
-      where: { tenantId, couponId, ...(userId ? { userId } : {}) },
+      where: {
+        tenantId,
+        couponId,
+        ...(userId ? { userId } : {}),
+        order: { status: { not: 'PENDING_PAYMENT' } },
+      },
     });
   }
 
@@ -100,8 +109,14 @@ export class PromotionsRepository {
     couponId: string,
     userId?: string,
   ): Promise<number> {
+    // Same rule as countCouponRedemptions: an unpaid signup doesn't count.
     return this.prisma.planCouponRedemption.count({
-      where: { tenantId, couponId, ...(userId ? { userId } : {}) },
+      where: {
+        tenantId,
+        couponId,
+        ...(userId ? { userId } : {}),
+        subscription: { status: { not: 'PENDING_PAYMENT' } },
+      },
     });
   }
 

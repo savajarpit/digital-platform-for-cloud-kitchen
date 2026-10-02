@@ -1,5 +1,6 @@
 "use client";
 
+import { MAX_ITEM_QUANTITY } from "@/lib/constants/order-limits";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -228,8 +229,13 @@ export function ManualOrderForm() {
               <input
                 type="number"
                 min={1}
+                max={MAX_ITEM_QUANTITY}
                 value={row.quantity}
-                onChange={(e) => updateRow(i, { quantity: Math.max(1, Number(e.target.value) || 1) })}
+                onChange={(e) =>
+                  updateRow(i, {
+                    quantity: Math.min(MAX_ITEM_QUANTITY, Math.max(1, Number(e.target.value) || 1)),
+                  })
+                }
                 className="input w-16 shrink-0 py-1.5 text-center"
               />
               <button

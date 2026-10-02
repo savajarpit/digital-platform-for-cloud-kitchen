@@ -1,3 +1,4 @@
+import { assertRefundAmount } from '../../shared-modules/refunds/refund-amount.util';
 import {
   BadRequestException,
   ForbiddenException,
@@ -53,6 +54,11 @@ import {
   RefundMethod,
   Role,
 } from '../../generated/prisma';
+import { mealsOverQuantityLimit } from '../../common/utils/order-quantity.util';
+import {
+  MAX_ITEM_QUANTITY,
+  MIN_ONLINE_PAYMENT_IN_PAISE,
+} from '../../common/constants/order-limits.constant';
 
 export interface CreatedOrder {
   order: OrderWithDetails;
@@ -152,6 +158,14 @@ export class OrdersService {
       );
     }
 
+    const overLimit = mealsOverQuantityLimit(cartItems);
+    if (overLimit.length > 0) {
+      const name = mealMap.get(overLimit[0])?.name ?? 'an item';
+      throw new BadRequestException(
+        `You can order at most ${MAX_ITEM_QUANTITY} of ${name} at a time.`,
+      );
+    }
+
     const items: OrderItemInput[] = [];
     let rawSubtotalInPaise = 0;
     for (const cartItem of cartItems) {
@@ -211,12 +225,15 @@ export class OrdersService {
       (sum, item) => sum + item.priceInPaiseSnapshot * item.quantity,
       0,
     );
+    const subtotalInPaise = rawSubtotalInPaise + extraItemsValue;
 
     return {
       items: [...items, ...extraItems],
-      subtotalInPaise: rawSubtotalInPaise + extraItemsValue,
+      subtotalInPaise,
       rawSubtotalInPaise,
-      discountInPaise,
+      // Automatic promotions + a coupon can together never discount more
+      // than the order is worth — the stored figure feeds invoices/reports.
+      discountInPaise: Math.min(discountInPaise, subtotalInPaise),
       couponId,
       resolvedCouponCode,
     };
@@ -333,6 +350,13 @@ export class OrdersService {
     // against the live window and scheduled ones against their own day, so
     // a closed kitchen still takes bookings for a later open day.
     const core = await this.buildOrderCore(tenantId, userId, dto);
+    // Razorpay's minimum charge is ₹1 — a total wiped out by discounts would
+    // otherwise surface as a generic "could not start payment" 500.
+    if (core.totalInPaise < MIN_ONLINE_PAYMENT_IN_PAISE) {
+      throw new BadRequestException(
+        'Your order total must be at least ₹1 after discounts to pay online — please adjust your cart or remove the coupon.',
+      );
+    }
 
     // Razorpay order first, on purpose: if it fails, nothing is written to
     // our DB at all. Creating the local order first and the Razorpay order
@@ -997,6 +1021,11 @@ export class OrdersService {
     }
 
     const convenienceFeeInPaise = dto.convenienceFeeInPaise ?? 0;
+    assertRefundAmount(
+      dto.amountInPaise,
+      convenienceFeeInPaise,
+      order.totalInPaise,
+    );
     const netRefundInPaise = Math.max(
       0,
       dto.amountInPaise - convenienceFeeInPaise,
@@ -1031,24 +1060,25 @@ export class OrdersService {
       razorpayRefundId = result.razorpayRefundId;
     }
 
-    const refund = await this.refundsRepo.create({
-      tenantId,
+    const result = await this.ordersRepo.cancelWithRefund(
       orderId,
-      method: dto.method,
-      amountInPaise: dto.amountInPaise,
-      convenienceFeeInPaise,
-      netRefundInPaise,
-      razorpayRefundId,
-      recordedByUserId: staffUserId,
-      notes: dto.notes,
-    });
-
-    const updated = await this.ordersRepo.cancelWithRefund(orderId, {
-      cancelledByUserId: staffUserId,
-      cancellationReason: dto.reason,
-    });
-
-    return { order: updated, refund };
+      { cancelledByUserId: staffUserId, cancellationReason: dto.reason },
+      {
+        tenantId,
+        orderId,
+        method: dto.method,
+        amountInPaise: dto.amountInPaise,
+        convenienceFeeInPaise,
+        netRefundInPaise,
+        razorpayRefundId,
+        recordedByUserId: staffUserId,
+        notes: dto.notes,
+      },
+    );
+    if (!result) {
+      throw new BadRequestException('This order is already cancelled.');
+    }
+    return result;
   }
 
   /**

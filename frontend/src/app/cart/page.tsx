@@ -1,11 +1,13 @@
 "use client";
 
+import { MAX_ITEM_QUANTITY } from "@/lib/constants/order-limits";
 import { useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Minus, Pencil, Plus, ShoppingCart, Trash2, TriangleAlert } from "lucide-react";
 import {
   cartLineUnitPrice,
+  mealQuantityInCart,
   useCartStore,
   useCartSubtotal,
   type CartAddonSelection,
@@ -132,7 +134,12 @@ export default function CartPage() {
                   <button
                     type="button"
                     onClick={() => updateQuantity(item.lineKey, item.quantity + 1)}
-                    disabled={isUnavailable}
+                    disabled={isUnavailable || mealQuantityInCart(items, item.mealId) >= MAX_ITEM_QUANTITY}
+                    title={
+                      mealQuantityInCart(items, item.mealId) >= MAX_ITEM_QUANTITY
+                        ? `Max ${MAX_ITEM_QUANTITY} per order`
+                        : undefined
+                    }
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
                     aria-label="Increase quantity"
                   >

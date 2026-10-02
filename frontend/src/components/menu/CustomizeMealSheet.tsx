@@ -1,5 +1,6 @@
 "use client";
 
+import { MAX_ITEM_QUANTITY } from "@/lib/constants/order-limits";
 import { useState } from "react";
 import { Minus, Plus, X } from "lucide-react";
 import type { Meal } from "@/lib/api/menu";
@@ -87,8 +88,10 @@ export function CustomizeMealSheet({
               </span>
               <button
                 type="button"
-                onClick={() => setQuantity((q) => q + 1)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+                onClick={() => setQuantity((q) => Math.min(q + 1, MAX_ITEM_QUANTITY))}
+                disabled={quantity >= MAX_ITEM_QUANTITY}
+                title={quantity >= MAX_ITEM_QUANTITY ? `Max ${MAX_ITEM_QUANTITY} per order` : undefined}
+                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
               >
                 <Plus className="h-3.5 w-3.5" />
               </button>

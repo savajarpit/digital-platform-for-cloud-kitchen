@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { MAX_ITEM_QUANTITY } from "@/lib/constants/order-limits";
 
 export interface CartAddonSelection {
   addonItemId: string;
@@ -33,6 +34,15 @@ export function cartLineUnitPrice(item: Pick<CartItem, "priceInPaise" | "addons"
   return item.priceInPaise + addonTotal;
 }
 
+/** Units of this meal across every line (add-on variants included),
+ * optionally ignoring one line — the per-meal cap the API also enforces. */
+export function mealQuantityInCart(items: CartItem[], mealId: string, exceptLineKey?: string): number {
+  return items.reduce(
+    (sum, i) => (i.mealId === mealId && i.lineKey !== exceptLineKey ? sum + i.quantity : sum),
+    0,
+  );
+}
+
 interface CartState {
   items: CartItem[];
   addItem: (item: Omit<CartItem, "quantity" | "lineKey">, quantity?: number) => void;
@@ -50,9 +60,11 @@ export const useCartStore = create<CartState>()(
   persist(
     (set) => ({
       items: [],
-      addItem: (item, quantity = 1) => {
+      addItem: (item, requested = 1) => {
         const lineKey = buildLineKey(item.mealId, item.addons);
         set((state) => {
+          const quantity = Math.min(requested, MAX_ITEM_QUANTITY - mealQuantityInCart(state.items, item.mealId));
+          if (quantity <= 0) return state;
           const existing = state.items.find((i) => i.lineKey === lineKey);
           if (existing) {
             return {
@@ -71,9 +83,14 @@ export const useCartStore = create<CartState>()(
           set((state) => ({ items: state.items.filter((i) => i.lineKey !== lineKey) }));
           return;
         }
-        set((state) => ({
-          items: state.items.map((i) => (i.lineKey === lineKey ? { ...i, quantity } : i)),
-        }));
+        set((state) => {
+          const line = state.items.find((i) => i.lineKey === lineKey);
+          if (!line) return state;
+          const capped = Math.min(quantity, MAX_ITEM_QUANTITY - mealQuantityInCart(state.items, line.mealId, lineKey));
+          return {
+            items: state.items.map((i) => (i.lineKey === lineKey ? { ...i, quantity: capped } : i)),
+          };
+        });
       },
       updateItemAddons: (lineKey, addons) => {
         set((state) => {
@@ -85,6 +102,8 @@ export const useCartStore = create<CartState>()(
           const mergeTarget = withoutOld.find((i) => i.lineKey === newLineKey);
           if (mergeTarget) {
             return {
+              // Merging two lines of the same meal never changes the meal's
+              // total units, so this can't exceed MAX_ITEM_QUANTITY.
               items: withoutOld.map((i) =>
                 i.lineKey === newLineKey ? { ...i, quantity: i.quantity + existing.quantity } : i,
               ),

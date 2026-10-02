@@ -1,3 +1,4 @@
+import { cleanValidationMessage } from '../utils/validation-message.util';
 import {
   ExceptionFilter,
   Catch,
@@ -32,11 +33,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const isStructuredResponse =
       typeof exceptionResponse === 'object' && exceptionResponse !== null;
 
-    const message = isStructuredResponse
-      ? (exceptionResponse as any).message
-      : exception instanceof Error
-        ? exception.message
-        : 'Internal server error';
+    const rawMessage = (
+      isStructuredResponse
+        ? (exceptionResponse as { message?: string | string[] }).message
+        : exception instanceof Error
+          ? exception.message
+          : 'Internal server error'
+    ) as string | string[];
+    const message = Array.isArray(rawMessage)
+      ? rawMessage.map(cleanValidationMessage)
+      : rawMessage;
 
     // Exceptions thrown as `new ForbiddenException({ message, code, ... })`
     // can carry machine-readable extras (e.g. `code: 'ACCOUNT_NOT_VERIFIED'`)

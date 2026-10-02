@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PromotionsRepository } from './promotions.repository';
 import { SettingsRepository } from '../settings/settings.repository';
+import { FeaturesService } from '../features/features.service';
 import { DateUtil } from '../../common/utils/date.util';
 import { Coupon, Promotion, PromotionType } from '../../generated/prisma';
 import { OrderItemInput } from '../orders/orders.repository';
@@ -35,6 +37,12 @@ export interface CouponValidationResult {
 }
 
 const SCHEDULED_DISCOUNT_SCOPE_TYPES: PromotionType[] = ['SCHEDULED_DISCOUNT'];
+const PROMOTIONS_FEATURE_KEY = 'promotions';
+
+/** appliesTo is ORDERS | PLANS | BOTH — each surface honours its own side
+ * plus BOTH, never the other one. */
+const appliesToOrders = (p: { appliesTo: string }) => p.appliesTo !== 'PLANS';
+const appliesToPlans = (p: { appliesTo: string }) => p.appliesTo !== 'ORDERS';
 const AUTOMATIC_TYPES: PromotionType[] = [
   'BOGO',
   'FREE_ITEM_ON_MINIMUM',
@@ -46,7 +54,16 @@ export class PromotionsService {
   constructor(
     private readonly promotionsRepo: PromotionsRepository,
     private readonly settingsRepo: SettingsRepository,
+    private readonly featuresService: FeaturesService,
   ) {}
+
+  /** The single entitlement check for every customer-facing promotion
+   * effect (discounts, badges, coupons, bonus days). The admin screens are
+   * gated at the controller, but existing promotions must also stop
+   * applying the moment SUPER_ADMIN revokes the feature. */
+  private promotionsEnabled(tenantId: string): Promise<boolean> {
+    return this.featuresService.hasFeature(tenantId, PROMOTIONS_FEATURE_KEY);
+  }
 
   /**
    * Computes every automatic (no-code) promotion for a cart: scheduled
@@ -59,13 +76,17 @@ export class PromotionsService {
     mealsById: Map<string, CartMeal>,
     rawSubtotalInPaise: number,
   ): Promise<CartPromotionsResult> {
-    const [promotions, timezone] = await Promise.all([
+    if (!(await this.promotionsEnabled(tenantId))) {
+      return { extraItems: [], discountInPaise: 0 };
+    }
+    const [allPromotions, timezone] = await Promise.all([
       this.promotionsRepo.findActivePromotionsByTypes(
         tenantId,
         AUTOMATIC_TYPES,
       ),
       this.getTenantTimezone(tenantId),
     ]);
+    const promotions = allPromotions.filter(appliesToOrders);
 
     let discountInPaise = 0;
 
@@ -179,6 +200,9 @@ export class PromotionsService {
     userId: string,
     subtotalInPaise: number,
   ): Promise<CouponValidationResult> {
+    if (!(await this.promotionsEnabled(tenantId))) {
+      throw new BadRequestException('Invalid coupon code');
+    }
     const coupon = await this.promotionsRepo.findCouponByCode(tenantId, code);
     if (!coupon || !coupon.isActive) {
       throw new BadRequestException('Invalid coupon code');
@@ -222,10 +246,12 @@ export class PromotionsService {
       }
     }
 
-    const discountInPaise =
+    const discountInPaise = Math.min(
+      subtotalInPaise,
       coupon.discountType === 'PERCENTAGE'
         ? Math.floor((subtotalInPaise * coupon.discountValue) / 100)
-        : Math.min(coupon.discountValue, subtotalInPaise);
+        : coupon.discountValue,
+    );
 
     return { couponId: coupon.id, code: coupon.code, discountInPaise };
   }
@@ -245,6 +271,9 @@ export class PromotionsService {
     userId: string,
     planPriceInPaise: number,
   ): Promise<CouponValidationResult> {
+    if (!(await this.promotionsEnabled(tenantId))) {
+      throw new BadRequestException('Invalid coupon code');
+    }
     const coupon = await this.promotionsRepo.findCouponByCode(tenantId, code);
     if (!coupon || !coupon.isActive || coupon.appliesTo === 'ORDERS') {
       throw new BadRequestException('Invalid coupon code');
@@ -285,10 +314,12 @@ export class PromotionsService {
       }
     }
 
-    const discountInPaise =
+    const discountInPaise = Math.min(
+      planPriceInPaise,
       coupon.discountType === 'PERCENTAGE'
         ? Math.floor((planPriceInPaise * coupon.discountValue) / 100)
-        : Math.min(coupon.discountValue, planPriceInPaise);
+        : coupon.discountValue,
+    );
 
     return { couponId: coupon.id, code: coupon.code, discountInPaise };
   }
@@ -315,6 +346,7 @@ export class PromotionsService {
     planId: string,
     durationDays: number,
   ): Promise<number> {
+    if (!(await this.promotionsEnabled(tenantId))) return 0;
     const promotions = await this.promotionsRepo.findActivePlanBonusPromotions(
       tenantId,
       planId,
@@ -332,6 +364,7 @@ export class PromotionsService {
   ): Promise<
     Map<string, { promotionName: string; discountPercentage: number }>
   > {
+    if (!(await this.promotionsEnabled(tenantId))) return new Map();
     const [promotions, timezone] = await Promise.all([
       this.promotionsRepo.findActivePromotionsByTypes(
         tenantId,
@@ -339,8 +372,8 @@ export class PromotionsService {
       ),
       this.getTenantTimezone(tenantId),
     ]);
-    const activeNow = promotions.filter((p) =>
-      this.isWithinWindow(p, timezone),
+    const activeNow = promotions.filter(
+      (p) => appliesToOrders(p) && this.isWithinWindow(p, timezone),
     );
 
     const result = new Map<
@@ -363,14 +396,16 @@ export class PromotionsService {
     return result;
   }
 
-  /** Active SCHEDULED_DISCOUNT promotion (appliesTo: PLANS) per plan — used
-   * for both the storefront plan-price badge and subscribe-time pricing. */
+  /** Active SCHEDULED_DISCOUNT promotion (appliesTo: PLANS or BOTH) per plan
+   * — used for both the storefront plan-price badge and subscribe-time
+   * pricing. */
   async getActiveScheduledDiscountsForPlans(
     tenantId: string,
     planIds: string[],
   ): Promise<
     Map<string, { promotionName: string; discountPercentage: number }>
   > {
+    if (!(await this.promotionsEnabled(tenantId))) return new Map();
     const [promotions, timezone] = await Promise.all([
       this.promotionsRepo.findActivePromotionsByTypes(
         tenantId,
@@ -379,7 +414,7 @@ export class PromotionsService {
       this.getTenantTimezone(tenantId),
     ]);
     const activeNow = promotions.filter(
-      (p) => p.appliesTo === 'PLANS' && this.isWithinWindow(p, timezone),
+      (p) => appliesToPlans(p) && this.isWithinWindow(p, timezone),
     );
 
     const result = new Map<
@@ -439,10 +474,13 @@ export class PromotionsService {
     return this.promotionsRepo.findCoupons(tenantId);
   }
 
-  createCoupon(tenantId: string, dto: CreateCouponDto): Promise<Coupon> {
+  async createCoupon(tenantId: string, dto: CreateCouponDto): Promise<Coupon> {
+    assertValidCouponValue(dto.discountType, dto.discountValue);
+    const code = dto.code.trim().toUpperCase();
+    await this.assertCouponCodeFree(tenantId, code);
     return this.promotionsRepo.createCoupon(tenantId, {
       ...dto,
-      code: dto.code.trim().toUpperCase(),
+      code,
       validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
       validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
     });
@@ -455,12 +493,29 @@ export class PromotionsService {
   ): Promise<Coupon> {
     const existing = await this.promotionsRepo.findCouponById(tenantId, id);
     if (!existing) throw new NotFoundException('Coupon not found');
+    assertValidCouponValue(
+      dto.discountType ?? existing.discountType,
+      dto.discountValue ?? existing.discountValue,
+    );
+    const code = dto.code ? dto.code.trim().toUpperCase() : undefined;
+    if (code && code !== existing.code) {
+      await this.assertCouponCodeFree(tenantId, code);
+    }
     return this.promotionsRepo.updateCoupon(id, {
       ...dto,
-      code: dto.code ? dto.code.trim().toUpperCase() : undefined,
+      code,
       validFrom: dto.validFrom ? new Date(dto.validFrom) : undefined,
       validUntil: dto.validUntil ? new Date(dto.validUntil) : undefined,
     });
+  }
+
+  private async assertCouponCodeFree(
+    tenantId: string,
+    code: string,
+  ): Promise<void> {
+    if (await this.promotionsRepo.findCouponByCode(tenantId, code)) {
+      throw new ConflictException(`A coupon with code ${code} already exists.`);
+    }
   }
 
   async deleteCoupon(tenantId: string, id: string): Promise<void> {
@@ -571,6 +626,19 @@ export class PromotionsService {
         );
       }
     }
+  }
+}
+
+/** A percentage coupon above 100% would discount more than the order is
+ * worth (and push the payable total to zero, which Razorpay rejects). */
+function assertValidCouponValue(
+  discountType: string,
+  discountValue: number,
+): void {
+  if (discountType === 'PERCENTAGE' && discountValue > 100) {
+    throw new BadRequestException(
+      'A percentage discount cannot be more than 100%.',
+    );
   }
 }
 

@@ -145,7 +145,12 @@ export class PaymentsService {
           await this.enqueueOrderConfirmation(order.tenantId, order.id);
         }
       } else if (payload.event === 'payment.failed') {
-        await this.ordersRepo.markFailed(order.id);
+        const changed = await this.ordersRepo.markFailed(order.id);
+        if (!changed) {
+          this.logger.log(
+            `Ignored stale payment.failed for already-paid order ${order.id}`,
+          );
+        }
       }
       await this.webhookEventsRepo.markProcessed(record.id);
     } catch (error) {

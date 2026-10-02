@@ -17,7 +17,9 @@ import {
   SubscriptionSettings,
   SubscriptionSkip,
   SubscriptionStatus,
+  Refund,
 } from '../../generated/prisma';
+import { CreateRefundInput } from '../../shared-modules/refunds/refunds.repository';
 
 export interface PlanDayInput {
   dayNumber?: number;
@@ -506,19 +508,30 @@ export class SubscriptionsRepository {
   }
 
   /** Admin cancel-with-refund path — distinct from the plain
-   * cancelSubscription() above (customer self-service, no refund trail). */
+   * cancelSubscription() above (customer self-service, no refund trail).
+   * Same all-or-nothing, cancel-once guarantee as the order version —
+   * returns null when the subscription was already cancelled. */
   cancelWithRefund(
     id: string,
     data: { cancelledByUserId: string; cancellationReason?: string },
-  ): Promise<Subscription> {
-    return this.prisma.subscription.update({
-      where: { id },
-      data: {
-        status: SubscriptionStatus.CANCELLED,
-        cancelledAt: new Date(),
-        cancelledByUserId: data.cancelledByUserId,
-        cancellationReason: data.cancellationReason,
-      },
+    refund: CreateRefundInput,
+  ): Promise<{ subscription: Subscription; refund: Refund } | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.subscription.updateMany({
+        where: { id, status: { not: SubscriptionStatus.CANCELLED } },
+        data: {
+          status: SubscriptionStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancelledByUserId: data.cancelledByUserId,
+          cancellationReason: data.cancellationReason,
+        },
+      });
+      if (count === 0) return null;
+      const createdRefund = await tx.refund.create({ data: refund });
+      const subscription = await tx.subscription.findUniqueOrThrow({
+        where: { id },
+      });
+      return { subscription, refund: createdRefund };
     });
   }
 

@@ -1,3 +1,5 @@
+import { assertRefundAmount } from '../../shared-modules/refunds/refund-amount.util';
+import { MIN_ONLINE_PAYMENT_IN_PAISE } from '../../common/constants/order-limits.constant';
 import {
   BadRequestException,
   ForbiddenException,
@@ -844,6 +846,14 @@ export class SubscriptionsService {
       resolvedCouponCode = result.code;
     }
     const amountInPaise = Math.max(0, plan.priceInPaise - discountInPaise);
+    // Razorpay's minimum charge is ₹1. Checked before anything is written:
+    // the subscription row and coupon redemption below are created ahead of
+    // the Razorpay order, so a late failure would orphan both.
+    if (amountInPaise < MIN_ONLINE_PAYMENT_IN_PAISE) {
+      throw new BadRequestException(
+        'The plan total must be at least ₹1 after discounts to pay online — please remove the coupon.',
+      );
+    }
 
     const bonusDays = await this.promotionsService.getApplicablePlanBonusDays(
       tenantId,
@@ -1842,6 +1852,11 @@ export class SubscriptionsService {
     }
 
     const convenienceFeeInPaise = dto.convenienceFeeInPaise ?? 0;
+    assertRefundAmount(
+      dto.amountInPaise,
+      convenienceFeeInPaise,
+      subscription.priceInPaiseSnapshot,
+    );
     const netRefundInPaise = Math.max(
       0,
       dto.amountInPaise - convenienceFeeInPaise,
@@ -1878,24 +1893,25 @@ export class SubscriptionsService {
       razorpayRefundId = result.razorpayRefundId;
     }
 
-    const refund = await this.refundsRepo.create({
-      tenantId,
-      subscriptionId: id,
-      method: dto.method,
-      amountInPaise: dto.amountInPaise,
-      convenienceFeeInPaise,
-      netRefundInPaise,
-      razorpayRefundId,
-      recordedByUserId: staffUserId,
-      notes: dto.notes,
-    });
-
-    const updated = await this.subscriptionsRepo.cancelWithRefund(id, {
-      cancelledByUserId: staffUserId,
-      cancellationReason: dto.reason,
-    });
-
-    return { subscription: updated, refund };
+    const result = await this.subscriptionsRepo.cancelWithRefund(
+      id,
+      { cancelledByUserId: staffUserId, cancellationReason: dto.reason },
+      {
+        tenantId,
+        subscriptionId: id,
+        method: dto.method,
+        amountInPaise: dto.amountInPaise,
+        convenienceFeeInPaise,
+        netRefundInPaise,
+        razorpayRefundId,
+        recordedByUserId: staffUserId,
+        notes: dto.notes,
+      },
+    );
+    if (!result) {
+      throw new BadRequestException('This subscription is already cancelled.');
+    }
+    return result;
   }
 
   private async getOwnedActiveSubscription(

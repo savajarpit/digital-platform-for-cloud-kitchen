@@ -62,6 +62,14 @@ export function CancelRefundForm({
   const amountInPaise = Math.round((Number(amountRupees) || 0) * 100);
   const feeInPaise = Math.round((Number(feeRupees) || 0) * 100);
   const netInPaise = Math.max(0, amountInPaise - feeInPaise);
+  // Same rules the API enforces — `defaultAmountInPaise` is what the customer
+  // actually paid (order total / plan price), so it's also the ceiling.
+  const amountError =
+    amountInPaise > defaultAmountInPaise
+      ? `Refund can't be more than the ${formatPriceFromPaise(defaultAmountInPaise)} the customer paid.`
+      : feeInPaise > amountInPaise
+        ? "The deducted fee can't be more than the refund amount."
+        : null;
 
   async function handleSubmit() {
     setSubmitting(true);
@@ -131,6 +139,7 @@ export function CancelRefundForm({
           <input
             type="number"
             min={0}
+            max={defaultAmountInPaise / 100}
             step="0.01"
             value={amountRupees}
             onChange={(e) => setAmountRupees(e.target.value)}
@@ -154,6 +163,11 @@ export function CancelRefundForm({
           Net refund: <span className="font-medium text-zinc-900 dark:text-zinc-100">{formatPriceFromPaise(netInPaise)}</span>
         </div>
       </div>
+      {amountError && (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950 dark:text-red-400">
+          {amountError}
+        </p>
+      )}
 
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Reason (internal)</label>
@@ -186,7 +200,7 @@ export function CancelRefundForm({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={submitting || amountInPaise < 0}
+          disabled={submitting || amountInPaise < 0 || amountError !== null}
           className="btn-primary btn-sm w-fit cursor-pointer"
         >
           {submitting ? "Cancelling…" : "Confirm Cancel & Refund"}

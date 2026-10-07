@@ -21,15 +21,17 @@ import { UpcomingDaysList } from "@/components/subscriptions/UpcomingDaysList";
 import { SubscriptionCalendarSection } from "@/components/subscriptions/SubscriptionCalendarSection";
 import { MoveDeliveryDateModal } from "@/components/subscriptions/MoveDeliveryDateModal";
 import { SubscriptionPauseAndCancel } from "@/components/subscriptions/SubscriptionPauseAndCancel";
+import { SubscriptionCancelledNote } from "@/components/subscriptions/SubscriptionCancelledNote";
 import { CancellationRequestStatusNote } from "@/components/cancellations/CancellationRequestStatusNote";
 import { SubscriptionDetailSkeleton } from "@/components/subscriptions/SubscriptionDetailSkeleton";
 import { PlanViewTabs, type PlanViewTab } from "@/components/subscriptions/PlanViewTabs";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { SUBSCRIPTION_STATUS_STYLES } from "@/lib/format/status-styles";
+import { subscriptionPeriodLabel } from "@/lib/format/subscription-period";
 
 /** "Mon, 5 Oct" for a tenant-local YYYY-MM-DD (UTC-parsed so it never shifts a day). */
 function formatDay(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-IN", {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -204,9 +206,9 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
           </div>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             {formatPriceFromPaise(subscription.priceInPaiseSnapshot)}
-            {subscription.cycleEnd &&
-              ` · Active through ${new Date(subscription.cycleEnd).toLocaleDateString()}`}
-            {subscription.bankedDays > 0 && ` · ${subscription.bankedDays} day(s) banked`}
+            {subscriptionPeriodLabel(subscription.status, subscription.cycleEnd) &&
+              ` · ${subscriptionPeriodLabel(subscription.status, subscription.cycleEnd)}`}
+            {isActive && subscription.bankedDays > 0 && ` · ${subscription.bankedDays} day(s) banked`}
           </p>
         </div>
         <Link
@@ -217,6 +219,8 @@ export default function SubscriptionDetailPage({ params }: { params: Promise<{ i
           Invoice
         </Link>
       </div>
+
+      {subscription.status === "CANCELLED" && <SubscriptionCancelledNote subscription={subscription} />}
 
       {subscription.cancellationRequest && (
         <div className="mt-6">

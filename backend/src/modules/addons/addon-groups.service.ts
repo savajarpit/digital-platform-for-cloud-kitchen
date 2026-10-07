@@ -26,9 +26,12 @@ export class AddonGroupsService {
   constructor(private readonly addonsRepo: AddonGroupsRepository) {}
 
   createGroup(tenantId: string, dto: CreateAddonGroupDto): Promise<AddonGroup> {
-    if (dto.minSelections !== undefined && dto.maxSelections !== undefined) {
-      this.assertSelectionBoundsValid(dto.minSelections, dto.maxSelections);
-    }
+    // A missing bound takes the column default (min 0, max 1), so "min 5"
+    // alone is checked against max 1 instead of slipping through.
+    this.assertSelectionBoundsValid(
+      dto.minSelections ?? 0,
+      dto.maxSelections ?? 1,
+    );
     return this.addonsRepo.createGroup(tenantId, dto);
   }
 

@@ -246,6 +246,7 @@ export class SettingsRepository {
               'PENDING_PAYMENT',
               'CONFIRMED',
               'PREPARING',
+              'READY',
               'OUT_FOR_DELIVERY',
             ],
           },
@@ -330,5 +331,28 @@ export class SettingsRepository {
 
   deleteKitchenZone(id: string): Promise<KitchenZone> {
     return this.prisma.kitchenZone.delete({ where: { id } });
+  }
+
+  /** What references a kitchen zone: its dining tables and waitlist entries
+   * (the FKs RESTRICT, so a delete would fail) and the pickup / dine-in
+   * orders placed there (SET NULL — they'd lose their outlet). */
+  async countKitchenZoneUsage(
+    tenantId: string,
+    zoneId: string,
+  ): Promise<{ tables: number; waitlist: number; orders: number }> {
+    const [tables, waitlist, orders] = await Promise.all([
+      this.prisma.diningTable.count({ where: { kitchenZoneId: zoneId } }),
+      this.prisma.waitlistEntry.count({ where: { kitchenZoneId: zoneId } }),
+      this.prisma.order.count({
+        where: {
+          tenantId,
+          OR: [
+            { pickupKitchenZoneId: zoneId },
+            { dineInKitchenZoneId: zoneId },
+          ],
+        },
+      }),
+    ]);
+    return { tables, waitlist, orders };
   }
 }

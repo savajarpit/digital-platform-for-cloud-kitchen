@@ -36,6 +36,9 @@ export class TenantLimitsRepository {
       where: {
         tenantId,
         status: { not: OrderStatus.PENDING_PAYMENT },
+        // A subscription's daily deliveries aren't new orders — subscribers
+        // have their own cap (countActiveSubscribers).
+        subscriptionId: null,
         createdAt: { gte: monthStart, lt: monthEnd },
       },
     });

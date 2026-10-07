@@ -1,4 +1,4 @@
-import { AlertTriangle, Check, Lock, SkipForward } from "lucide-react";
+import { AlertTriangle, Check, Lock, PauseCircle, SkipForward } from "lucide-react";
 import type { SubscriptionCalendarDay } from "@/lib/api/subscriptions";
 import {
   dayOfMonth,
@@ -104,6 +104,13 @@ export function SubscriptionCalendarCell({
         <span className="truncate">Holiday</span>
       </span>
     );
+  } else if (day.kind === "ON_HOLD") {
+    status = (
+      <span className="flex items-center gap-0.5">
+        <PauseCircle className="h-3 w-3" aria-hidden />
+        <span className="hidden sm:inline">On hold</span>
+      </span>
+    );
   } else if (day.kind === "OFF_DAY") {
     status = (
       <>
@@ -135,7 +142,8 @@ export function SubscriptionCalendarCell({
         {number}
       </span>
 
-      <span className="flex w-full min-w-0 flex-col gap-1 text-[10px] leading-none">
+      {/* 9px + tight on phones, same as PlanDayCell: "Day 2" fits a 390px box. */}
+      <span className="flex w-full min-w-0 flex-col gap-1 text-[9px] leading-none tracking-tight sm:text-[10px] sm:tracking-normal">
         {withMeals && slots.length > 0 && (
           <span className="flex flex-wrap items-center gap-0.5" aria-hidden>
             {slots.map((slot, i) => (

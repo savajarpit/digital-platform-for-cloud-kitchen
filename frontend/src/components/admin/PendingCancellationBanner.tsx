@@ -13,7 +13,7 @@ import { RejectCancellationSheet } from "./RejectCancellationSheet";
 export const CANCEL_REFUND_ANCHOR = "cancel-refund";
 
 function formatDay(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-IN", {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -72,7 +72,7 @@ export function PendingCancellationBanner({
         <div className="min-w-0">
           <p className="font-semibold">
             {customer} asked to cancel on{" "}
-            {new Date(request.createdAt).toLocaleString(undefined, {
+            {new Date(request.createdAt).toLocaleString("en-IN", {
               day: "numeric",
               month: "short",
               hour: "numeric",

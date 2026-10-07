@@ -4,6 +4,7 @@ export type OrderStatus =
   | "PENDING_PAYMENT"
   | "CONFIRMED"
   | "PREPARING"
+  | "READY"
   | "OUT_FOR_DELIVERY"
   | "DELIVERED"
   | "CANCELLED";
@@ -16,6 +17,7 @@ interface Stage {
 const DELIVERY_STAGES: Stage[] = [
   { status: "CONFIRMED", label: "Confirmed" },
   { status: "PREPARING", label: "Preparing" },
+  { status: "READY", label: "Ready for delivery" },
   { status: "OUT_FOR_DELIVERY", label: "Out for Delivery" },
   { status: "DELIVERED", label: "Delivered" },
 ];
@@ -23,7 +25,7 @@ const DELIVERY_STAGES: Stage[] = [
 const PICKUP_STAGES: Stage[] = [
   { status: "CONFIRMED", label: "Confirmed" },
   { status: "PREPARING", label: "Preparing" },
-  { status: "OUT_FOR_DELIVERY", label: "Ready for Pickup" },
+  { status: "READY", label: "Ready for Pickup" },
   { status: "DELIVERED", label: "Picked Up" },
 ];
 
@@ -32,12 +34,14 @@ const PICKUP_STAGES: Stage[] = [
 const DINE_IN_STAGES: Stage[] = [
   { status: "CONFIRMED", label: "Confirmed" },
   { status: "PREPARING", label: "Preparing" },
+  { status: "READY", label: "Ready to serve" },
   { status: "DELIVERED", label: "Served" },
 ];
 
 const TAKEAWAY_STAGES: Stage[] = [
   { status: "CONFIRMED", label: "Confirmed" },
   { status: "PREPARING", label: "Preparing" },
+  { status: "READY", label: "Ready for Pickup" },
   { status: "DELIVERED", label: "Picked Up" },
 ];
 
@@ -47,11 +51,11 @@ const STAGES_BY_FULFILLMENT_TYPE: Record<string, Stage[]> = {
   TAKEAWAY: TAKEAWAY_STAGES,
 };
 
-/** Visual stage-progress indicator for an order's lifecycle. Reuses the
- * existing OrderStatus enum values as-is (OUT_FOR_DELIVERY/DELIVERED just
- * get pickup-appropriate labels) — no new backend states. CANCELLED is a
- * terminal override, not a stage on the line, matching how the admin
- * order page already treats DELIVERED/CANCELLED as final states. */
+/** Visual stage-progress indicator for an order's lifecycle. READY and
+ * DELIVERED get labels that fit the order type ("Ready to serve", "Picked
+ * Up"). CANCELLED is a terminal override, not a stage on the line, matching
+ * how the admin order page already treats DELIVERED/CANCELLED as final
+ * states. */
 export function OrderStatusStepper({
   status,
   fulfillmentType,
@@ -69,13 +73,17 @@ export function OrderStatusStepper({
   if (status === "PENDING_PAYMENT") return null;
 
   const stages = STAGES_BY_FULFILLMENT_TYPE[fulfillmentType] ?? DELIVERY_STAGES;
-  const activeIndex = stages.findIndex((s) => s.status === status);
+  // Pickup orders from before READY existed used OUT_FOR_DELIVERY to mean
+  // "ready to collect".
+  const stageStatus = status === "OUT_FOR_DELIVERY" && fulfillmentType !== "DELIVERY" ? "READY" : status;
+  const activeIndex = stages.findIndex((s) => s.status === stageStatus);
 
   return (
     <div className="flex items-center">
       {stages.map((stage, i) => {
-        const done = i < activeIndex;
-        const current = i === activeIndex;
+        // Reaching the last stage (Delivered/Served/Picked Up) completes it.
+        const done = i < activeIndex || (i === activeIndex && i === stages.length - 1);
+        const current = i === activeIndex && !done;
         return (
           <div key={stage.status} className="flex flex-1 items-center last:flex-none">
             <div className="flex flex-col items-center gap-1.5">

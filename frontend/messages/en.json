@@ -61,6 +61,7 @@
     "orderSummary": "Order summary",
     "paymentFailed": "Payment failed or was cancelled — your order hasn't been charged.",
     "verifyingPayment": "Confirming your payment…",
+    "paymentConfirming": "Payment received — we're confirming it. Your order will show as confirmed within a few minutes.",
     "paymentReceived": "Payment received",
     "settingUpOrder": "Setting up your order…",
     "deliveryDay": "Delivery day",
@@ -127,6 +128,7 @@
   "order": {
     "confirmedTitle": "Order confirmed!",
     "confirmedSubtitle": "Your order has been placed and payment received.",
+    "payOnDeliverySubtitle": "Your order is confirmed — pay when it arrives.",
     "orderNumber": "Order number",
     "viewOrders": "View my orders",
     "backToMenu": "Back to menu",

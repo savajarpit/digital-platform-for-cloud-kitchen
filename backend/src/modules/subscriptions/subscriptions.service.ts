@@ -2,6 +2,7 @@ import { assertRefundAmount } from '../../shared-modules/refunds/refund-amount.u
 import { MIN_ONLINE_PAYMENT_IN_PAISE } from '../../common/constants/order-limits.constant';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -39,11 +40,21 @@ import { buildUpcomingPreview } from '../../common/utils/subscription-upcoming.u
 import { projectHolidayReplacements } from '../../common/utils/subscription-holiday-projection.util';
 import { deliversOn } from '../../common/utils/subscription-prep.util';
 import { newSubscriptionsClosedReason } from './subscription-availability.util';
+import { normalizePlanText } from './plan-text.util';
+import {
+  type DeliveryCalendar,
+  holdError,
+  pausedDeliveryDays,
+  pauseRangeError,
+  skipDateError,
+  skippedDateSet,
+} from './subscription-day-rules';
 import { slotOffersFor } from '../settings/delivery-slot-rules';
 import {
   SubscriptionOffDayHandling,
   SubscriptionPlanSchedulingMode,
   SubscriptionPlanViewMode,
+  SubscriptionStatus,
 } from '../../generated/prisma';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
@@ -66,6 +77,8 @@ import { SubscriptionBankingService } from './subscription-banking.service';
 import { RefundsRepository } from '../../shared-modules/refunds/refunds.repository';
 import { RAZORPAY_REFUNDS_FEATURE_KEY } from '../../shared-modules/refunds/refunds.constants';
 import { CancelRefundDto } from '../../shared-modules/refunds/dto/cancel-refund.dto';
+import { withRefundLock } from '../../shared-modules/refunds/refund-lock';
+import { RedisService } from '../../shared-modules/cache/redis.service';
 import {
   PaymentMethod,
   Refund,
@@ -84,6 +97,8 @@ const SUBSCRIPTIONS_FEATURE_KEY = 'subscriptions';
 // brand-new tenant with no grant row keeps today's working behavior instead
 // of silently losing the time picker the moment this feature key exists.
 const TIME_LOCK_FEATURE_KEY = 'subscription-plan-time-lock';
+export const UNPAID_SUBSCRIPTION_REFUND_MESSAGE =
+  'This plan was never paid, so there’s nothing to refund — cancel it with a ₹0 refund.';
 // SUPER_ADMIN opt-ins for the calendar plan view and (on top of it) customer
 // date selection — see getCalendarEntitlements for the dependency rule.
 const PLAN_CALENDAR_FEATURE_KEY = 'plan-calendar-view';
@@ -105,6 +120,7 @@ export class SubscriptionsService {
     private readonly usersRepo: UsersRepository,
     private readonly bankingService: SubscriptionBankingService,
     private readonly cancellationNotifier: CancellationNotifier,
+    private readonly redis: RedisService,
   ) {}
 
   // ─── Admin plan CRUD ─────────────────────────────────────
@@ -161,14 +177,18 @@ export class SubscriptionsService {
   }
 
   async createPlan(tenantId: string, dto: CreatePlanDto) {
+    const text = normalizePlanText(dto);
     const scheduling = await this.resolveSchedulingFields(tenantId, null, dto);
     return this.subscriptionsRepo.createPlan(tenantId, {
       ...dto,
+      ...text,
+      name: text.name!,
       ...scheduling,
     });
   }
 
   async updatePlan(tenantId: string, id: string, dto: UpdatePlanDto) {
+    const text = normalizePlanText(dto);
     const existing = await this.findPlanForAdmin(tenantId, id);
     if (
       dto.schedulingMode !== undefined &&
@@ -187,7 +207,11 @@ export class SubscriptionsService {
       existing,
       dto,
     );
-    return this.subscriptionsRepo.updatePlan(id, { ...dto, ...scheduling });
+    return this.subscriptionsRepo.updatePlan(id, {
+      ...dto,
+      ...text,
+      ...scheduling,
+    });
   }
 
   /** Cross-field validation that class-validator can't express: WEEKLY_FIXED
@@ -246,6 +270,15 @@ export class SubscriptionsService {
 
   async deletePlan(tenantId: string, id: string): Promise<void> {
     await this.findPlanForAdmin(tenantId, id);
+    // Any subscription, past or present, keeps its plan (the FK RESTRICTs):
+    // their history, invoices and analytics all point at it.
+    const subscriptions =
+      await this.subscriptionsRepo.countSubscriptionsForPlan(id);
+    if (subscriptions > 0) {
+      throw new ConflictException(
+        `This plan has ${subscriptions} subscription${subscriptions === 1 ? '' : 's'} (current or past), so it can't be deleted. Unpublish it instead — new customers stop seeing it, and existing subscribers are unaffected.`,
+      );
+    }
     await this.subscriptionsRepo.deletePlan(id);
   }
 
@@ -342,6 +375,31 @@ export class SubscriptionsService {
       if (new Set(dayNumbers).size !== dayNumbers.length) {
         throw new BadRequestException('Duplicate dayNumber in plan days');
       }
+      const beyond = dayNumbers.find((n) => n > plan.durationDays);
+      if (beyond !== undefined) {
+        throw new BadRequestException(
+          `Day ${beyond} is past the end of this ${plan.durationDays}-day plan.`,
+        );
+      }
+    }
+
+    // Tenant isolation: every picked meal must be on this tenant's own,
+    // non-deleted menu — never another business's meal by id.
+    const mealIds = [
+      ...new Set(
+        dto.days.flatMap((d) =>
+          d.slots.map((s) => s.mealId).filter((m): m is string => Boolean(m)),
+        ),
+      ),
+    ];
+    if (
+      mealIds.length > 0 &&
+      (await this.subscriptionsRepo.countTenantMeals(tenantId, mealIds)) !==
+        mealIds.length
+    ) {
+      throw new BadRequestException(
+        "One or more of the chosen meals aren't on your menu (or were deleted) — pick them again.",
+      );
     }
 
     await this.subscriptionsRepo.replacePlanDays(id, dto.days);
@@ -1036,14 +1094,46 @@ export class SubscriptionsService {
     );
     if (!valid) throw new BadRequestException('Payment verification failed');
 
-    await this.subscriptionsRepo.markInvoicePaid(
-      invoice.id,
-      dto.razorpayPaymentId,
-    );
-
-    await this.activateSubscriptionNow(tenantId, subscription);
-
+    await this.confirmInvoicePayment(invoice, dto.razorpayPaymentId);
     return { confirmed: true };
+  }
+
+  /**
+   * A Razorpay payment for this invoice was captured — confirmed by the
+   * customer's browser (verifyPayment), Razorpay's webhook, or the
+   * payment-check job, whichever arrives first. Safe to call from all three
+   * at once: only the call that actually flips the invoice to PAID goes on
+   * to activate, and activation itself is guarded too.
+   */
+  async confirmInvoicePayment(
+    invoice: { id: string; tenantId: string; subscriptionId: string },
+    razorpayPaymentId: string,
+  ): Promise<boolean> {
+    const flipped = await this.subscriptionsRepo.markInvoicePaidIfUnpaid(
+      invoice.id,
+      razorpayPaymentId,
+    );
+    if (!flipped) return false;
+    const subscription = await this.subscriptionsRepo.findSubscriptionById(
+      invoice.tenantId,
+      invoice.subscriptionId,
+    );
+    if (subscription?.status === 'PENDING_PAYMENT') {
+      await this.activateSubscriptionNow(invoice.tenantId, subscription);
+    }
+    return true;
+  }
+
+  findInvoiceByRazorpayOrderId(razorpayOrderId: string) {
+    return this.subscriptionsRepo.findInvoiceByRazorpayOrderId(razorpayOrderId);
+  }
+
+  findPendingRazorpayInvoices(from: Date, to: Date, limit: number) {
+    return this.subscriptionsRepo.findPendingRazorpayInvoices(from, to, limit);
+  }
+
+  markStaleInvoicesFailed(before: Date): Promise<number> {
+    return this.subscriptionsRepo.markStaleInvoicesFailed(before);
   }
 
   /**
@@ -1089,10 +1179,12 @@ export class SubscriptionsService {
         subscription.durationDaysSnapshot,
       );
     }
-    await this.subscriptionsRepo.activateSubscription(subscription.id, {
-      startDate,
-      cycleEnd,
-    });
+    const activated = await this.subscriptionsRepo.activatePendingSubscription(
+      subscription.id,
+      { startDate, cycleEnd },
+    );
+    // Lost the race to a concurrent activation — it owns the rest.
+    if (!activated) return;
 
     // Same-day delivery: startDate already being "today or earlier" (a
     // startDateLeadDays of 0, or a delayed payment that let a chosen
@@ -1297,6 +1389,12 @@ export class SubscriptionsService {
             subscriptionClosures,
           )
         : undefined;
+    // While a cancellation request is pending nothing is delivered from its
+    // hold date on — both views show those days as on hold.
+    const holdFromDateStr =
+      cancellationRequest?.status === 'PENDING'
+        ? cancellationRequest.heldFromDate
+        : null;
     const upcoming = buildUpcomingPreview(
       subscription,
       todayStr,
@@ -1304,6 +1402,7 @@ export class SubscriptionsService {
       earliest.dateStr,
       subscriptionClosures,
       projection,
+      holdFromDateStr,
     );
 
     // Same downgrade rule as the storefront's findPublishedPlan — a stored
@@ -1329,6 +1428,7 @@ export class SubscriptionsService {
             earliest.dateStr,
             subscriptionClosures,
             projection,
+            holdFromDateStr,
           )
         : [];
 
@@ -1380,6 +1480,21 @@ export class SubscriptionsService {
     if (!scheduled) {
       throw new BadRequestException('That date is not part of this plan.');
     }
+    // A skipped day was already credited back at the end of the plan —
+    // moving it would deliver it twice. Skipped/paused dates are no target
+    // either: a delivery moved into a pause would silently be lost.
+    const deliveryCalendar = await this.buildDeliveryCalendar(
+      tenantId,
+      subscription,
+    );
+    const { skipped } = deliveryCalendar;
+    const held = holdError(deliveryCalendar, date);
+    if (held) throw new BadRequestException(held);
+    if (skipped.has(date)) {
+      throw new BadRequestException(
+        "This day is skipped, so there's nothing to move.",
+      );
+    }
 
     const [plan, settings, closedDates, allScheduled] = await Promise.all([
       this.subscriptionsRepo.findPlanScheduleConfig(subscription.planId),
@@ -1415,7 +1530,12 @@ export class SubscriptionsService {
       timezone,
     );
     return candidates.filter(
-      (d) => d !== date && !alreadyScheduled.has(d) && d >= earliestDateStr,
+      (d) =>
+        d !== date &&
+        !alreadyScheduled.has(d) &&
+        !skipped.has(d) &&
+        !holdError(deliveryCalendar, d) &&
+        d >= earliestDateStr,
     );
   }
 
@@ -1495,10 +1615,19 @@ export class SubscriptionsService {
       id,
     );
     if (!subscription) throw new NotFoundException('Subscription not found');
-    const invoice = await this.subscriptionsRepo.findInvoiceBySubscriptionId(
-      subscription.id,
-    );
-    return { ...subscription, invoice };
+    const [invoice, timeLocked, deliverySlots] = await Promise.all([
+      this.subscriptionsRepo.findInvoiceBySubscriptionId(subscription.id),
+      this.featuresService.hasFeature(tenantId, TIME_LOCK_FEATURE_KEY),
+      this.settingsRepo.findActiveDeliverySlots(tenantId, 'SUBSCRIPTIONS'),
+    ]);
+    // Staff acting on the customer's behalf get the same delivery-time
+    // choice (and the same SUPER_ADMIN lock) the customer has.
+    return {
+      ...subscription,
+      invoice,
+      canOverrideTime: !timeLocked,
+      deliverySlots,
+    };
   }
 
   /**
@@ -1656,15 +1785,12 @@ export class SubscriptionsService {
     dto: SkipDayDto,
   ) {
     await this.assertWithinNoticeWindow(tenantId, dto.date);
-    // Nothing is delivered on a tenant closure, so there is nothing to skip —
-    // and crediting a banked day for it would hand out a free extra delivery
-    // on plans that do not compensate closures.
-    const closedDates = await this.settingsRepo.findClosedDates(tenantId);
-    if (subscriptionClosedDateSet(closedDates).has(dto.date)) {
-      throw new BadRequestException(
-        'The kitchen is closed on that date, so there is no delivery to skip.',
-      );
-    }
+    // Only a real, not-yet-skipped delivery day can be skipped — anything
+    // else (a closure, a day outside the plan, an off day, a repeat) would
+    // credit a free extra delivery.
+    const calendar = await this.buildDeliveryCalendar(tenantId, subscription);
+    const error = skipDateError(calendar, dto.date);
+    if (error) throw new BadRequestException(error);
     await this.subscriptionsRepo.createSkip({
       subscriptionId: subscription.id,
       dateFrom: dto.date,
@@ -1703,11 +1829,14 @@ export class SubscriptionsService {
     subscription: Subscription,
     dto: PauseDto,
   ) {
-    if (dto.dateTo < dto.dateFrom) {
-      throw new BadRequestException('dateTo must not be before dateFrom');
-    }
+    const calendar = await this.buildDeliveryCalendar(tenantId, subscription);
+    const error = pauseRangeError(calendar, dto.dateFrom, dto.dateTo);
+    if (error) throw new BadRequestException(error);
     await this.assertWithinNoticeWindow(tenantId, dto.dateFrom);
-    const bankedDays = DateUtil.enumerateDateStrs(
+    // Credit only the deliveries the pause really stops, and resume them
+    // after the pause — even when it runs past the plan's last day.
+    const bankedDays = pausedDeliveryDays(
+      calendar,
       dto.dateFrom,
       dto.dateTo,
     ).length;
@@ -1721,6 +1850,7 @@ export class SubscriptionsService {
       tenantId,
       { ...subscription, cycleEnd: subscription.cycleEnd as Date },
       bankedDays,
+      dto.dateTo,
     );
     return this.subscriptionsRepo.extendCycleEnd(
       subscription.id,
@@ -1770,7 +1900,28 @@ export class SubscriptionsService {
     await this.assertWithinNoticeWindow(tenantId, dto.date);
     if (!dto.addressId && !dto.deliverySlotId && dto.note === undefined) {
       throw new BadRequestException(
-        'Provide at least an addressId, a deliverySlotId, or a note to override',
+        'Choose a new address, delivery time or note for that day.',
+      );
+    }
+    // A change only means something on a day that actually delivers.
+    const calendar = await this.buildDeliveryCalendar(tenantId, subscription);
+    const held = holdError(calendar, dto.date);
+    if (held) throw new BadRequestException(held);
+    if (
+      dto.date < calendar.startStr ||
+      dto.date > calendar.cycleEndStr ||
+      !calendar.isPlanDay(dto.date) ||
+      calendar.closed.has(dto.date)
+    ) {
+      throw new BadRequestException("There's no delivery on that day.");
+    }
+    // Nothing is delivered on a skipped day (the customer's skip, a pause, a
+    // holiday or a disruption), so an address/time/note for it is meaningless.
+    if (
+      await this.subscriptionsRepo.findSkipForDate(subscription.id, dto.date)
+    ) {
+      throw new BadRequestException(
+        "This day is skipped, so there's nothing to change for it.",
       );
     }
     if (dto.addressId && options.requireDeliverable) {
@@ -1871,10 +2022,11 @@ export class SubscriptionsService {
 
     const deliveredDays =
       await this.subscriptionsRepo.countMaterializedOrders(id);
-    const pendingDays = Math.max(
-      0,
-      subscription.durationDaysSnapshot - deliveredDays,
-    );
+    // An unpaid plan has nothing to refund, however many days are left.
+    const pendingDays =
+      subscription.status === SubscriptionStatus.PENDING_PAYMENT
+        ? 0
+        : Math.max(0, subscription.durationDaysSnapshot - deliveredDays);
     const suggestedAmountInPaise = Math.round(
       (subscription.priceInPaiseSnapshot * pendingDays) /
         subscription.durationDaysSnapshot,
@@ -1895,7 +2047,18 @@ export class SubscriptionsService {
     };
   }
 
-  async cancelWithRefund(
+  cancelWithRefund(
+    tenantId: string,
+    staffUserId: string,
+    id: string,
+    dto: CancelRefundDto,
+  ): Promise<{ subscription: Subscription; refund: Refund }> {
+    return withRefundLock(this.redis, `subscription:${id}`, () =>
+      this.cancelWithRefundUnlocked(tenantId, staffUserId, id, dto),
+    );
+  }
+
+  private async cancelWithRefundUnlocked(
     tenantId: string,
     staffUserId: string,
     id: string,
@@ -1908,6 +2071,13 @@ export class SubscriptionsService {
     if (!subscription) throw new NotFoundException('Subscription not found');
     if (subscription.status === 'CANCELLED') {
       throw new BadRequestException('This subscription is already cancelled.');
+    }
+    // Nothing was paid, so there's nothing to give back — only a ₹0 record.
+    if (
+      subscription.status === SubscriptionStatus.PENDING_PAYMENT &&
+      dto.amountInPaise > 0
+    ) {
+      throw new BadRequestException(UNPAID_SUBSCRIPTION_REFUND_MESSAGE);
     }
 
     const convenienceFeeInPaise = dto.convenienceFeeInPaise ?? 0;
@@ -2055,7 +2225,7 @@ export class SubscriptionsService {
       await this.getEarliestEditableDate(tenantId, timezone);
     if (dateStr < earliestDateStr) {
       throw new BadRequestException(
-        `Changes need at least ${noticeHours}h notice — the earliest editable day is ${earliestDateStr}.`,
+        `Changes need at least ${noticeHours}h notice — the earliest day you can change is ${DateUtil.formatDateStrShort(earliestDateStr)}.`,
       );
     }
   }
@@ -2063,6 +2233,56 @@ export class SubscriptionsService {
   private async getTenantTimezone(tenantId: string): Promise<string> {
     const profile = await this.settingsRepo.findBusinessProfile(tenantId);
     return profile?.timezone ?? 'Asia/Kolkata';
+  }
+
+  /** Which days this subscription really delivers on — the input to the
+   * skip/pause rules (see subscription-day-rules.ts). */
+  private async buildDeliveryCalendar(
+    tenantId: string,
+    subscription: Subscription,
+  ): Promise<DeliveryCalendar> {
+    if (!subscription.startDate || !subscription.cycleEnd) {
+      throw new BadRequestException('This subscription has not started yet.');
+    }
+    const [timezone, plan, closedDates, skips, scheduled, request] =
+      await Promise.all([
+        this.getTenantTimezone(tenantId),
+        this.subscriptionsRepo.findPlanScheduleConfig(subscription.planId),
+        this.settingsRepo.findClosedDates(tenantId),
+        this.subscriptionsRepo.findSkipRanges(subscription.id),
+        subscription.usesDateSelection
+          ? this.subscriptionsRepo.findScheduledDates(subscription.id)
+          : Promise.resolve([]),
+        this.subscriptionsRepo.findLatestCancellationRequest(subscription.id),
+      ]);
+    const deliveryDayKeys =
+      plan?.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED
+        ? await this.subscriptionsRepo.findPlanDeliveryDayKeys(
+            subscription.planId,
+          )
+        : null;
+    const scheduledSet = new Set(scheduled.map((s) => s.date));
+    const isPlanDay = (dateStr: string): boolean => {
+      if (subscription.usesDateSelection) return scheduledSet.has(dateStr);
+      if (!plan || !deliveryDayKeys) return true; // RELATIVE_DAY: every day
+      const key = PlanScheduleUtil.resolveKey(plan, {
+        dateStr,
+        relativeCounter: 1, // unused for WEEKLY_FIXED
+      });
+      return (
+        'weekNumber' in key &&
+        deliveryDayKeys.has(`${key.weekNumber}-${key.weekday}`)
+      );
+    };
+    return {
+      startStr: DateUtil.toTenantDateStr(subscription.startDate, timezone),
+      cycleEndStr: DateUtil.toTenantDateStr(subscription.cycleEnd, timezone),
+      isPlanDay,
+      closed: subscriptionClosedDateSet(closedDates),
+      skipped: skippedDateSet(skips),
+      heldFrom:
+        request?.status === 'PENDING' ? (request.heldFromDate ?? null) : null,
+    };
   }
 
   /** A NEW subscription's cycleEnd at activation. LOSS_DELIVERY (default,

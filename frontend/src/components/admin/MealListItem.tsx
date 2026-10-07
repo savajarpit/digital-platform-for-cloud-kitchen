@@ -1,9 +1,10 @@
 "use client";
 
-import { ImageOff, Leaf, Pencil, Star, Trash2 } from "lucide-react";
+import { Leaf, Pencil, Star, Trash2 } from "lucide-react";
 import type { Category, Meal } from "@/lib/api/admin-menu";
 import { Toggle } from "@/components/ui/Toggle";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { MealThumb } from "@/components/ui/MealThumb";
 
 export function MealListItem({
   meal,
@@ -25,14 +26,7 @@ export function MealListItem({
   return (
     <div className="card flex gap-3 p-4">
       <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-zinc-100 dark:bg-zinc-800">
-        {meal.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={meal.imageUrl} alt={meal.name} className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-zinc-300 dark:text-zinc-600">
-            <ImageOff className="h-5 w-5" />
-          </div>
-        )}
+        <MealThumb src={meal.imageUrl} alt={meal.name} iconClassName="h-5 w-5" />
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col justify-between">

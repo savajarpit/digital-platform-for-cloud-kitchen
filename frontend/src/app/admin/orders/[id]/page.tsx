@@ -1,20 +1,22 @@
 "use client";
 
-import { use, useState } from "react";
+import { Fragment, use, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { ArrowLeft, Clock, FileText, MapPin, Phone, User } from "lucide-react";
+import { ArrowLeft, CalendarClock, Clock, FileText, MapPin, Phone, User } from "lucide-react";
 import {
   ApiError,
   getAdminOrder,
   getOrderCustomerLabel,
   getOrderStatusLabel,
   getSettableStatusesFor,
+  canChangeOrderStatus,
   markOrderPaid,
   updateOrderStatus,
   type AdminOrderDetail,
 } from "@/lib/api/admin-orders";
-import { usePermission } from "@/context/PermissionsContext";
+import { usePermission, usePermissions } from "@/context/PermissionsContext";
+import { getDineInOrder } from "@/lib/api/dine-in";
 import { useFeatures } from "@/context/FeaturesContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
 import { useToast } from "@/context/ToastContext";
@@ -34,6 +36,7 @@ import { DineInOrderPanel } from "@/components/admin/DineInOrderPanel";
 import { ORDER_STATUS_STYLES as STATUS_STYLES } from "@/lib/format/status-styles";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
+import { formatDateTime } from "@/lib/format/date";
 
 export default function AdminOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -41,13 +44,21 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const canCancelRefund = usePermission(PERMISSIONS.ORDERS_CANCEL_REFUND);
   const canRecordPayment = usePermission(PERMISSIONS.PAYMENTS_MANUAL_RECORD);
   const canOrderCreate = usePermission(PERMISSIONS.DINE_IN_ORDER_CREATE);
+  const canViewCustomers = usePermission(PERMISSIONS.CUSTOMERS_VIEW);
+  const { loading: permissionsLoading } = usePermissions();
+  // Counter staff who take dine-in orders but can't manage every order: the
+  // page loads through the dine-in route and links back to the floor.
+  const counterOnly = !canEdit && canOrderCreate;
+  const backHref = counterOnly ? "/admin/dine-in" : "/admin/orders";
+  const backLabel = counterOnly ? "Back to dine-in" : "Back to orders";
   const { has: hasFeature } = useFeatures();
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const detailKey = qk.admin("orders", "detail", id);
   const { data: order, isPending, isError } = useQuery({
     queryKey: detailKey,
-    queryFn: () => getAdminOrder(id),
+    queryFn: () => (counterOnly ? getDineInOrder(id) : getAdminOrder(id)),
+    enabled: !permissionsLoading,
     staleTime: STALE.short,
   });
   const [markingPaid, setMarkingPaid] = useState(false);
@@ -90,8 +101,8 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     return (
       <div className="flex flex-col items-center gap-4 py-24 text-center">
         <p className="text-zinc-600 dark:text-zinc-400">Order not found.</p>
-        <Link href="/admin/orders" className="btn-primary">
-          Back to orders
+        <Link href={backHref} className="btn-primary">
+          {backLabel}
         </Link>
       </div>
     );
@@ -100,6 +111,10 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   if (isPending) return <OrderDetailSkeleton />;
 
   const isPaid = order.paymentStatus === "PAID";
+  const canMove = canChangeOrderStatus(order);
+  // A subscription's daily delivery: no price, invoice or cancel of its own.
+  const plan = order.planDelivery;
+  const deliveryNote = plan ? plan.customerNote : order.notes;
   const isFinal = order.status === "DELIVERED" || order.status === "CANCELLED";
   const isDineInLike = order.fulfillmentType === "DINE_IN" || order.fulfillmentType === "TAKEAWAY";
 
@@ -107,11 +122,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
-          href="/admin/orders"
+          href={backHref}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-600 hover:text-primary-600 dark:text-zinc-400"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to orders
+          {backLabel}
         </Link>
         <div className="flex items-center gap-3">
           <ShareOrderDetailsButton
@@ -124,15 +139,16 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               deliveryWindowEnd: isDineInLike || order.isInstant ? null : order.deliveryWindowEnd,
               deliveryDateLabel: isDineInLike
                 ? undefined
-                : new Date(order.deliveryDate).toLocaleDateString(undefined, {
+                : new Date(order.deliveryDate).toLocaleDateString("en-IN", {
                     weekday: "short",
                     month: "short",
                     day: "numeric",
+                    timeZone: "UTC",
                   }),
-              totalLabel: formatPriceFromPaise(order.totalInPaise),
+              totalLabel: plan ? "Included in plan" : formatPriceFromPaise(order.totalInPaise),
               note: [
                 order.prepNotes ? `Cooking: ${order.prepNotes}` : null,
-                order.notes ? `Delivery: ${order.notes}` : null,
+                deliveryNote ? `Delivery: ${deliveryNote}` : null,
               ]
                 .filter(Boolean)
                 .join(" — ") || null,
@@ -151,10 +167,17 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   : { address: order.address! }),
             }}
           />
-          <Link href={`/admin/orders/${order.id}/invoice`} className="btn-outline btn-sm">
-            <FileText className="h-4 w-4" />
-            Invoice
-          </Link>
+          {plan ? (
+            <Link href={`/admin/subscriptions/${plan.subscriptionId}`} className="btn-outline btn-sm">
+              <CalendarClock className="h-4 w-4" />
+              View subscription
+            </Link>
+          ) : counterOnly ? null : (
+            <Link href={`/admin/orders/${order.id}/invoice`} className="btn-outline btn-sm">
+              <FileText className="h-4 w-4" />
+              Invoice
+            </Link>
+          )}
         </div>
       </div>
 
@@ -164,7 +187,9 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             Order <span className="font-mono">{order.orderNumber}</span>
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Placed {new Date(order.createdAt).toLocaleString()}
+            {plan
+              ? `Plan delivery · ${plan.planName}${plan.dayLabel ? `, ${plan.dayLabel}` : ""}`
+              : `Placed ${formatDateTime(order.createdAt)}`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -204,7 +229,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
           {canEdit && order.paymentMethod !== "RAZORPAY" && !isPaid && order.status !== "CANCELLED" && (
             <CancelUnpaidOrderButton orderId={order.id} orderNumber={order.orderNumber} onCancelled={refresh} />
           )}
-          {canEdit && isPaid && !isFinal ? (
+          {canEdit && canMove && !isFinal ? (
             <Select value={order.status} onValueChange={handleStatusChange}>
               <SelectTrigger variant="unstyled" className={`badge border-0 ${STATUS_STYLES[order.status] ?? ""}`}>
                 <SelectValue />
@@ -214,7 +239,8 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   {getOrderStatusLabel(order.status, order.fulfillmentType)}
                 </SelectItem>
                 {getSettableStatusesFor(order.fulfillmentType)
-                  .filter((s) => s !== order.status)
+                  // A plan delivery is never cancelled on its own (skip/disruption instead).
+                  .filter((s) => s !== order.status && !(plan && s === "CANCELLED"))
                   .map((s) => (
                     <SelectItem key={s} value={s}>
                       {getOrderStatusLabel(s, order.fulfillmentType)}
@@ -230,7 +256,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
         </div>
       </div>
 
-      {order.status !== "CANCELLED" && (
+      {order.status !== "CANCELLED" && !counterOnly && (
         <PendingCancellationBanner
           kind="ORDER"
           targetId={order.id}
@@ -239,7 +265,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
         />
       )}
 
-      {canCancelRefund && isPaid && order.status !== "CANCELLED" && (
+      {canCancelRefund && isPaid && !plan && order.status !== "CANCELLED" && (
         <div id={CANCEL_REFUND_ANCHOR} className="scroll-mt-24">
           <CancelRefundForm kind="order" id={order.id} defaultAmountInPaise={order.totalInPaise} onCancelled={refresh} />
         </div>
@@ -251,10 +277,12 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
         refunds={order.refunds}
       />
 
-      {isPaid && (
+      {canMove && order.status !== "CANCELLED" && (
         <div className="card flex justify-center p-6">
           <OrderStatusStepper
-            status={order.status as OrderStatus}
+            // Cash on delivery sits at PENDING_PAYMENT until the kitchen
+            // starts it — on the stepper that's simply "Confirmed".
+            status={(order.status === "PENDING_PAYMENT" ? "CONFIRMED" : order.status) as OrderStatus}
             fulfillmentType={order.fulfillmentType}
           />
         </div>
@@ -264,15 +292,41 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
         <div className="card flex flex-col gap-3 p-6 lg:col-span-2">
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Items</h3>
           <div className="flex flex-col gap-2">
-            {order.items.map((item) => (
-              <div key={item.id} className="flex justify-between gap-3 text-sm text-zinc-600 dark:text-zinc-400">
-                <span className="min-w-0 wrap-break-word">
-                  {item.nameSnapshot} × {item.quantity}
-                </span>
-                <span className="shrink-0">{formatPriceFromPaise(item.priceInPaiseSnapshot * item.quantity)}</span>
-              </div>
-            ))}
+            {order.items.map((item) => {
+              const addonUnitTotal = (item.addons ?? []).reduce(
+                (sum, a) => sum + a.priceInPaiseSnapshot * a.quantity,
+                0,
+              );
+              return (
+                <Fragment key={item.id}>
+                  <div className="flex justify-between gap-3 text-sm text-zinc-600 dark:text-zinc-400">
+                    <span className="min-w-0 wrap-break-word">
+                      {item.nameSnapshot} × {item.quantity}
+                    </span>
+                    {!plan && (
+                      <span className="shrink-0">
+                        {formatPriceFromPaise((item.priceInPaiseSnapshot + addonUnitTotal) * item.quantity)}
+                      </span>
+                    )}
+                  </div>
+                  {item.addons && item.addons.length > 0 && (
+                    <ul className="-mt-1 flex flex-col gap-0.5 pl-3 text-xs text-zinc-400">
+                      {item.addons.map((a) => (
+                        <li key={a.id} className="wrap-break-word">
+                          + {a.nameSnapshot} × {a.quantity}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Fragment>
+              );
+            })}
           </div>
+          {plan ? (
+            <p className="mt-2 border-t border-zinc-100 pt-3 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+              Included in the customer&apos;s {plan.planName} plan — no separate payment.
+            </p>
+          ) : (
           <div className="mt-2 flex flex-col gap-1.5 border-t border-zinc-100 pt-3 text-sm dark:border-zinc-800">
             <div className="flex justify-between text-zinc-600 dark:text-zinc-400">
               <span>Subtotal</span>
@@ -293,16 +347,17 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
               <span>{formatPriceFromPaise(order.totalInPaise)}</span>
             </div>
           </div>
+          )}
           {order.prepNotes && (
             <div className="mt-2 wrap-break-word rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950 dark:text-amber-400">
               <span className="font-medium">Cooking instructions: </span>
               {order.prepNotes}
             </div>
           )}
-          {order.notes && (
+          {deliveryNote && (
             <div className="mt-2 wrap-break-word rounded-lg bg-zinc-50 p-3 text-sm text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
               <span className="font-medium text-zinc-900 dark:text-zinc-100">Delivery notes: </span>
-              {order.notes}
+              {deliveryNote}
             </div>
           )}
         </div>
@@ -315,12 +370,18 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             </h3>
             {order.user ? (
               <>
-                <Link
-                  href={`/admin/customers/${order.userId}`}
-                  className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
-                >
-                  {order.user.firstName} {order.user.lastName ?? ""}
-                </Link>
+                {canViewCustomers ? (
+                  <Link
+                    href={`/admin/customers/${order.userId}`}
+                    className="text-sm font-medium text-primary-600 hover:underline dark:text-primary-400"
+                  >
+                    {order.user.firstName} {order.user.lastName ?? ""}
+                  </Link>
+                ) : (
+                  <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                    {order.user.firstName} {order.user.lastName ?? ""}
+                  </p>
+                )}
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">{order.user.email}</p>
               </>
             ) : (
@@ -397,10 +458,11 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                     ? "Instant delivery"
                     : `${order.deliverySlotName} (${formatTime12h(order.deliveryWindowStart)}–${formatTime12h(order.deliveryWindowEnd)})`}
                   {" · "}
-                  {new Date(order.deliveryDate).toLocaleDateString(undefined, {
+                  {new Date(order.deliveryDate).toLocaleDateString("en-IN", {
                     weekday: "short",
                     month: "short",
                     day: "numeric",
+                    timeZone: "UTC",
                   })}
                 </span>
               </div>

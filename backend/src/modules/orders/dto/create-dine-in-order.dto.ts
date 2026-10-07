@@ -6,10 +6,16 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
+import { trimToUndefined } from '../../../common/utils/trim.util';
+import {
+  INDIA_PHONE_MESSAGE,
+  INDIA_PHONE_REGEX,
+} from '../../../common/constants/phone.constant';
 import { MAX_CART_LINES } from '../../../common/constants/order-limits.constant';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrderItemInputDto } from './create-order.dto';
@@ -52,15 +58,17 @@ export class CreateDineInOrderDto {
   customerUserId?: string;
 
   @ApiPropertyOptional({ example: 'Sharma' })
+  @Transform(trimToUndefined)
   @IsOptional()
   @IsString()
   @MaxLength(80)
   guestName?: string;
 
-  @ApiPropertyOptional({ example: '9876543210' })
+  @ApiPropertyOptional({ example: '+919876543210' })
+  @Transform(trimToUndefined)
   @IsOptional()
   @IsString()
-  @MaxLength(20)
+  @Matches(INDIA_PHONE_REGEX, { message: INDIA_PHONE_MESSAGE })
   guestPhone?: string;
 
   @ApiPropertyOptional({
@@ -69,11 +77,15 @@ export class CreateDineInOrderDto {
   })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(MAX_CART_LINES, {
+    message: `An order can have at most ${MAX_CART_LINES} different lines.`,
+  })
   @ValidateNested({ each: true })
   @Type(() => OrderItemInputDto)
   items?: OrderItemInputDto[];
 
   @ApiPropertyOptional({ example: 'No onions' })
+  @Transform(trimToUndefined)
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -111,20 +123,25 @@ export class SeatWaitlistEntryDto {
   customerUserId?: string;
 
   @ApiPropertyOptional({ example: 'Sharma' })
+  @Transform(trimToUndefined)
   @IsOptional()
   @IsString()
   @MaxLength(80)
   guestName?: string;
 
-  @ApiPropertyOptional({ example: '9876543210' })
+  @ApiPropertyOptional({ example: '+919876543210' })
+  @Transform(trimToUndefined)
   @IsOptional()
   @IsString()
-  @MaxLength(20)
+  @Matches(INDIA_PHONE_REGEX, { message: INDIA_PHONE_MESSAGE })
   guestPhone?: string;
 
   @ApiPropertyOptional({ type: [OrderItemInputDto] })
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(MAX_CART_LINES, {
+    message: `An order can have at most ${MAX_CART_LINES} different lines.`,
+  })
   @ValidateNested({ each: true })
   @Type(() => OrderItemInputDto)
   items?: OrderItemInputDto[];

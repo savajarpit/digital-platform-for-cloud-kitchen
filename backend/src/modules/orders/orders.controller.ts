@@ -193,6 +193,23 @@ export class OrdersController {
     return this.ordersService.createDineIn(tenantId, staffUserId, dto);
   }
 
+  @Get('admin/dine-in/:id')
+  @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
+  @RequireFeature('dine-in')
+  @RequirePermission('dine-in.order-create')
+  @ApiBearerAuth('access-token')
+  @ResponseMessage('Order retrieved successfully')
+  @ApiOperation({
+    summary:
+      "Admin: a dine-in/takeaway order's detail for counter staff who take orders but don't manage every order",
+  })
+  findDineInOrder(
+    @CurrentTenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.ordersService.findDineInOrderForStaff(tenantId, id);
+  }
+
   @Post('admin/waitlist/:waitlistEntryId/seat')
   @Roles(Role.SUPER_ADMIN, Role.OWNER, Role.STAFF)
   @RequireFeature('dine-in')

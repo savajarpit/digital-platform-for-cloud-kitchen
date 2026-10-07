@@ -29,7 +29,7 @@ import { PlanDaysPreview } from "./PlanDaysPreview";
 import { PlanViewTabs, type PlanViewTab } from "./PlanViewTabs";
 
 function formatShort(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
     timeZone: "UTC",

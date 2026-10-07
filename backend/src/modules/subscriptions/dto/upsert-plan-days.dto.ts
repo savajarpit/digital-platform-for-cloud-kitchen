@@ -74,6 +74,8 @@ export class PlanDayDto {
 export class UpsertPlanDaysDto {
   @ApiProperty({ type: [PlanDayDto] })
   @IsArray()
+  // A plan lasts at most 365 days; a 52-week WEEKLY_FIXED plan has 364.
+  @ArrayMaxSize(366, { message: 'A plan can have at most 366 days.' })
   @ValidateNested({ each: true })
   @Type(() => PlanDayDto)
   days: PlanDayDto[];

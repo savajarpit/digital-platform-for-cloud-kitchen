@@ -1,6 +1,8 @@
 import { ApiError, proxyFetch, proxyFetchPaginated } from "@/lib/api/client";
 import type { PaginationMeta } from "@/lib/api/response";
 import type { CancelRefundInput, Refund } from "@/lib/api/refunds";
+import type { OrderItemAddon, PlanDelivery } from "@/lib/api/orders";
+import { orderStatusLabel } from "@/lib/format/order-status";
 
 export { ApiError };
 export type { CancelRefundInput, Refund } from "@/lib/api/refunds";
@@ -10,6 +12,8 @@ export interface AdminOrderItem {
   nameSnapshot: string;
   priceInPaiseSnapshot: number;
   quantity: number;
+  /** Per-unit add-ons; their price is on top of priceInPaiseSnapshot. */
+  addons?: OrderItemAddon[];
 }
 
 export interface AdminOrderAddress {
@@ -39,6 +43,8 @@ export interface AdminDineInZone {
 
 export interface AdminOrder {
   id: string;
+  /** Set for a subscription's daily delivery (no price/invoice of its own). */
+  planDelivery: PlanDelivery | null;
   orderNumber: string;
   status: string;
   paymentStatus: string;
@@ -84,6 +90,13 @@ export interface AdminOrderDetail extends AdminOrder {
   refunds: Refund[];
 }
 
+/** Staff can move an order along once it's paid, or straight away for a
+ * cash/UPI order they took — that's cash on delivery, cooked and delivered
+ * before the money is collected. An unpaid online checkout stays locked. */
+export function canChangeOrderStatus(order: { paymentStatus: string; paymentMethod: string }): boolean {
+  return order.paymentStatus === "PAID" || order.paymentMethod !== "RAZORPAY";
+}
+
 /** DELIVERY only ever settles PENDING_PAYMENT via the payment-verify flow —
  * every fulfillment type shares the same admin-settable list, except
  * OUT_FOR_DELIVERY, which only makes sense when something is actually being
@@ -98,22 +111,13 @@ export function getSettableStatusesFor(
   return progress.filter((s) => s !== "OUT_FOR_DELIVERY");
 }
 
-const COMPLETION_LABEL: Record<AdminOrderFulfillmentType, string> = {
-  DELIVERY: "Delivered",
-  PICKUP: "Picked Up",
-  DINE_IN: "Served",
-  TAKEAWAY: "Picked Up",
-};
-
-/** DELIVERED is the one shared "done" terminal status across every
- * fulfillment type — just relabeled per type in the UI, no new backend
- * status. Every other status reads the same everywhere. */
+/** READY and DELIVERED read per order type ("Ready to serve", "Picked
+ * up"…) — see lib/format/order-status.ts. */
 export function getOrderStatusLabel(
   status: string,
   fulfillmentType: AdminOrderFulfillmentType,
 ): string {
-  if (status === "DELIVERED") return COMPLETION_LABEL[fulfillmentType];
-  return status.replace(/_/g, " ");
+  return orderStatusLabel(status, fulfillmentType);
 }
 
 /** "Sharma" for a guest, the linked account's name otherwise, or a plain
@@ -130,6 +134,7 @@ export type AdminOrdersMeta = PaginationMeta;
 
 export const ADMIN_SETTABLE_STATUSES = [
   "PREPARING",
+  "READY",
   "OUT_FOR_DELIVERY",
   "DELIVERED",
   "CANCELLED",
@@ -214,13 +219,20 @@ export function cancelOrderRefund(
   });
 }
 
+export interface SalesTotals {
+  orders: number;
+  plans: number;
+  revenueInPaise: number;
+}
+
 export interface OrdersOverview {
-  today: { orders: number; revenueInPaise: number };
-  last7Days: { orders: number; revenueInPaise: number };
+  /** Revenue = real money in: paid food orders + plans bought (never a plan's daily deliveries). */
+  today: SalesTotals;
+  last7Days: SalesTotals;
   activeOrders: number;
   totalCustomers: number;
-  allTimeRevenue: { orders: number; revenueInPaise: number };
-  revenueTrend: { date: string; orders: number; revenueInPaise: number }[];
+  allTimeRevenue: SalesTotals;
+  revenueTrend: ({ date: string } & SalesTotals)[];
   statusBreakdown: { status: string; count: number }[];
   topMeals: { mealId: string | null; name: string; quantitySold: number }[];
 }

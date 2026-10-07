@@ -5,6 +5,7 @@ import type {
   PlatformCancellationRequest,
   PlatformCancellationRequestStatus,
 } from "@/lib/api/platform-cancellation-requests";
+import { formatDateTime } from "@/lib/format/date";
 
 const STATUS_STYLES: Record<PlatformCancellationRequestStatus, string> = {
   PENDING: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400",
@@ -43,7 +44,7 @@ export function PlatformCancellationRequestRow({
           <span className={`badge ${STATUS_STYLES[request.status]}`}>{request.status}</span>
         </div>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          {new Date(request.createdAt).toLocaleString()}
+          {formatDateTime(request.createdAt)}
         </p>
         <p className="mt-1 text-xs text-zinc-400">{request.reason}</p>
       </div>

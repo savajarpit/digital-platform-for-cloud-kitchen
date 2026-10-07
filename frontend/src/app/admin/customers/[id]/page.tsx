@@ -13,10 +13,13 @@ import { ShareAddressButton } from "@/components/ui/ShareAddressButton";
 import { CustomerInviteStatus } from "@/components/admin/CustomerInviteStatus";
 import { AddCustomerAddressButton } from "@/components/admin/AddCustomerAddressButton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { formatDate } from "@/lib/format/date";
+import { orderStatusLabel } from "@/lib/format/order-status";
 
 const ORDER_STATUS_STYLES: Record<string, string> = {
   CONFIRMED: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
   PREPARING: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
+  READY: "bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-400",
   OUT_FOR_DELIVERY: "bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400",
   DELIVERED: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
   CANCELLED: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400",
@@ -69,7 +72,7 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
               {customer.firstName} {customer.lastName ?? ""}
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Joined {new Date(customer.createdAt).toLocaleDateString()}
+              Joined {formatDate(customer.createdAt)}
             </p>
           </div>
         </div>
@@ -89,7 +92,7 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Contact</h3>
           <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
             <Mail className="h-4 w-4 shrink-0 text-primary-600" />
-            <span>{customer.email}</span>
+            <span className="min-w-0 break-all">{customer.email}</span>
           </div>
           {customer.phone && (
             <div className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
@@ -99,7 +102,7 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
           )}
           {customer.verifiedAt && (
             <p className="text-xs text-zinc-400">
-              Verified {new Date(customer.verifiedAt).toLocaleDateString()}
+              Verified {formatDate(customer.verifiedAt)}
             </p>
           )}
           <CustomerInviteStatus
@@ -170,14 +173,14 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
               >
                 <div>
                   <p className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{order.orderNumber}</p>
-                  <p className="text-xs text-zinc-400">{new Date(order.createdAt).toLocaleDateString()}</p>
+                  <p className="text-xs text-zinc-400">{formatDate(order.createdAt)}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="font-medium text-zinc-900 dark:text-zinc-100">
                     {formatPriceFromPaise(order.totalInPaise)}
                   </span>
                   <span className={`badge ${ORDER_STATUS_STYLES[order.status] ?? ""}`}>
-                    {order.status.replace(/_/g, " ")}
+                    {orderStatusLabel(order.status, order.fulfillmentType)}
                   </span>
                 </div>
               </Link>
@@ -204,9 +207,9 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
                 <div>
                   <p className="font-medium text-zinc-900 dark:text-zinc-100">{sub.planNameSnapshot}</p>
                   <p className="text-xs text-zinc-400">
-                    {sub.startDate ? new Date(sub.startDate).toLocaleDateString() : "—"}
+                    {sub.startDate ? formatDate(sub.startDate) : "—"}
                     {" – "}
-                    {sub.cycleEnd ? new Date(sub.cycleEnd).toLocaleDateString() : "—"}
+                    {sub.cycleEnd ? formatDate(sub.cycleEnd) : "—"}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">

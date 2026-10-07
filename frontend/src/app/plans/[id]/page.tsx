@@ -145,6 +145,10 @@ export default function PlanDetailPage({
       void queryClient.invalidateQueries({ queryKey: qk.subscriptions.all });
 
       await loadRazorpayScript();
+      // Razorpay fires ondismiss right after a successful handler too — a
+      // local flag (not state) keeps that from toasting "cancelled" over a
+      // real payment.
+      let paymentSucceeded = false;
       const razorpay = new window.Razorpay({
         key: razorpayKeyId,
         amount: amountInPaise,
@@ -155,6 +159,8 @@ export default function PlanDetailPage({
         ),
         description: plan.name,
         handler: (response) => {
+          paymentSucceeded = true;
+          setIsSubscribing(true);
           verifySubscriptionPayment({
             razorpayOrderId: response.razorpay_order_id,
             razorpayPaymentId: response.razorpay_payment_id,
@@ -166,17 +172,23 @@ export default function PlanDetailPage({
                 queryKey: qk.subscriptions.all,
               });
               void queryClient.invalidateQueries({ queryKey: qk.orders.all });
+              showToast("Payment received — your plan is active.", "success");
               router.push(`/account/subscriptions/${subscriptionId}`);
             })
-            .catch(() =>
+            // The money is already captured: the payment check job activates
+            // the plan within a few minutes even when this call fails.
+            .catch(() => {
               showToast(
-                "Payment succeeded but activation failed — contact support.",
-                "error",
-              ),
-            );
+                "Payment received — we're confirming it. Your plan will show as active within a few minutes.",
+                "info",
+              );
+              router.push("/account/subscriptions");
+            });
         },
         modal: {
-          ondismiss: () => showToast("Payment cancelled.", "error"),
+          ondismiss: () => {
+            if (!paymentSucceeded) showToast("Payment cancelled.", "error");
+          },
         },
       });
       razorpay.open();

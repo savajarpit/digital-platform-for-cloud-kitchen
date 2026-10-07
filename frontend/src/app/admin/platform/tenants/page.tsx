@@ -7,6 +7,7 @@ import { ApiError, listTenants } from "@/lib/api/platform";
 import { qk, STALE } from "@/lib/query/keys";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TableSkeleton } from "@/components/ui/skeletons/TableSkeleton";
+import { formatDate } from "@/lib/format/date";
 
 const STATUS_STYLES: Record<string, string> = {
   ACTIVE: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
@@ -109,7 +110,7 @@ export default function TenantsPage() {
                     )}
                   </td>
                   <td className="px-5 py-3 text-zinc-500 dark:text-zinc-400">
-                    {new Date(tenant.createdAt).toLocaleDateString()}
+                    {formatDate(tenant.createdAt)}
                   </td>
                 </tr>
               ))}

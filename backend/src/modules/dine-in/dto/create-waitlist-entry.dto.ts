@@ -3,11 +3,18 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { trimToUndefined } from '../../../common/utils/trim.util';
+import {
+  INDIA_PHONE_MESSAGE,
+  INDIA_PHONE_REGEX,
+} from '../../../common/constants/phone.constant';
 
 /**
  * Deliberately minimal — a waiting party is just "how many, and who to call
@@ -23,15 +30,17 @@ export class CreateWaitlistEntryDto {
   kitchenZoneId: string;
 
   @ApiPropertyOptional({ example: 'Sharma' })
+  @Transform(trimToUndefined)
   @IsOptional()
   @IsString()
   @MaxLength(80)
   guestName?: string;
 
-  @ApiPropertyOptional({ example: '9876543210' })
+  @ApiPropertyOptional({ example: '+919876543210' })
+  @Transform(trimToUndefined)
   @IsOptional()
   @IsString()
-  @MaxLength(20)
+  @Matches(INDIA_PHONE_REGEX, { message: INDIA_PHONE_MESSAGE })
   guestPhone?: string;
 
   @ApiPropertyOptional({ example: 4, default: 1 })

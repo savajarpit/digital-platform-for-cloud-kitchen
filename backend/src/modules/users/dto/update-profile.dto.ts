@@ -5,6 +5,8 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { trimString } from '../../../common/utils/trim.util';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   INDIA_PHONE_MESSAGE,
@@ -20,13 +22,15 @@ import {
 export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'John' })
   @IsOptional()
+  @Transform(trimString)
   @IsString()
-  @MinLength(2)
+  @MinLength(2, { message: 'First name must be at least 2 characters.' })
   @MaxLength(50)
   firstName?: string;
 
   @ApiPropertyOptional({ example: 'Doe' })
   @IsOptional()
+  @Transform(trimString)
   @IsString()
   @MaxLength(50)
   lastName?: string;

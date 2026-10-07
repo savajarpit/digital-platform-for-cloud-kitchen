@@ -132,6 +132,35 @@ export class RazorpayClientService {
     }
   }
 
+  /**
+   * The id of the payment that captured `razorpayOrderId` on the tenant's
+   * account, or null if none has (still attempting, failed or abandoned).
+   * The payment-check job's source of truth for a payment whose browser
+   * confirmation and webhook both never arrived. Throws on an API/network
+   * failure so the caller can retry on its next run rather than treat it as
+   * "not paid".
+   */
+  async findCapturedPaymentId(
+    tenantId: string,
+    razorpayOrderId: string,
+  ): Promise<string | null> {
+    const { keyId, keySecret } = await this.getCredentials(tenantId);
+    const client = new Razorpay({ key_id: keyId, key_secret: keySecret });
+    try {
+      const { items } = await client.orders.fetchPayments(razorpayOrderId);
+      return items.find((p) => p.status === 'captured')?.id ?? null;
+    } catch (error) {
+      const detail = isRazorpaySdkError(error)
+        ? `[${error.error.code}] ${error.error.description}`
+        : error instanceof Error
+          ? error.message
+          : JSON.stringify(error);
+      throw new InternalServerErrorException(
+        `Could not fetch payments for Razorpay order ${razorpayOrderId}: ${detail}`,
+      );
+    }
+  }
+
   async verifyPaymentSignature(
     tenantId: string,
     params: {

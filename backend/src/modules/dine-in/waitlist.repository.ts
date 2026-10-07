@@ -44,14 +44,28 @@ export class WaitlistRepository {
     });
   }
 
+  /** Atomically flips WAITING → SEATED; false when another request got
+   * there first (two staff tapping "Seat" at once). */
+  async claimForSeating(tenantId: string, id: string): Promise<boolean> {
+    const { count } = await this.prisma.waitlistEntry.updateMany({
+      where: { id, tenantId, status: WaitlistStatus.WAITING },
+      data: { status: WaitlistStatus.SEATED, seatedAt: new Date() },
+    });
+    return count === 1;
+  }
+
+  /** Undoes claimForSeating when the order couldn't be opened. */
+  async releaseClaim(id: string): Promise<void> {
+    await this.prisma.waitlistEntry.updateMany({
+      where: { id, status: WaitlistStatus.SEATED, seatedOrderId: null },
+      data: { status: WaitlistStatus.WAITING, seatedAt: null },
+    });
+  }
+
   markSeated(id: string, seatedOrderId: string): Promise<WaitlistEntry> {
     return this.prisma.waitlistEntry.update({
       where: { id },
-      data: {
-        status: WaitlistStatus.SEATED,
-        seatedAt: new Date(),
-        seatedOrderId,
-      },
+      data: { seatedOrderId },
     });
   }
 

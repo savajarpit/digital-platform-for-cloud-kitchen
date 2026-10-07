@@ -7,6 +7,7 @@ import {
   Bell,
   Building2,
   CalendarClock,
+  ChefHat,
   Clock,
   CreditCard,
   FileText,
@@ -44,6 +45,9 @@ interface NavItem {
    * `permission` above) — when the tenant doesn't have this feature the
    * link is hidden entirely, not just shown view-only. */
   feature?: string;
+  /** Hide the link (not just lock it) without `permission` — for a page
+   * that has nothing to show someone who can't view it. */
+  hideWithoutPermission?: boolean;
 }
 
 const OPERATIONS_NAV: NavItem[] = [
@@ -52,6 +56,14 @@ const OPERATIONS_NAV: NavItem[] = [
   { href: "/admin/menu", label: "Menu", icon: UtensilsCrossed, permission: PERMISSIONS.MENU_MANAGE },
   { href: "/admin/menu/addons", label: "Add-ons", icon: Layers, permission: PERMISSIONS.MENU_MANAGE, feature: "menu-addons" },
   { href: "/admin/orders", label: "Orders", icon: Package, permission: PERMISSIONS.ORDERS_MANAGE },
+  {
+    href: "/admin/kitchen",
+    label: "Kitchen",
+    icon: ChefHat,
+    permission: PERMISSIONS.KITCHEN_VIEW,
+    feature: "kitchen-display",
+    hideWithoutPermission: true,
+  },
   { href: "/admin/dine-in", label: "Dine-in", icon: Utensils, permission: PERMISSIONS.DINE_IN_ORDER_CREATE, feature: "dine-in" },
   { href: "/admin/promotions", label: "Promotions", icon: Tag, permission: PERMISSIONS.PROMOTIONS_MANAGE, feature: "promotions" },
   { href: "/admin/subscriptions", label: "Subscription Plans", icon: CalendarClock, permission: PERMISSIONS.SUBSCRIPTIONS_MANAGE },
@@ -87,6 +99,7 @@ export function AdminSidebar() {
 
   function renderLink(item: NavItem) {
     if (item.feature && !featuresLoading && !hasFeature(item.feature)) return null;
+    if (item.hideWithoutPermission && item.permission && !loading && !can(item.permission)) return null;
     const isActive = isNavActive(pathname, item.href);
     const editable = !item.permission || loading || can(item.permission);
     return (

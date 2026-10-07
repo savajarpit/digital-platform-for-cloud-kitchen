@@ -65,6 +65,10 @@ export function SubscriptionCalendar({
           ...(days.some((d) => d.kind === "PROJECTED")
             ? (["PROJECTED"] as const)
             : []),
+          // Only while (or after) a cancellation request held deliveries.
+          ...(days.some((d) => d.kind === "ON_HOLD")
+            ? (["ON_HOLD"] as const)
+            : []),
         ].map((kind) => (
           <span key={kind} className="flex items-center gap-1.5">
             <span

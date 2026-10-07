@@ -113,9 +113,9 @@ export function CancelRefundForm({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50/50 p-4 dark:border-red-900 dark:bg-red-950/30">
+    <div className="flex basis-full flex-col gap-3 rounded-lg border border-red-200 bg-red-50/50 p-4 dark:border-red-900 dark:bg-red-950/30">
       {kind === "subscription" && (
-        <p className="text-xs text-red-700 dark:text-red-400">
+        <p className="text-xs text-zinc-600 dark:text-zinc-400">
           {preview
             ? `${preview.deliveredDays} of ${preview.durationDaysSnapshot} days delivered — ${preview.pendingDays} pending. Suggested refund: ${formatPriceFromPaise(preview.suggestedAmountInPaise)}.`
             : "Loading suggested refund amount…"}
@@ -132,7 +132,12 @@ export function CancelRefundForm({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="MANUAL">Manual (recorded only)</SelectItem>
-              <SelectItem value="RAZORPAY">Razorpay (real refund)</SelectItem>
+              <SelectItem
+                value="RAZORPAY"
+                disabled={kind === "subscription" && preview ? !preview.razorpayRefundAvailable : false}
+              >
+                Razorpay (real refund)
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>

@@ -23,6 +23,11 @@ const mockSettingsRepo = {
   deleteDeliverySlot: jest.fn(),
   countDeliverySlotUsage: jest.fn(),
   findBusinessProfile: jest.fn(),
+  findKitchenZoneById: jest.fn(),
+  countKitchenZoneUsage: jest.fn(),
+  createKitchenZone: jest.fn(),
+  updateKitchenZone: jest.fn(),
+  deleteKitchenZone: jest.fn(),
 };
 const mockFeatures = { hasFeature: jest.fn() };
 
@@ -326,6 +331,83 @@ describe('SettingsService — closed dates', () => {
       await service.deleteDeliverySlot('t1', 'slot1');
 
       expect(mockSettingsRepo.deleteDeliverySlot).toHaveBeenCalledWith('slot1');
+    });
+  });
+
+  describe('kitchen zones', () => {
+    it('refuses to delete a zone that tables or orders still reference', async () => {
+      mockSettingsRepo.findKitchenZoneById.mockResolvedValue({ id: 'z1' });
+      mockSettingsRepo.countKitchenZoneUsage.mockResolvedValue({
+        tables: 1,
+        waitlist: 0,
+        orders: 1,
+      });
+
+      await expect(service.deleteKitchenZone('t1', 'z1')).rejects.toThrow(
+        ConflictException,
+      );
+      expect(mockSettingsRepo.deleteKitchenZone).not.toHaveBeenCalled();
+    });
+
+    it('deletes an unreferenced zone', async () => {
+      mockSettingsRepo.findKitchenZoneById.mockResolvedValue({ id: 'z1' });
+      mockSettingsRepo.countKitchenZoneUsage.mockResolvedValue({
+        tables: 0,
+        waitlist: 0,
+        orders: 0,
+      });
+
+      await service.deleteKitchenZone('t1', 'z1');
+
+      expect(mockSettingsRepo.deleteKitchenZone).toHaveBeenCalledWith('z1');
+    });
+
+    it('refuses to turn on pickup without a pickup address, including on update', async () => {
+      await expect(
+        service.createKitchenZone('t1', {
+          name: 'Nikol',
+          lat: 23,
+          lng: 72,
+          radiusMeters: 1000,
+          pickupEnabled: true,
+          pickupAddress: '   ',
+        }),
+      ).rejects.toThrow(/Add the pickup address/);
+
+      // Saved zone has pickup on with an address; clearing the address alone
+      // would leave pickup on with nothing to show.
+      mockSettingsRepo.findKitchenZoneById.mockResolvedValue({
+        id: 'z1',
+        pickupEnabled: true,
+        pickupAddress: 'Counter 1',
+      });
+      await expect(
+        service.updateKitchenZone('t1', 'z1', { pickupAddress: '' }),
+      ).rejects.toThrow(/Add the pickup address/);
+      expect(mockSettingsRepo.updateKitchenZone).not.toHaveBeenCalled();
+    });
+
+    it('rejects a blank name and trims a real one', async () => {
+      await expect(
+        service.createKitchenZone('t1', {
+          name: '   ',
+          lat: 23,
+          lng: 72,
+          radiusMeters: 1000,
+        }),
+      ).rejects.toThrow('Give the kitchen zone a name.');
+
+      mockSettingsRepo.createKitchenZone.mockResolvedValue({});
+      await service.createKitchenZone('t1', {
+        name: ' Nikol ',
+        lat: 23,
+        lng: 72,
+        radiusMeters: 1000,
+      });
+      expect(mockSettingsRepo.createKitchenZone).toHaveBeenCalledWith(
+        't1',
+        expect.objectContaining({ name: 'Nikol' }),
+      );
     });
   });
 

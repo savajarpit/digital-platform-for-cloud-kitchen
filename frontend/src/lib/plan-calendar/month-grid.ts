@@ -101,7 +101,7 @@ export function monthPageIndexOf(
 
 /** "Oct" */
 export function formatMonthShort(dateStr: string): string {
-  return toUtc(dateStr).toLocaleDateString(undefined, {
+  return toUtc(dateStr).toLocaleDateString("en-IN", {
     month: "short",
     timeZone: "UTC",
   });
@@ -112,7 +112,7 @@ export function dayOfMonth(dateStr: string): number {
 }
 
 export function formatMonthTitle(monthKey: string): string {
-  return toUtc(`${monthKey}-01`).toLocaleDateString(undefined, {
+  return toUtc(`${monthKey}-01`).toLocaleDateString("en-IN", {
     month: "long",
     year: "numeric",
     timeZone: "UTC",
@@ -120,7 +120,7 @@ export function formatMonthTitle(monthKey: string): string {
 }
 
 export function formatLongDate(dateStr: string): string {
-  return toUtc(dateStr).toLocaleDateString(undefined, {
+  return toUtc(dateStr).toLocaleDateString("en-IN", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -129,7 +129,7 @@ export function formatLongDate(dateStr: string): string {
 }
 
 export function formatWeekday(dateStr: string): string {
-  return toUtc(dateStr).toLocaleDateString(undefined, {
+  return toUtc(dateStr).toLocaleDateString("en-IN", {
     weekday: "long",
     timeZone: "UTC",
   });

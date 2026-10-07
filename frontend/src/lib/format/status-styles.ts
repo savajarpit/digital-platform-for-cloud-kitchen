@@ -5,6 +5,7 @@ export const ORDER_STATUS_STYLES: Record<string, string> = {
   PENDING_PAYMENT: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
   CONFIRMED: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
   PREPARING: "bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400",
+  READY: "bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-400",
   OUT_FOR_DELIVERY: "bg-accent-50 text-accent-700 dark:bg-accent-950 dark:text-accent-400",
   DELIVERED: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
   CANCELLED: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-400",

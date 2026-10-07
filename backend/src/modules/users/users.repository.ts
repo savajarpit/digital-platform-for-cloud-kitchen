@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma/prisma.service';
 import { User, Prisma, Role } from '../../generated/prisma';
+import { NOT_ABANDONED_CHECKOUT } from '../orders/orders.repository';
+import { customerSearchConditions } from './customer-search.util';
 
 export type CustomerWithOrderCount = User & { _count: { orders: number } };
 
@@ -28,6 +30,17 @@ export class UsersRepository {
    * one tenant. Always scope this to the tenant the request is actually
    * for; never look up "by email alone" for a CUSTOMER/STAFF/OWNER lookup.
    */
+  /** Includes removed (soft-deleted) users — their email still holds the
+   * unique slot, so a new account can't take it. */
+  findByEmailIncludingRemoved(
+    email: string,
+    tenantId: string,
+  ): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { tenantId_email: { tenantId, email } },
+    });
+  }
+
   async findByEmail(email: string, tenantId: string): Promise<User | null> {
     return this.prisma.user.findUnique({
       where: { tenantId_email: { tenantId, email }, deletedAt: null },
@@ -86,16 +99,7 @@ export class UsersRepository {
       tenantId,
       role: Role.CUSTOMER,
       deletedAt: null,
-      ...(search
-        ? {
-            OR: [
-              { firstName: { contains: search, mode: 'insensitive' } },
-              { lastName: { contains: search, mode: 'insensitive' } },
-              { email: { contains: search, mode: 'insensitive' } },
-              { phone: { contains: search } },
-            ],
-          }
-        : {}),
+      ...(search?.trim() ? { OR: customerSearchConditions(search) } : {}),
     };
     return this.prisma.$transaction([
       this.prisma.user.findMany({
@@ -106,7 +110,9 @@ export class UsersRepository {
         include: {
           _count: {
             select: {
-              orders: { where: { status: { not: 'PENDING_PAYMENT' } } },
+              // Abandoned online checkouts don't count; an unpaid cash-on-
+              // delivery phone order does.
+              orders: { where: NOT_ABANDONED_CHECKOUT },
             },
           },
         },

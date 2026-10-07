@@ -249,9 +249,14 @@ export default function CheckoutPage() {
               clearCart();
               router.replace(`/orders/${order.id}`);
             })
+            // Razorpay only calls the handler for a captured payment, so the
+            // customer has paid: never say otherwise or keep the cart (they'd
+            // pay twice). The payment check job confirms the order shortly.
             .catch(() => {
-              setIsConfirmingPayment(false);
-              showToast(t("paymentFailed"), "error");
+              void queryClient.invalidateQueries({ queryKey: qk.orders.all });
+              clearCart();
+              showToast(t("paymentConfirming"), "info");
+              router.replace(`/orders/${order.id}`);
             });
         },
         modal: {

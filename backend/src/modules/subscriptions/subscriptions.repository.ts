@@ -206,6 +206,63 @@ export class SubscriptionsRepository {
     });
   }
 
+  /** Marks an invoice PAID unless it already is — true only for the caller
+   * that flipped it. A FAILED (abandoned) invoice still flips: Razorpay
+   * captured it after all, and the customer did pay. */
+  async markInvoicePaidIfUnpaid(
+    id: string,
+    razorpayPaymentId: string,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.subscriptionInvoice.updateMany({
+      where: { id, status: { not: 'PAID' } },
+      data: { status: 'PAID', razorpayPaymentId },
+    });
+    return count === 1;
+  }
+
+  /** Razorpay-paid invoices still PENDING, created in [from, to) — the
+   * payment-check job asks Razorpay about each. Oldest first, capped. */
+  findPendingRazorpayInvoices(
+    from: Date,
+    to: Date,
+    limit: number,
+  ): Promise<SubscriptionInvoice[]> {
+    return this.prisma.subscriptionInvoice.findMany({
+      where: { status: 'PENDING', createdAt: { gte: from, lt: to } },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
+  }
+
+  /** PENDING invoices created before `before` become FAILED (the customer
+   * never completed payment). Returns how many. */
+  async markStaleInvoicesFailed(before: Date): Promise<number> {
+    const { count } = await this.prisma.subscriptionInvoice.updateMany({
+      where: { status: 'PENDING', createdAt: { lt: before } },
+      data: { status: 'FAILED' },
+    });
+    return count;
+  }
+
+  /** PENDING_PAYMENT → ACTIVE in one conditional write. False when another
+   * request (a second Mark paid click, or a concurrent payment
+   * confirmation) already activated it — the caller must then do nothing
+   * more, or today's delivery would be materialized twice. */
+  async activatePendingSubscription(
+    id: string,
+    data: { startDate: Date; cycleEnd: Date },
+  ): Promise<boolean> {
+    const { count } = await this.prisma.subscription.updateMany({
+      where: { id, status: SubscriptionStatus.PENDING_PAYMENT },
+      data: {
+        status: SubscriptionStatus.ACTIVE,
+        startDate: data.startDate,
+        cycleEnd: data.cycleEnd,
+      },
+    });
+    return count === 1;
+  }
+
   activateSubscription(
     id: string,
     data: { startDate: Date; cycleEnd: Date },
@@ -266,6 +323,11 @@ export class SubscriptionsRepository {
         scheduledDates: { orderBy: { sequence: 'asc' } },
         address: true,
         deliverySlot: true,
+        // What the customer got back — never staff notes or who recorded it.
+        refunds: {
+          orderBy: { createdAt: 'desc' },
+          select: { netRefundInPaise: true, method: true, createdAt: true },
+        },
       },
     });
   }
@@ -315,7 +377,18 @@ export class SubscriptionsRepository {
       include: {
         plan: { include: PLAN_WITH_DAYS_INCLUDE },
         skips: { orderBy: { dateFrom: 'asc' } },
-        dayOverrides: true,
+        // With what changed, so staff see the day's address/time/note.
+        dayOverrides: {
+          orderBy: { date: 'asc' },
+          include: {
+            address: {
+              select: { label: true, line1: true, city: true },
+            },
+            deliverySlot: {
+              select: { name: true, startTime: true, endTime: true },
+            },
+          },
+        },
         address: true,
         deliverySlot: true,
         user: {
@@ -819,6 +892,40 @@ export class SubscriptionsRepository {
     });
   }
 
+  /** Claims `dateStr` for this subscription in one conditional write: true
+   * only for the caller that moved lastMaterializedDate onto it. Any other
+   * run (the next hourly tick, a second server, the same-day inline call
+   * at activation) sees it already claimed and does nothing. */
+  async claimMaterializationDate(
+    id: string,
+    dateStr: string,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.subscription.updateMany({
+      where: {
+        id,
+        OR: [
+          { lastMaterializedDate: null },
+          { lastMaterializedDate: { not: dateStr } },
+        ],
+      },
+      data: { lastMaterializedDate: dateStr },
+    });
+    return count === 1;
+  }
+
+  /** Undoes a claim whose processing failed, so the next run retries the
+   * day — but only if this claim is still the one in place. */
+  async releaseMaterializationDate(
+    id: string,
+    dateStr: string,
+    previous: string | null,
+  ): Promise<void> {
+    await this.prisma.subscription.updateMany({
+      where: { id, lastMaterializedDate: dateStr },
+      data: { lastMaterializedDate: previous },
+    });
+  }
+
   /** Same shape as findActiveSubscriptionsForMaterialization(), for a single
    * subscription — used by verifyPayment()'s same-day inline materialize
    * call (startDateLeadDays === 0), which can't wait for the nightly job. */
@@ -831,6 +938,17 @@ export class SubscriptionsRepository {
         deliverySlot: true,
         tenant: { include: { businessProfile: true } },
       },
+    });
+  }
+
+  /** Every skip/pause range on a subscription — for the skip/pause rules,
+   * which must not credit the same day twice. */
+  findSkipRanges(
+    subscriptionId: string,
+  ): Promise<{ dateFrom: string; dateTo: string }[]> {
+    return this.prisma.subscriptionSkip.findMany({
+      where: { subscriptionId },
+      select: { dateFrom: true, dateTo: true },
     });
   }
 
@@ -871,6 +989,14 @@ export class SubscriptionsRepository {
    * block a schedulingMode change once a plan is no longer purely
    * hypothetical (neither mode's per-subscriber bookkeeping handles a live
    * plan switching semantics mid-flight). */
+  /** How many of `mealIds` are live meals of this tenant — a plan may only
+   * reference its own tenant's menu. */
+  countTenantMeals(tenantId: string, mealIds: string[]): Promise<number> {
+    return this.prisma.meal.count({
+      where: { tenantId, id: { in: mealIds }, deletedAt: null },
+    });
+  }
+
   countSubscriptionsForPlan(planId: string): Promise<number> {
     return this.prisma.subscription.count({ where: { planId } });
   }
@@ -935,6 +1061,8 @@ export class SubscriptionsRepository {
     subscriptionId: string;
     addressId: string;
     orderNumber: string;
+    /** Tenant-local YYYY-MM-DD the delivery is for. */
+    deliveryDateStr: string;
     notes: string;
     deliverySlotId?: string;
     deliverySlotName: string;
@@ -951,7 +1079,10 @@ export class SubscriptionsRepository {
       (sum, item) => sum + item.priceInPaiseSnapshot * item.quantity,
       0,
     );
-    const today = new Date();
+    // Stored like every other order's deliveryDate (UTC midnight of the
+    // tenant-local date) — not the run time, which for a run just after
+    // local midnight is still the previous day in UTC.
+    const deliveryDate = new Date(`${input.deliveryDateStr}T00:00:00.000Z`);
     // Snapshot the address as it stands right now, at materialization time —
     // same rule as a regular customer-placed order (see Order model
     // comment): a later edit/delete of this Address must never rewrite or
@@ -978,7 +1109,7 @@ export class SubscriptionsRepository {
         paymentStatus: PaymentStatus.PAID,
         subtotalInPaise,
         totalInPaise: subtotalInPaise,
-        deliveryDate: today,
+        deliveryDate,
         deliverySlotId: input.deliverySlotId,
         deliverySlotName: input.deliverySlotName,
         deliveryWindowStart: input.deliveryWindowStart,

@@ -9,6 +9,7 @@ import { fetchPublicConfig } from "@/lib/api/settings-client";
 import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { formatDate } from "@/lib/format/date";
 
 export default function AdminSubscriptionInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -133,7 +134,7 @@ export default function AdminSubscriptionInvoicePage({ params }: { params: Promi
               Invoice: <span className="font-mono">{invoice.razorpayOrderId}</span>
             </p>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
-              Date: {new Date(invoice.createdAt).toLocaleDateString()}
+              Date: {formatDate(invoice.createdAt)}
             </p>
           </div>
         </div>

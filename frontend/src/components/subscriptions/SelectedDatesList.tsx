@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { formatLongDate } from "@/lib/plan-calendar/month-grid";
 
 function formatRowDate(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString(undefined, {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-IN", {
     weekday: "short",
     day: "numeric",
     month: "short",

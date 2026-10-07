@@ -11,6 +11,7 @@ import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { InvoiceSkeleton } from "@/components/invoice/InvoiceSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { formatDate } from "@/lib/format/date";
 
 export default function SubscriptionInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -105,7 +106,7 @@ export default function SubscriptionInvoicePage({ params }: { params: Promise<{ 
               Payment ID: <span className="font-mono">{invoice.razorpayPaymentId ?? "—"}</span>
             </p>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
-              Date: {new Date(invoice.createdAt).toLocaleDateString()}
+              Date: {formatDate(invoice.createdAt)}
             </p>
           </div>
         </div>

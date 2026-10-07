@@ -39,6 +39,7 @@ import {
   WelcomeEmailJob,
 } from '../../shared-modules/queue/processors/mail.processor';
 import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
+import { emailTakenMessage } from '../users/email-taken.util';
 
 const OTP_TTL_SECONDS = 600; // 10 minutes
 const OTP_MAX_ATTEMPTS = 5;
@@ -76,8 +77,11 @@ export class AuthService {
       profile?.timezone ?? 'Asia/Kolkata',
     );
 
-    const existing = await this.usersRepo.findByEmail(dto.email, tenantId);
-    if (existing) throw new ConflictException('Email already in use');
+    const taken = emailTakenMessage(
+      await this.usersRepo.findByEmailIncludingRemoved(dto.email, tenantId),
+      'signup',
+    );
+    if (taken) throw new ConflictException(taken);
 
     const [hasTerms, hasPrivacy] = await Promise.all([
       this.contentService.hasPublished(tenantId, 'terms-of-service'),

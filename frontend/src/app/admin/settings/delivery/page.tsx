@@ -29,7 +29,10 @@ import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { KitchenZonesCard } from "@/components/admin/KitchenZonesCard";
 import { DeliverySlotsCard } from "@/components/admin/DeliverySlotsCard";
 
-const rupeesToPaise = (rupees: string): number | undefined =>
+/** Same cap as the API (UpdateDeliveryZonesDto). */
+const MAX_ADVANCE_ORDER_DAYS = 30;
+
+const rupeesToPaise =(rupees: string): number | undefined =>
   rupees === "" ? undefined : Math.round(Number(rupees) * 100);
 
 export default function DeliveryZonesPage() {
@@ -70,7 +73,24 @@ export default function DeliveryZonesPage() {
 
   if (!profile || !zones || !pincodes || !slots) {
     if (profileQ.isError || zonesQ.isError || pincodesQ.isError || slotsQ.isError) {
-      return <EmptyState compact icon={MapPin} title="Couldn't load delivery zone settings." />;
+      return (
+        <EmptyState
+          compact
+          icon={MapPin}
+          title="Couldn't load delivery zone settings."
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                for (const q of [profileQ, zonesQ, pincodesQ, slotsQ]) if (q.isError) void q.refetch();
+              }}
+              className="btn-outline btn-sm cursor-pointer"
+            >
+              Try again
+            </button>
+          }
+        />
+      );
     }
     return <DeliveryZonesSkeleton />;
   }
@@ -113,9 +133,14 @@ function AdvanceOrderWindowForm({
   const setMaxAdvanceOrderDays = setDraft;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Same bounds as the API — checkout lists every day up to this many ahead.
+  const days = Number(maxAdvanceOrderDays);
+  const daysInvalid =
+    maxAdvanceOrderDays.trim() === "" || !Number.isInteger(days) || days < 0 || days > MAX_ADVANCE_ORDER_DAYS;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (daysInvalid) return;
     setError(null);
     setSaving(true);
     try {
@@ -153,12 +178,25 @@ function AdvanceOrderWindowForm({
           <input
             type="number"
             min={0}
+            max={MAX_ADVANCE_ORDER_DAYS}
             value={maxAdvanceOrderDays}
             onChange={(e) => setMaxAdvanceOrderDays(e.target.value)}
+            aria-invalid={daysInvalid}
             className="input w-full"
           />
+          {daysInvalid ? (
+            <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+              Enter a whole number of days from 0 to {MAX_ADVANCE_ORDER_DAYS}.
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              {days === 0
+                ? "Customers can order for today only."
+                : `Customers can schedule orders for today and up to ${days} day${days === 1 ? "" : "s"} ahead.`}
+            </p>
+          )}
         </div>
-        <button type="submit" disabled={saving} className="btn-primary w-fit">
+        <button type="submit" disabled={saving || daysInvalid} className="btn-primary w-fit">
           {saving ? "Saving…" : "Save changes"}
         </button>
       </fieldset>
@@ -234,7 +272,8 @@ function PincodesCard({
         Serviceable pincodes
       </h3>
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        Used as a fallback when kitchen geo-radius above isn&apos;t configured.
+        Also delivers to these pincodes when an address is outside every kitchen zone&apos;s radius. Inside a
+        zone, that zone&apos;s fee and minimum apply.
       </p>
 
       <div className="flex flex-col gap-2">

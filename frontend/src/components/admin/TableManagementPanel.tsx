@@ -10,6 +10,7 @@ import {
   type DiningTable,
 } from "@/lib/api/dine-in";
 import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
 
 /** Table CRUD for one outlet — gated by dine-in.manage, separate from the
  * order-taking flow (dine-in.order-create) since a tenant may want a
@@ -25,6 +26,7 @@ export function TableManagementPanel({
   onChanged: () => void;
 }) {
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const [label, setLabel] = useState("");
   const [capacity, setCapacity] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -52,24 +54,33 @@ export function TableManagementPanel({
   async function handleToggleActive(table: DiningTable) {
     try {
       await updateDiningTable(table.id, { isActive: !table.isActive });
+      showToast(table.isActive ? `${table.label} deactivated` : `${table.label} activated`, "success");
       onChanged();
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Couldn't update this table.", "error");
     }
   }
 
-  async function handleDelete(table: DiningTable) {
+  function handleDelete(table: DiningTable) {
     if (table.activeOrderId) {
       showToast("This table has an active order — cannot remove it.", "error");
       return;
     }
-    try {
-      await deleteDiningTable(table.id);
-      showToast("Table removed", "success");
-      onChanged();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't remove this table.", "error");
-    }
+    confirm({
+      message: `Remove ${table.label}? Past orders keep its name.`,
+      confirmLabel: "Remove",
+      processingLabel: "Removing…",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await deleteDiningTable(table.id);
+          showToast("Table removed", "success");
+          onChanged();
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't remove this table.", "error");
+        }
+      },
+    });
   }
 
   return (
@@ -86,6 +97,7 @@ export function TableManagementPanel({
         <input
           type="number"
           min={1}
+          max={100}
           value={capacity}
           onChange={(e) => setCapacity(e.target.value)}
           placeholder="Seats"
@@ -125,7 +137,8 @@ export function TableManagementPanel({
               <button
                 type="button"
                 onClick={() => handleDelete(table)}
-                className="rounded p-1 text-zinc-400 hover:text-red-600"
+                aria-label={`Remove ${table.label}`}
+                className="cursor-pointer rounded p-1 text-zinc-400 hover:text-red-600"
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>

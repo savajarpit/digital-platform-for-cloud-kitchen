@@ -9,6 +9,7 @@ const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
   OrderStatus.PENDING_PAYMENT,
   OrderStatus.CONFIRMED,
   OrderStatus.PREPARING,
+  OrderStatus.READY,
 ];
 
 export interface DiningTableWithStatus extends DiningTable {
@@ -65,6 +66,25 @@ export class DiningTablesRepository {
     }));
   }
 
+  /** The open order sitting at this table, if any — `exceptOrderId` lets an
+   * order being moved ignore itself. */
+  async findActiveOrderId(
+    tenantId: string,
+    tableId: string,
+    exceptOrderId?: string,
+  ): Promise<string | null> {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        tenantId,
+        tableId,
+        status: { in: ACTIVE_ORDER_STATUSES },
+        ...(exceptOrderId ? { id: { not: exceptOrderId } } : {}),
+      },
+      select: { id: true },
+    });
+    return order?.id ?? null;
+  }
+
   update(
     id: string,
     data: { label?: string; capacity?: number | null; isActive?: boolean },
@@ -86,7 +106,8 @@ export class DiningTablesRepository {
       where: {
         tenantId,
         kitchenZoneId,
-        label,
+        // "table 4" and "Table 4" are the same table to staff.
+        label: { equals: label, mode: 'insensitive' },
         ...(excludeId ? { id: { not: excludeId } } : {}),
       },
     });

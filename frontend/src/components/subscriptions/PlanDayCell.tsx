@@ -149,7 +149,9 @@ export function PlanDayCell({
                 </span>
               )}
               {(dayLabel || sortedSlots.length > 0) && (
-                <span className="truncate text-[10px] leading-none text-zinc-500 dark:text-zinc-400">
+                // 9px + tight on phones: a 390px screen leaves ~27px per box,
+                // just short of "Day 2" at 10px.
+                <span className="truncate text-[9px] leading-none tracking-tight text-zinc-500 sm:text-[10px] sm:tracking-normal dark:text-zinc-400">
                   {dayLabel && (
                     <span className="font-semibold text-primary-700 dark:text-primary-400">
                       {dayLabel}

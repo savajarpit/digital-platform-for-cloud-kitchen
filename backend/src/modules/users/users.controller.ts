@@ -57,8 +57,12 @@ export class UsersController {
   async create(
     @Body() dto: CreateUserDto,
     @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: Role,
   ) {
-    return new UserResponseDto(await this.usersService.create(dto, tenantId));
+    return new UserResponseDto(
+      await this.usersService.create(dto, tenantId, { userId, role }),
+    );
   }
 
   @Get()
@@ -176,9 +180,11 @@ export class UsersController {
     @Param('id') id: string,
     @CurrentUser('tenantId') tenantId: string,
     @Body() dto: UpdateUserDto,
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: Role,
   ) {
     return new UserResponseDto(
-      await this.usersService.update(id, tenantId, dto),
+      await this.usersService.update(id, tenantId, dto, { userId, role }),
     );
   }
 
@@ -188,7 +194,12 @@ export class UsersController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Soft delete user' })
   @ApiResponse({ status: 204 })
-  remove(@Param('id') id: string, @CurrentUser('tenantId') tenantId: string) {
-    return this.usersService.remove(id, tenantId);
+  remove(
+    @Param('id') id: string,
+    @CurrentUser('tenantId') tenantId: string,
+    @CurrentUser('userId') userId: string,
+    @CurrentUser('role') role: Role,
+  ) {
+    return this.usersService.remove(id, tenantId, { userId, role });
   }
 }

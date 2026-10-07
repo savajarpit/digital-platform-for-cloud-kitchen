@@ -97,7 +97,7 @@ export function ExpiringSoonCard() {
                     <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{s.planName}</p>
                   </div>
                   <span className="shrink-0 text-xs text-zinc-400">
-                    {new Date(s.cycleEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    {new Date(s.cycleEnd).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
                   </span>
                 </Link>
               ))}

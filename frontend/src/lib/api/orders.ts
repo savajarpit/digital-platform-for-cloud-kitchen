@@ -38,11 +38,24 @@ export interface OrderPickupZone {
   lng: number;
 }
 
+/** A subscription's daily delivery — paid for as part of the plan, so it
+ * has no price or invoice of its own. Null for a normal order. */
+export interface PlanDelivery {
+  subscriptionId: string;
+  planName: string;
+  /** "Day 3" or "Week 1 · Mon". */
+  dayLabel: string;
+  /** The customer's own note for that day. */
+  customerNote: string | null;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
   status: string;
   paymentStatus: string;
+  /** CASH/UPI = an order staff took for you, paid on delivery. */
+  paymentMethod: "RAZORPAY" | "CASH" | "UPI";
   subtotalInPaise: number;
   discountInPaise: number;
   couponCode: string | null;
@@ -61,6 +74,7 @@ export interface Order {
   fulfillmentType: OrderFulfillmentType;
   address: OrderAddress | null;
   pickupKitchenZone: OrderPickupZone | null;
+  planDelivery: PlanDelivery | null;
 }
 
 export interface CreateOrderItemInput {

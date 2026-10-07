@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { UsersRepository } from './users.repository';
 import { CustomerInviteService } from './customer-invite.service';
@@ -14,7 +15,13 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { QueryCustomersDto } from './dto/query-customers.dto';
 import { OffsetPaginationDto } from '../../common/dto/pagination.dto';
-import { User } from '../../generated/prisma';
+import { Role, User } from '../../generated/prisma';
+import { emailTakenMessage } from './email-taken.util';
+import {
+  assertCanAssignRole,
+  assertCanUpdateUser,
+  RoleActor,
+} from './user-role-policy.util';
 
 @Injectable()
 export class UsersService {
@@ -24,9 +31,17 @@ export class UsersService {
     private readonly invites: CustomerInviteService,
   ) {}
 
-  async create(dto: CreateUserDto, tenantId: string): Promise<User> {
-    const exists = await this.usersRepo.findByEmail(dto.email, tenantId);
-    if (exists) throw new ConflictException('Email already in use');
+  async create(
+    dto: CreateUserDto,
+    tenantId: string,
+    actor: RoleActor,
+  ): Promise<User> {
+    assertCanAssignRole(actor.role, dto.role ?? Role.CUSTOMER);
+    const taken = emailTakenMessage(
+      await this.usersRepo.findByEmailIncludingRemoved(dto.email, tenantId),
+      'staff',
+    );
+    if (taken) throw new ConflictException(taken);
 
     const passwordHash = await HashUtil.hash(dto.password);
     return this.usersRepo.create({
@@ -87,16 +102,42 @@ export class UsersService {
     id: string,
     tenantId: string,
     dto: UpdateUserDto,
+    actor: RoleActor,
   ): Promise<User> {
-    await this.findOne(id, tenantId);
-    if (dto.password) {
-      dto.password = await HashUtil.hash(dto.password);
+    const user = await this.findOne(id, tenantId);
+    assertCanUpdateUser(actor, user, dto.role);
+    const { password, ...rest } = dto;
+    if (password && user.id === actor.userId) {
+      // Your own password goes through /users/me/password, which checks the
+      // current one first.
+      throw new ForbiddenException(
+        'Change your own password from your account settings.',
+      );
     }
-    return this.usersRepo.update(id, dto);
+    return this.usersRepo.update(id, {
+      ...rest,
+      ...(password ? { passwordHash: await HashUtil.hash(password) } : {}),
+    });
   }
 
-  async remove(id: string, tenantId: string): Promise<void> {
-    await this.findOne(id, tenantId);
+  async remove(
+    id: string,
+    tenantId: string,
+    actor: { userId: string; role: string },
+  ): Promise<void> {
+    const user = await this.findOne(id, tenantId);
+    if (user.id === actor.userId) {
+      throw new ForbiddenException("You can't remove your own account.");
+    }
+    // Only the platform can remove a business's owner (or a platform admin).
+    if (
+      (user.role === Role.OWNER || user.role === Role.SUPER_ADMIN) &&
+      actor.role !== Role.SUPER_ADMIN
+    ) {
+      throw new ForbiddenException(
+        "An owner's account can only be removed by the platform admin.",
+      );
+    }
     await this.usersRepo.softDelete(id);
   }
 

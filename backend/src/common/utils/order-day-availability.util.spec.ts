@@ -1,4 +1,5 @@
 import {
+  deliveryDateRangeError,
   INSTANT_NOT_OFFERED_REASON,
   instantDeliveryUnavailableMessage,
   orderDayAvailability,
@@ -122,6 +123,35 @@ describe('orderDayAvailability', () => {
     expect(
       orderDayAvailability(settings(), '2026-09-27', MONDAY_8PM),
     ).toMatchObject({ open: false, reason: 'Past date' });
+  });
+});
+
+describe('deliveryDateRangeError', () => {
+  // 2026-10-02 is a Friday.
+  it('accepts today through today + maxDays', () => {
+    expect(deliveryDateRangeError('2026-10-02', '2026-10-02', 2)).toBeNull();
+    expect(deliveryDateRangeError('2026-10-04', '2026-10-02', 2)).toBeNull();
+  });
+
+  it('explains a past, too-far or impossible date', () => {
+    expect(deliveryDateRangeError('2026-10-01', '2026-10-02', 2)).toBe(
+      'That delivery date has already passed.',
+    );
+    expect(deliveryDateRangeError('2026-10-05', '2026-10-02', 2)).toBe(
+      'You can order up to 2 days ahead — please pick a date up to Sun, 4 Oct.',
+    );
+    expect(deliveryDateRangeError('2026-10-04', '2026-10-02', 1)).toBe(
+      'You can order up to 1 day ahead — please pick a date up to Sat, 3 Oct.',
+    );
+    expect(deliveryDateRangeError('2026-02-30', '2026-02-01', 30)).toBe(
+      "That delivery date isn't a real date.",
+    );
+  });
+
+  it('says "today only" when the window is 0', () => {
+    expect(deliveryDateRangeError('2026-10-03', '2026-10-02', 0)).toBe(
+      'Orders are for today only — please pick today.',
+    );
   });
 });
 

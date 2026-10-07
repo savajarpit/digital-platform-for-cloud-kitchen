@@ -18,6 +18,11 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
+import { useConfirm } from "@/context/ConfirmContext";
+import { PhoneInput } from "@/components/ui/PhoneInput";
+
+/** Mirrors the backend's CreateWaitlistEntryDto partySize cap. */
+const MAX_PARTY_SIZE = 50;
 
 /** The "table's full, guest is standing" queue — deliberately has no items
  * and no bill, just who's waiting and how many. Seating a party is the only
@@ -33,6 +38,7 @@ export function WaitlistPanel({
 }) {
   const router = useRouter();
   const { showToast } = useToast();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { data: entries, isError } = useQuery({
     queryKey: qk.admin("dine-in", "waitlist", kitchenZoneId),
@@ -71,14 +77,22 @@ export function WaitlistPanel({
     }
   }
 
-  async function handleCancel(id: string) {
-    try {
-      await cancelWaitlistEntry(id);
-      showToast("Removed from waitlist", "success");
-      refresh();
-    } catch (err) {
-      showToast(err instanceof ApiError ? err.message : "Couldn't remove this entry.", "error");
-    }
+  function handleCancel(id: string, name: string) {
+    confirm({
+      message: `Remove ${name} from the waitlist? Use this when they left without being seated.`,
+      confirmLabel: "Remove",
+      processingLabel: "Removing…",
+      variant: "danger",
+      onConfirm: async () => {
+        try {
+          await cancelWaitlistEntry(id);
+          showToast("Removed from waitlist", "success");
+          refresh();
+        } catch (err) {
+          showToast(err instanceof ApiError ? err.message : "Couldn't remove this entry.", "error");
+        }
+      },
+    });
   }
 
   async function handleSeat(id: string) {
@@ -107,19 +121,21 @@ export function WaitlistPanel({
           placeholder="Name (optional)"
           className="input w-36"
         />
-        <input
+        <PhoneInput
           value={guestPhone}
-          onChange={(e) => setGuestPhone(e.target.value)}
+          onChange={setGuestPhone}
           placeholder="Phone (optional)"
-          className="input w-36"
+          className="w-52"
         />
         <input
           type="number"
           min={1}
+          max={MAX_PARTY_SIZE}
           value={partySize}
-          onChange={(e) => setPartySize(Math.max(1, Number(e.target.value) || 1))}
+          onChange={(e) => setPartySize(Math.min(MAX_PARTY_SIZE, Math.max(1, Number(e.target.value) || 1)))}
           className="input w-20 text-center"
           title="Party size"
+          aria-label="Party size"
         />
         <button
           type="button"
@@ -209,9 +225,10 @@ export function WaitlistPanel({
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleCancel(entry.id)}
-                      className="rounded p-1.5 text-zinc-400 hover:text-red-600"
+                      onClick={() => handleCancel(entry.id, entry.guestName?.trim() || "this walk-in")}
+                      className="cursor-pointer rounded p-1.5 text-zinc-400 hover:text-red-600"
                       title="Left without being seated"
+                      aria-label="Remove from waitlist"
                     >
                       <UserX className="h-4 w-4" />
                     </button>

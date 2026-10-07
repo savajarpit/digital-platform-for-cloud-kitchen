@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { Fragment, use } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { ArrowLeft, Printer } from "lucide-react";
@@ -9,6 +9,7 @@ import { fetchPublicConfig } from "@/lib/api/settings-client";
 import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { InvoiceSkeleton } from "@/components/admin/InvoiceSkeleton";
+import { formatDate } from "@/lib/format/date";
 
 export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -38,6 +39,20 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
   }
 
   if (!order || !config) return <InvoiceSkeleton />;
+
+  // A plan delivery was paid for with the plan — its bill is the plan's invoice.
+  if (order.planDelivery) {
+    return (
+      <div className="flex flex-col items-center gap-4 py-24 text-center">
+        <p className="text-zinc-600 dark:text-zinc-400">
+          This delivery is part of a meal plan and has no bill of its own.
+        </p>
+        <Link href={`/admin/subscriptions/${order.planDelivery.subscriptionId}/invoice`} className="btn-primary">
+          View plan invoice
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <div className="print:py-0">
@@ -90,7 +105,7 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
               Order: <span className="font-mono">{order.orderNumber}</span>
             </p>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
-              Date: {new Date(order.createdAt).toLocaleDateString()}
+              Date: {formatDate(order.createdAt)}
             </p>
           </div>
         </div>
@@ -147,19 +162,37 @@ export default function AdminOrderInvoicePage({ params }: { params: Promise<{ id
             </tr>
           </thead>
           <tbody>
-            {order.items.map((item) => (
-              <tr
-                key={item.id}
-                className="border-b border-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 print:border-zinc-200 print:text-black"
-              >
-                <td className="py-2.5">{item.nameSnapshot}</td>
-                <td className="py-2.5 text-center">{item.quantity}</td>
-                <td className="py-2.5 text-right">{formatPriceFromPaise(item.priceInPaiseSnapshot)}</td>
-                <td className="py-2.5 text-right">
-                  {formatPriceFromPaise(item.priceInPaiseSnapshot * item.quantity)}
-                </td>
-              </tr>
-            ))}
+            {order.items.map((item) => {
+              const addonUnitTotal = (item.addons ?? []).reduce(
+                (sum, a) => sum + a.priceInPaiseSnapshot * a.quantity,
+                0,
+              );
+              return (
+                <Fragment key={item.id}>
+                  <tr className="border-b border-zinc-100 text-zinc-700 dark:border-zinc-800 dark:text-zinc-300 print:border-zinc-200 print:text-black">
+                    <td className="py-2.5">{item.nameSnapshot}</td>
+                    <td className="py-2.5 text-center">{item.quantity}</td>
+                    <td className="py-2.5 text-right">
+                      {formatPriceFromPaise(item.priceInPaiseSnapshot + addonUnitTotal)}
+                    </td>
+                    <td className="py-2.5 text-right">
+                      {formatPriceFromPaise((item.priceInPaiseSnapshot + addonUnitTotal) * item.quantity)}
+                    </td>
+                  </tr>
+                  {item.addons?.map((a) => (
+                    <tr
+                      key={a.id}
+                      className="border-b border-zinc-100 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400 print:border-zinc-200 print:text-zinc-600"
+                    >
+                      <td className="py-1 pl-4 wrap-break-word">+ {a.nameSnapshot}</td>
+                      <td className="py-1 text-center">{a.quantity}</td>
+                      <td className="py-1 text-right">{formatPriceFromPaise(a.priceInPaiseSnapshot)}</td>
+                      <td className="py-1 text-right" />
+                    </tr>
+                  ))}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
         </div>

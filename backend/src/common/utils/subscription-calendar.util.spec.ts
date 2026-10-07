@@ -112,6 +112,52 @@ describe('buildSubscriptionCalendarDays — RELATIVE_DAY, no date selection', ()
     ]);
   });
 
+  it('marks every delivery day from a pending request’s hold date ON_HOLD (locked, no meals)', () => {
+    const days = buildSubscriptionCalendarDays(
+      baseSubscription(),
+      '2026-09-20',
+      '2026-09-22',
+      '2026-09-19',
+      '2026-09-19',
+      [],
+      undefined,
+      '2026-09-21', // hold from
+    );
+    expect(days.map((d) => [d.date, d.kind, d.locked, d.meals.length])).toEqual(
+      [
+        ['2026-09-20', 'UPCOMING', false, 1],
+        ['2026-09-21', 'ON_HOLD', true, 0],
+        ['2026-09-22', 'ON_HOLD', true, 0],
+      ],
+    );
+  });
+
+  it('shows a day already held for a cancellation request as ON_HOLD, never a holiday', () => {
+    const days = buildSubscriptionCalendarDays(
+      baseSubscription({
+        skips: [
+          {
+            dateFrom: '2026-09-21',
+            dateTo: '2026-09-21',
+            reason: 'On hold — cancellation requested',
+            disruptionId: null,
+            cancellationRequestId: 'req1',
+          },
+        ],
+      }),
+      '2026-09-20',
+      '2026-09-22',
+      '2026-09-23',
+      '2026-09-23',
+      [],
+    );
+    expect(days.map((d) => [d.date, d.kind, d.dayLabel])).toEqual([
+      ['2026-09-20', 'DELIVERED', 'Day 1'],
+      ['2026-09-21', 'ON_HOLD', null],
+      ['2026-09-22', 'DELIVERED', 'Day 2'],
+    ]);
+  });
+
   it('a disruption-declared skip is DISRUPTED with its reason, and does not advance the counter', () => {
     const days = buildSubscriptionCalendarDays(
       baseSubscription({

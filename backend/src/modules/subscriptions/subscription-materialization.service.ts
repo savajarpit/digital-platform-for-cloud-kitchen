@@ -55,6 +55,38 @@ import {
  * closure added at the last minute still works and nothing has to be
  * back-filled onto existing subscribers when the date is saved.
  */
+/** What materializeOne needs about a subscription (the materialization
+ * query's row shape). */
+export interface MaterializableSubscription {
+  id: string;
+  tenantId: string;
+  userId: string;
+  addressId: string;
+  deliverySlotId: string | null;
+  planId: string;
+  planNameSnapshot: string;
+  nextPlanDayNumber: number;
+  usesDateSelection: boolean;
+  startDate: Date | null;
+  cycleEnd: Date | null;
+  plan: {
+    durationDays: number;
+    schedulingMode: SubscriptionPlanSchedulingMode;
+    weekCount: number | null;
+    scheduleAnchorDate: string | null;
+    offDayHandling: SubscriptionOffDayHandling;
+  };
+  tenant: { businessProfile: { timezone: string } | null };
+  lastMaterializedDate?: string | null;
+}
+
+/** What one materializeOne call did — counted in the job's run summary. */
+export type MaterializeOutcome =
+  | 'processed'
+  | 'already-done'
+  | 'not-due'
+  | 'expired';
+
 @Injectable()
 export class SubscriptionMaterializationService {
   private readonly logger = new Logger(SubscriptionMaterializationService.name);
@@ -65,28 +97,10 @@ export class SubscriptionMaterializationService {
     private readonly bankingService: SubscriptionBankingService,
   ) {}
 
-  async materializeOne(subscription: {
-    id: string;
-    tenantId: string;
-    userId: string;
-    addressId: string;
-    deliverySlotId: string | null;
-    planId: string;
-    planNameSnapshot: string;
-    nextPlanDayNumber: number;
-    usesDateSelection: boolean;
-    startDate: Date | null;
-    cycleEnd: Date | null;
-    plan: {
-      durationDays: number;
-      schedulingMode: SubscriptionPlanSchedulingMode;
-      weekCount: number | null;
-      scheduleAnchorDate: string | null;
-      offDayHandling: SubscriptionOffDayHandling;
-    };
-    tenant: { businessProfile: { timezone: string } | null };
-  }): Promise<void> {
-    if (!subscription.cycleEnd || !subscription.startDate) return;
+  async materializeOne(
+    subscription: MaterializableSubscription,
+  ): Promise<MaterializeOutcome> {
+    if (!subscription.cycleEnd || !subscription.startDate) return 'not-due';
     const timezone =
       subscription.tenant.businessProfile?.timezone ?? 'Asia/Kolkata';
     const { dateStr: todayStr } = DateUtil.getTenantNow(timezone);
@@ -99,12 +113,40 @@ export class SubscriptionMaterializationService {
       timezone,
     );
 
-    if (todayStr < startDateStr) return; // Day 1 hasn't arrived yet
+    if (todayStr < startDateStr) return 'not-due'; // Day 1 hasn't arrived yet
     if (todayStr > cycleEndStr) {
       await this.subscriptionsRepo.expireSubscription(subscription.id);
-      return;
+      return 'expired';
     }
 
+    // Claim today first: the hourly job, a second server and the same-day
+    // inline call at activation all funnel through here, and only the
+    // claimer processes the day — never twice.
+    const claimed = await this.subscriptionsRepo.claimMaterializationDate(
+      subscription.id,
+      todayStr,
+    );
+    if (!claimed) return 'already-done';
+    try {
+      await this.processDay(subscription, todayStr);
+    } catch (error) {
+      // Hand the day back so the next run retries it.
+      await this.subscriptionsRepo.releaseMaterializationDate(
+        subscription.id,
+        todayStr,
+        subscription.lastMaterializedDate ?? null,
+      );
+      throw error;
+    }
+    return 'processed';
+  }
+
+  /** Today's work for one subscription, once it has been claimed: skip,
+   * closure, cancellation hold, or a real order (see the class comment). */
+  private async processDay(
+    subscription: MaterializableSubscription,
+    todayStr: string,
+  ): Promise<void> {
     const skip = await this.subscriptionsRepo.findSkipForDate(
       subscription.id,
       todayStr,
@@ -137,7 +179,8 @@ export class SubscriptionMaterializationService {
       // be compensated a second time.
       if (await this.isPlanOffWeekday(subscription, todayStr)) return;
       await this.materializeClosedDate(
-        { ...subscription, cycleEnd: subscription.cycleEnd },
+        // materializeOne only calls processDay once cycleEnd is set.
+        { ...subscription, cycleEnd: subscription.cycleEnd! },
         todayStr,
         closure.name,
       );
@@ -217,6 +260,7 @@ export class SubscriptionMaterializationService {
         subscriptionId: subscription.id,
         addressId,
         orderNumber: generateSubscriptionOrderNumber(),
+        deliveryDateStr: todayStr,
         notes,
         deliverySlotId: slot?.id,
         deliverySlotName: slot?.name ?? 'Subscription delivery',

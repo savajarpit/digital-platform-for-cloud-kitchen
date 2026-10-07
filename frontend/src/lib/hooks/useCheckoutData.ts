@@ -100,7 +100,7 @@ export function useCheckoutData(labels: { today: string; tomorrow: string }): Ch
           ? today
           : i === 1
             ? tomorrow
-            : date.toLocaleDateString(undefined, {
+            : date.toLocaleDateString("en-IN", {
                 weekday: "short",
                 month: "short",
                 day: "numeric",

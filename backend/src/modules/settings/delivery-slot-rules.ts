@@ -1,4 +1,5 @@
 import { DeliverySlotUsage } from '../../generated/prisma';
+import { countPhrase, joinPhrases } from '../../common/utils/count-phrase.util';
 
 /** The two flows a slot can be offered in. */
 export type SlotFlow = 'ORDERS' | 'SUBSCRIPTIONS';
@@ -41,13 +42,13 @@ export function deliverySlotTimesError(
 export function deliverySlotInUseMessage(
   usage: DeliverySlotDependents,
 ): string | null {
-  const parts = [
-    plural(usage.subscriptions, 'active subscription'),
-    plural(usage.dayChanges, 'upcoming day change'),
-    plural(usage.orders, 'upcoming order'),
-  ].filter((p): p is string => p !== null);
-  if (parts.length === 0) return null;
-  return `This slot is still used by ${joinList(parts)}. Switch it off instead — customers stop seeing it, and existing deliveries keep their time.`;
+  const users = joinPhrases([
+    countPhrase(usage.subscriptions, 'active subscription'),
+    countPhrase(usage.dayChanges, 'upcoming day change'),
+    countPhrase(usage.orders, 'upcoming order'),
+  ]);
+  if (!users) return null;
+  return `This slot is still used by ${users}. Switch it off instead — customers stop seeing it, and existing deliveries keep their time.`;
 }
 
 /** Why a slot can't stop being offered to subscriptions, or null. Live
@@ -57,20 +58,10 @@ export function deliverySlotInUseMessage(
 export function subscriptionSlotInUseMessage(
   dependents: DeliverySlotDependents,
 ): string | null {
-  const parts = [
-    plural(dependents.subscriptions, 'active subscription'),
-    plural(dependents.dayChanges, 'upcoming day change'),
-  ].filter((p): p is string => p !== null);
-  if (parts.length === 0) return null;
-  return `This slot is still used by ${joinList(parts)}, so it has to stay available for subscriptions. Move them to another slot first, or keep it on "Both".`;
-}
-
-function plural(count: number, noun: string): string | null {
-  if (count === 0) return null;
-  return `${count} ${noun}${count === 1 ? '' : 's'}`;
-}
-
-function joinList(parts: string[]): string {
-  if (parts.length === 1) return parts[0];
-  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  const users = joinPhrases([
+    countPhrase(dependents.subscriptions, 'active subscription'),
+    countPhrase(dependents.dayChanges, 'upcoming day change'),
+  ]);
+  if (!users) return null;
+  return `This slot is still used by ${users}, so it has to stay available for subscriptions. Move them to another slot first, or keep it on "Both".`;
 }

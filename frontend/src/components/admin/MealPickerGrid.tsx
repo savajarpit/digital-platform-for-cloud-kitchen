@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImageOff } from "lucide-react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { listMeals, type Meal } from "@/lib/api/admin-menu";
 import { qk, STALE } from "@/lib/query/keys";
@@ -9,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { MealThumb } from "@/components/ui/MealThumb";
 
 const PAGE_SIZE = 12;
 
@@ -115,14 +115,7 @@ export function MealPickerGrid({
                       className="h-3.5 w-3.5 shrink-0 accent-primary-600"
                     />
                     <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">
-                      {meal.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={meal.imageUrl} alt={meal.name} className="h-full w-full object-cover" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-zinc-300 dark:text-zinc-600">
-                          <ImageOff className="h-4 w-4" />
-                        </div>
-                      )}
+                      <MealThumb src={meal.imageUrl} alt={meal.name} iconClassName="h-4 w-4" />
                     </div>
                   </div>
                   <div className="min-w-0">

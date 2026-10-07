@@ -19,6 +19,7 @@ import { EligiblePlanCard } from "@/components/admin/EligiblePlanCard";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { submitCancellationRequest } from "@/lib/api/platform-cancellation-requests";
+import { formatDate } from "@/lib/format/date";
 
 // The backend + admin review flow for this are fully built and working —
 // flip this to true to show the trigger below once you're ready to offer
@@ -165,7 +166,7 @@ export default function MyPlanPage() {
             <div className="rounded-lg border border-amber-200 bg-amber-50/50 px-3.5 py-2.5 text-sm dark:border-amber-900 dark:bg-amber-950/30">
               <p className="text-amber-700 dark:text-amber-400">
                 Your plan is cancelling
-                {eligible.cancelsOn && ` on ${new Date(eligible.cancelsOn).toLocaleDateString()}`}.
+                {eligible.cancelsOn && ` on ${formatDate(eligible.cancelsOn)}`}.
                 Plan switching is disabled until then.
               </p>
             </div>
@@ -173,7 +174,7 @@ export default function MyPlanPage() {
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-3.5 py-2.5 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
               <p className="text-emerald-700 dark:text-emerald-400">
                 You&apos;re on a free trial until{" "}
-                {new Date(eligible.trialEndsAt).toLocaleDateString()}. Plan switching is disabled
+                {formatDate(eligible.trialEndsAt)}. Plan switching is disabled
                 until the trial ends.
               </p>
             </div>
@@ -184,7 +185,7 @@ export default function MyPlanPage() {
                   <p className="text-sky-700 dark:text-sky-400">
                     Switching to <strong>{eligible.pendingSwitch.planName}</strong>
                     {eligible.pendingSwitch.changeAt &&
-                      ` on ${new Date(eligible.pendingSwitch.changeAt).toLocaleDateString()}`}
+                      ` on ${formatDate(eligible.pendingSwitch.changeAt)}`}
                     . This can&apos;t be cancelled — Razorpay doesn&apos;t support undoing a
                     scheduled switch. Picking a different plan below replaces it.
                   </p>

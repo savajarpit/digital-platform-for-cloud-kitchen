@@ -37,17 +37,18 @@ export function PlansPageSettingsCard({ canEdit }: { canEdit: boolean }) {
     if (!settings) return;
     setSaving(true);
     try {
+      // null, not undefined — an emptied field must clear back to the default.
       const updated = await updateSubscriptionSettings({
-        homepageTitle: settings.homepageTitle || undefined,
-        homepageDescription: settings.homepageDescription || undefined,
-        plansPageTitle: settings.plansPageTitle || undefined,
-        plansPageSubtitle: settings.plansPageSubtitle || undefined,
+        homepageTitle: settings.homepageTitle?.trim() || null,
+        homepageDescription: settings.homepageDescription?.trim() || null,
+        plansPageTitle: settings.plansPageTitle?.trim() || null,
+        plansPageSubtitle: settings.plansPageSubtitle?.trim() || null,
         whySubscribeEnabled: settings.whySubscribeEnabled,
         faqEnabled: settings.faqEnabled,
         contactCtaEnabled: settings.contactCtaEnabled,
-        contactCtaTitle: settings.contactCtaTitle || undefined,
-        contactCtaDescription: settings.contactCtaDescription || undefined,
-        contactEmail: settings.contactEmail || undefined,
+        contactCtaTitle: settings.contactCtaTitle?.trim() || null,
+        contactCtaDescription: settings.contactCtaDescription?.trim() || null,
+        contactEmail: settings.contactEmail?.trim() || null,
       });
       queryClient.setQueryData(settingsKey, updated);
       setSettings(null);

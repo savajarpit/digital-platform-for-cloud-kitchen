@@ -11,6 +11,8 @@ export const PERMISSIONS = {
   ORDERS_CANCEL_REFUND: "orders.cancel-refund",
   ORDERS_MANUAL_CREATE: "orders.manual-create",
   PAYMENTS_MANUAL_RECORD: "payments.manual-record",
+  KITCHEN_VIEW: "kitchen.view",
+  KITCHEN_UPDATE: "kitchen.update",
   DELIVERY_MANAGE: "delivery.manage",
   SUBSCRIPTIONS_MANAGE: "subscriptions.manage",
   SUBSCRIPTIONS_CANCEL_REFUND: "subscriptions.cancel-refund",

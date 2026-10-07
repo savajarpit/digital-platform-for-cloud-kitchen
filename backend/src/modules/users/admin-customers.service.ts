@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { UsersRepository } from './users.repository';
 import { CustomerInviteService } from './customer-invite.service';
+import { emailTakenMessage } from './email-taken.util';
 import { AddressesService } from '../addresses/addresses.service';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CreateAddressDto } from '../addresses/dto/create-address.dto';
@@ -26,12 +27,11 @@ export class AdminCustomersService {
     tenantId: string,
     dto: CreateCustomerDto,
   ): Promise<{ customer: User; address: Address | null }> {
-    const existing = await this.usersRepo.findByEmail(dto.email, tenantId);
-    if (existing) {
-      throw new ConflictException(
-        'A customer with this email already exists — search for them instead.',
-      );
-    }
+    const taken = emailTakenMessage(
+      await this.usersRepo.findByEmailIncludingRemoved(dto.email, tenantId),
+      'customer',
+    );
+    if (taken) throw new ConflictException(taken);
 
     // Nobody knows this password — the account is unusable until the
     // customer sets their own through the invite (or forgot-password).

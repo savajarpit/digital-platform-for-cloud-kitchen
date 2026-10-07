@@ -13,6 +13,7 @@ import { qk, STALE } from "@/lib/query/keys";
 import { useToast } from "@/context/ToastContext";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { formatDateTime } from "@/lib/format/date";
 
 export default function PlatformTermsAdminPage() {
   const { showToast } = useToast();
@@ -122,7 +123,7 @@ export default function PlatformTermsAdminPage() {
                       Version {terms.version}
                     </span>
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                      {new Date(terms.publishedAt).toLocaleString()}
+                      {formatDateTime(terms.publishedAt)}
                     </span>
                   </div>
                 ))}

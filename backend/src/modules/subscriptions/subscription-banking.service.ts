@@ -31,6 +31,9 @@ export class SubscriptionBankingService {
     private readonly settingsRepo: SettingsRepository,
   ) {}
 
+  /** `afterDateStr`: credited days must land after this date even when it's
+   * past the current cycleEnd — a pause that runs beyond the plan's last day
+   * resumes the missed deliveries only once the pause is over. */
   async bankExtraDays(
     tenantId: string,
     subscription: {
@@ -40,14 +43,25 @@ export class SubscriptionBankingService {
       usesDateSelection: boolean;
     },
     bankedDaysDelta: number,
+    afterDateStr?: string,
   ): Promise<Date> {
+    const timezone = await this.getTenantTimezone(tenantId);
+    const cycleEndStr = DateUtil.toTenantDateStr(
+      subscription.cycleEnd,
+      timezone,
+    );
+    const pastCycleEnd = !!afterDateStr && afterDateStr > cycleEndStr;
     const plan = await this.subscriptionsRepo.findPlanScheduleConfig(
       subscription.planId,
     );
     if (!plan) {
       // Same fallback the old duplicated methods used — a plan somehow
       // missing its schedule config shouldn't block banking outright.
-      return DateUtil.addDays(subscription.cycleEnd, bankedDaysDelta);
+      return pastCycleEnd
+        ? new Date(
+            `${DateUtil.addDaysToDateStr(afterDateStr, bankedDaysDelta)}T00:00:00.000Z`,
+          )
+        : DateUtil.addDays(subscription.cycleEnd, bankedDaysDelta);
     }
     const weekly =
       plan.schedulingMode === SubscriptionPlanSchedulingMode.WEEKLY_FIXED;
@@ -58,16 +72,13 @@ export class SubscriptionBankingService {
     if (
       !weekly &&
       closedDateSet.size === 0 &&
-      !subscription.usesDateSelection
+      !subscription.usesDateSelection &&
+      !pastCycleEnd
     ) {
       return DateUtil.addDays(subscription.cycleEnd, bankedDaysDelta);
     }
 
-    const timezone = await this.getTenantTimezone(tenantId);
-    const currentCycleEndStr = DateUtil.toTenantDateStr(
-      subscription.cycleEnd,
-      timezone,
-    );
+    const currentCycleEndStr = pastCycleEnd ? afterDateStr : cycleEndStr;
     const deliveryDayKeys = weekly
       ? await this.subscriptionsRepo.findPlanDeliveryDayKeys(
           subscription.planId,

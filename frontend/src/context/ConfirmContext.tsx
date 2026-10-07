@@ -89,10 +89,13 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
+              {/* Focus starts on Cancel — the safe choice for a delete prompt,
+                  and it lets keyboard users answer without hunting for it. */}
               <button
                 type="button"
                 onClick={dismiss}
                 disabled={isProcessing}
+                autoFocus
                 className="btn-ghost btn-sm"
               >
                 {pending.cancelLabel ?? "Cancel"}

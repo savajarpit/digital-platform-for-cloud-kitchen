@@ -66,6 +66,18 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     category: 'operations',
   },
   {
+    key: 'kitchen.view',
+    description:
+      "Open the Kitchen screen — see the day's orders, plan deliveries and prep summary (customer phone/email stay hidden unless they can also manage orders)",
+    category: 'operations',
+  },
+  {
+    key: 'kitchen.update',
+    description:
+      'Start preparing an order and mark it ready from the Kitchen screen',
+    category: 'operations',
+  },
+  {
     key: 'delivery.manage',
     description: 'Assign and track deliveries',
     category: 'operations',

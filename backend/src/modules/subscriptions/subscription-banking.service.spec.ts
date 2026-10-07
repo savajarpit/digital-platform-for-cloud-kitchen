@@ -78,6 +78,52 @@ describe('SubscriptionBankingService', () => {
     expect(mockRepo.createScheduledDates).not.toHaveBeenCalled();
   });
 
+  it('a pause running past cycleEnd resumes the credited days after the pause', async () => {
+    mockRepo.findPlanScheduleConfig.mockResolvedValue(relativePlan);
+
+    // cycleEnd 26 Sep, pause until 30 Sep, 2 credited days -> 1 and 2 Oct.
+    const result = await service.bankExtraDays(
+      't1',
+      subscription(),
+      2,
+      '2026-09-30',
+    );
+
+    expect(result).toEqual(new Date('2026-10-02T00:00:00.000Z'));
+  });
+
+  it('a pause ending before cycleEnd still banks from cycleEnd', async () => {
+    mockRepo.findPlanScheduleConfig.mockResolvedValue(relativePlan);
+
+    const result = await service.bankExtraDays(
+      't1',
+      subscription(),
+      2,
+      '2026-09-24',
+    );
+
+    expect(result).toEqual(new Date('2026-09-28T00:00:00.000Z'));
+  });
+
+  it('date selection: a pause past cycleEnd appends dates after the pause', async () => {
+    mockRepo.findPlanScheduleConfig.mockResolvedValue(relativePlan);
+    mockRepo.findScheduledDates.mockResolvedValue([
+      { date: '2026-09-26', sequence: 7 },
+    ]);
+
+    await service.bankExtraDays(
+      't1',
+      subscription({ usesDateSelection: true }),
+      2,
+      '2026-09-30',
+    );
+
+    expect(mockRepo.createScheduledDates).toHaveBeenCalledWith('sub1', [
+      { date: '2026-10-01', sequence: 8 },
+      { date: '2026-10-02', sequence: 9 },
+    ]);
+  });
+
   it('WEEKLY_FIXED: skips the off-weekday even without date selection', async () => {
     mockRepo.findPlanScheduleConfig.mockResolvedValue(weeklyPlan);
     mockRepo.findPlanDeliveryDayKeys.mockResolvedValue(MON_TO_SAT);

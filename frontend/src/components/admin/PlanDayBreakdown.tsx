@@ -1,5 +1,5 @@
-import { ImageOff } from "lucide-react";
 import type { MealSlotType, PlanDay } from "@/lib/api/admin-subscriptions";
+import { MealThumb } from "@/components/ui/MealThumb";
 
 const SLOT_LABELS: Record<MealSlotType, string> = {
   BREAKFAST: "Breakfast",
@@ -51,14 +51,7 @@ export function PlanDayBreakdown({ days }: { days: PlanDay[] }) {
             {day.slots.map((slot) => (
               <div key={slot.id} className="flex items-center gap-2">
                 <div className="h-9 w-9 shrink-0 overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">
-                  {slot.meal?.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={slot.meal.imageUrl} alt={slot.meal.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-zinc-300 dark:text-zinc-600">
-                      <ImageOff className="h-3.5 w-3.5" />
-                    </div>
-                  )}
+                  <MealThumb src={slot.meal?.imageUrl} alt={slot.meal?.name ?? ""} iconClassName="h-3.5 w-3.5" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-medium tracking-wide text-zinc-400 uppercase">

@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ImageOff, Search, X } from "lucide-react";
+import { Check, ChevronDown, Search, X } from "lucide-react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { listMeals, type Meal } from "@/lib/api/admin-menu";
 import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { ComboboxRowsSkeleton } from "@/components/ui/skeletons/ComboboxRowsSkeleton";
+import { MealThumb } from "@/components/ui/MealThumb";
 
 const PAGE_SIZE = 15;
 
@@ -117,14 +118,7 @@ export function MealCombobox({
         className="input flex w-full min-w-0 cursor-pointer items-center gap-2 py-1.5 text-left text-sm disabled:cursor-not-allowed disabled:opacity-50"
       >
         <div className="h-6 w-6 shrink-0 overflow-hidden rounded bg-zinc-100 dark:bg-zinc-800">
-          {selectedMeal?.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={selectedMeal.imageUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-zinc-300 dark:text-zinc-600">
-              <ImageOff className="h-3 w-3" />
-            </div>
-          )}
+          <MealThumb src={selectedMeal?.imageUrl} alt="" iconClassName="h-3 w-3" />
         </div>
         <span className="min-w-0 flex-1 truncate">
           {value ? (selectedMeal?.name ?? "Meal selected") : noneLabel}
@@ -180,14 +174,7 @@ export function MealCombobox({
                 }`}
               >
                 <div className="h-8 w-8 shrink-0 overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">
-                  {meal.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={meal.imageUrl} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-zinc-300 dark:text-zinc-600">
-                      <ImageOff className="h-3.5 w-3.5" />
-                    </div>
-                  )}
+                  <MealThumb src={meal.imageUrl} alt="" iconClassName="h-3.5 w-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="wrap-break-word text-zinc-700 dark:text-zinc-300">{meal.name}</p>

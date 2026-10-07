@@ -19,6 +19,7 @@ import { TableRowsSkeleton } from "@/components/ui/skeletons/TableRowsSkeleton";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { formatDate } from "@/lib/format/date";
 
 const SUBSCRIPTION_STATUS_STYLES: Record<AdminSubscription["status"], string> = {
   PENDING_PAYMENT: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
@@ -146,9 +147,9 @@ export function SubscribersTab() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-zinc-500 dark:text-zinc-400">
-                      {sub.startDate ? new Date(sub.startDate).toLocaleDateString() : "—"}
+                      {sub.startDate ? formatDate(sub.startDate) : "—"}
                       {" – "}
-                      {sub.cycleEnd ? new Date(sub.cycleEnd).toLocaleDateString() : "—"}
+                      {sub.cycleEnd ? formatDate(sub.cycleEnd) : "—"}
                     </td>
                     <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-100">
                       {formatPriceFromPaise(sub.priceInPaiseSnapshot)}

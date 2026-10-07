@@ -8,6 +8,7 @@ import { listDisruptions } from "@/lib/api/admin-subscriptions";
 import { qk, STALE } from "@/lib/query/keys";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { formatDate } from "@/lib/format/date";
 
 export default function DisruptionsAdminPage() {
   const [page, setPage] = useState(1);
@@ -93,7 +94,7 @@ export default function DisruptionsAdminPage() {
                   {d._count.skips} affected · +{d.compensationDays} day
                   {d.compensationDays === 1 ? "" : "s"}
                 </p>
-                <p>{new Date(d.createdAt).toLocaleDateString()}</p>
+                <p>{formatDate(d.createdAt)}</p>
               </div>
             </div>
           ))}

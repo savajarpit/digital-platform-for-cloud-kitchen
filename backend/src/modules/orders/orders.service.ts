@@ -38,7 +38,10 @@ import { UsersRepository } from '../users/users.repository';
 import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-client.service';
 import { PaginationService } from '../../common/services/pagination.service';
 import { DateUtil } from '../../common/utils/date.util';
-import { instantDeliveryUnavailableMessage } from '../../common/utils/order-day-availability.util';
+import {
+  deliveryDateRangeError,
+  instantDeliveryUnavailableMessage,
+} from '../../common/utils/order-day-availability.util';
 import { slotOffersFor } from '../settings/delivery-slot-rules';
 import { TenantLimitsService } from '../tenant-limits/tenant-limits.service';
 import { FeaturesService } from '../features/features.service';
@@ -47,11 +50,16 @@ import { RAZORPAY_REFUNDS_FEATURE_KEY } from '../../shared-modules/refunds/refun
 import { CancelRefundDto } from '../../shared-modules/refunds/dto/cancel-refund.dto';
 import { DiningTablesService } from '../dine-in/dining-tables.service';
 import { WaitlistService } from '../dine-in/waitlist.service';
+import {
+  BILL_SETTLED_MESSAGE,
+  EMPTY_BILL_MESSAGE,
+} from '../dine-in/dine-in-rules';
 import { AddonGroupsService } from '../addons/addon-groups.service';
 import { AddonGroupWithItems } from '../addons/addon-groups.repository';
 import { MENU_ADDONS_FEATURE_KEY } from '../addons/addons.constants';
 import {
   OrderFulfillmentType,
+  OrderStatus,
   PaymentMethod,
   PaymentStatus,
   Refund,
@@ -59,12 +67,22 @@ import {
   Role,
 } from '../../generated/prisma';
 import { mealsOverQuantityLimit } from '../../common/utils/order-quantity.util';
-import { assertStatusChangeAllowed } from './order-status-rules';
+import {
+  assertStatusChangeAllowed,
+  PLAN_DELIVERY_CANCEL_MESSAGE,
+} from './order-status-rules';
 import { CancellationNotifier } from '../../shared-modules/cancellation-notifications/cancellation-notifier.service';
 import {
   MAX_ITEM_QUANTITY,
   MIN_ONLINE_PAYMENT_IN_PAISE,
 } from '../../common/constants/order-limits.constant';
+import {
+  bucketRevenueByDay,
+  sumRevenueSince,
+  toRevenueRows,
+} from './overview-revenue.util';
+import { withRefundLock } from '../../shared-modules/refunds/refund-lock';
+import { RedisService } from '../../shared-modules/cache/redis.service';
 
 export interface CreatedOrder {
   order: OrderWithDetails;
@@ -110,6 +128,7 @@ export class OrdersService {
     private readonly addonGroupsService: AddonGroupsService,
     private readonly mealStock: MealStockService,
     private readonly cancellationNotifier: CancellationNotifier,
+    private readonly redis: RedisService,
   ) {}
 
   /**
@@ -389,6 +408,7 @@ export class OrdersService {
       fulfillmentType: dto.fulfillmentType ?? 'DELIVERY',
       addressId: core.isPickup ? undefined : dto.addressId,
       addressSnapshot: core.addressSnapshot,
+      pickupSnapshot: core.pickupSnapshot,
       pickupKitchenZoneId: core.isPickup ? dto.pickupKitchenZoneId : undefined,
       orderNumber: core.orderNumber,
       subtotalInPaise: core.pricing.subtotalInPaise,
@@ -448,6 +468,7 @@ export class OrdersService {
       fulfillmentType: dto.fulfillmentType ?? 'DELIVERY',
       addressId: core.isPickup ? undefined : dto.addressId,
       addressSnapshot: core.addressSnapshot,
+      pickupSnapshot: core.pickupSnapshot,
       pickupKitchenZoneId: core.isPickup ? dto.pickupKitchenZoneId : undefined,
       orderNumber: core.orderNumber,
       subtotalInPaise: core.pricing.subtotalInPaise,
@@ -507,11 +528,15 @@ export class OrdersService {
     const isDineIn =
       order.fulfillmentType === OrderFulfillmentType.DINE_IN ||
       order.fulfillmentType === OrderFulfillmentType.TAKEAWAY;
+    if (isDineIn && order.items.length === 0) {
+      throw new BadRequestException(EMPTY_BILL_MESSAGE);
+    }
     await this.ordersRepo.markPaidManually(
       id,
       isDineIn && dto.paymentMethod
         ? (dto.paymentMethod as PaymentMethod)
         : undefined,
+      order.status !== OrderStatus.PENDING_PAYMENT,
     );
     const updated = await this.ordersRepo.findByIdForTenant(tenantId, id);
     return updated!;
@@ -557,6 +582,7 @@ export class OrdersService {
       if (!table) {
         throw new BadRequestException('Selected table is not available.');
       }
+      await this.diningTablesService.assertTableFree(tenantId, table);
       tableLabelSnapshot = table.label;
     }
 
@@ -629,6 +655,9 @@ export class OrdersService {
     dto: AddOrderItemsDto,
   ): Promise<OrderWithAdminDetails> {
     const order = await this.getOpenDineInOrder(tenantId, id);
+    if (order.paymentStatus === PaymentStatus.PAID) {
+      throw new BadRequestException(BILL_SETTLED_MESSAGE);
+    }
     const pricing = await this.computePricing(
       tenantId,
       order.userId ?? undefined,
@@ -667,6 +696,7 @@ export class OrdersService {
     if (!table) {
       throw new BadRequestException('Selected table is not available.');
     }
+    await this.diningTablesService.assertTableFree(tenantId, table, order.id);
     return this.ordersRepo.assignTable(id, table.id, table.label);
   }
 
@@ -681,27 +711,47 @@ export class OrdersService {
     waitlistEntryId: string,
     dto: SeatWaitlistEntryDto,
   ): Promise<OrderWithAdminDetails> {
-    const entry = await this.waitlistService.findWaitingForTenant(
+    const entry = await this.waitlistService.claimForSeating(
       tenantId,
       waitlistEntryId,
     );
-    if (!entry) {
-      throw new NotFoundException(
-        'Waitlist entry not found, or already seated',
-      );
+
+    let order: OrderWithAdminDetails;
+    try {
+      order = await this.createDineIn(tenantId, staffUserId, {
+        kitchenZoneId: entry.kitchenZoneId,
+        fulfillmentType: 'DINE_IN',
+        tableId: dto.tableId,
+        customerUserId: dto.customerUserId,
+        guestName: dto.guestName ?? entry.guestName ?? undefined,
+        guestPhone: dto.guestPhone ?? entry.guestPhone ?? undefined,
+        items: dto.items,
+      });
+    } catch (err) {
+      // e.g. the table just filled up — the party is still waiting.
+      await this.waitlistService.releaseClaim(entry.id);
+      throw err;
     }
 
-    const order = await this.createDineIn(tenantId, staffUserId, {
-      kitchenZoneId: entry.kitchenZoneId,
-      fulfillmentType: 'DINE_IN',
-      tableId: dto.tableId,
-      customerUserId: dto.customerUserId,
-      guestName: dto.guestName ?? entry.guestName ?? undefined,
-      guestPhone: dto.guestPhone ?? entry.guestPhone ?? undefined,
-      items: dto.items,
-    });
-
     await this.waitlistService.markSeated(entry.id, order.id);
+    return order;
+  }
+
+  /** The order page for counter staff holding only dine-in.order-create —
+   * scoped to in-store orders, so it never exposes a delivery customer's
+   * address or phone. */
+  async findDineInOrderForStaff(
+    tenantId: string,
+    id: string,
+  ): Promise<OrderWithAdminDetails> {
+    const order = await this.ordersRepo.findByIdForTenant(tenantId, id);
+    if (
+      !order ||
+      (order.fulfillmentType !== OrderFulfillmentType.DINE_IN &&
+        order.fulfillmentType !== OrderFulfillmentType.TAKEAWAY)
+    ) {
+      throw new NotFoundException('Order not found');
+    }
     return order;
   }
 
@@ -765,6 +815,7 @@ export class OrdersService {
   ): Promise<{
     isPickup: boolean;
     addressSnapshot?: CreateOrderInput['addressSnapshot'];
+    pickupSnapshot?: CreateOrderInput['pickupSnapshot'];
     deliveryFeeInPaise: number;
     totalInPaise: number;
     pricing: PricingResult;
@@ -793,17 +844,30 @@ export class OrdersService {
     let minOrderAmountInPaise = 0;
     let freeDeliveryAboveAmountInPaise: number | undefined;
     let addressSnapshot: CreateOrderInput['addressSnapshot'];
+    let pickupSnapshot: CreateOrderInput['pickupSnapshot'];
     let serviceabilityOverridden = false;
     if (isPickup) {
       const zone = await this.settingsRepo.findKitchenZoneById(
         tenantId,
         dto.pickupKitchenZoneId!,
       );
-      if (!profile?.pickupEnabled || !zone?.isActive || !zone.pickupEnabled) {
+      if (
+        !profile?.pickupEnabled ||
+        !zone?.isActive ||
+        !zone.pickupEnabled ||
+        !zone.pickupAddress?.trim()
+      ) {
         throw new BadRequestException(
           'Pickup is not available for this business right now.',
         );
       }
+      // Kept on the order like a delivery address, so a later edit to the
+      // outlet's pickup address never rewrites this order or its invoice.
+      pickupSnapshot = {
+        address: zone.pickupAddress.trim(),
+        lat: zone.lat,
+        lng: zone.lng,
+      };
     } else {
       const address = await this.addressesService.findOne(
         tenantId,
@@ -919,16 +983,12 @@ export class OrdersService {
           'Selected delivery slot is not available.',
         );
       }
-      const maxAdvanceOrderDays = profile?.maxAdvanceOrderDays ?? 2;
-      const maxDateStr = DateUtil.addDaysToDateStr(
+      const rangeError = deliveryDateRangeError(
+        dto.deliveryDate!,
         todayStr,
-        maxAdvanceOrderDays,
+        profile?.maxAdvanceOrderDays ?? 2,
       );
-      if (dto.deliveryDate! < todayStr || dto.deliveryDate! > maxDateStr) {
-        throw new BadRequestException(
-          `Delivery date must be between ${todayStr} and ${maxDateStr}.`,
-        );
-      }
+      if (rangeError) throw new BadRequestException(rangeError);
       await this.orderAcceptanceService.assertOrderDayOpen(
         tenantId,
         dto.deliveryDate!,
@@ -963,6 +1023,7 @@ export class OrdersService {
     return {
       isPickup,
       addressSnapshot,
+      pickupSnapshot,
       deliveryFeeInPaise,
       totalInPaise,
       pricing,
@@ -1044,7 +1105,18 @@ export class OrdersService {
    * nothing paid yet) still goes through untouched. Only reachable for an
    * already-PAID order, since there's nothing to refund otherwise.
    */
-  async cancelWithRefund(
+  cancelWithRefund(
+    tenantId: string,
+    staffUserId: string,
+    orderId: string,
+    dto: CancelRefundDto,
+  ): Promise<{ order: OrderWithAdminDetails; refund: Refund }> {
+    return withRefundLock(this.redis, `order:${orderId}`, () =>
+      this.cancelWithRefundUnlocked(tenantId, staffUserId, orderId, dto),
+    );
+  }
+
+  private async cancelWithRefundUnlocked(
     tenantId: string,
     staffUserId: string,
     orderId: string,
@@ -1054,6 +1126,10 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
     if (order.status === 'CANCELLED') {
       throw new BadRequestException('This order is already cancelled.');
+    }
+    // No money was taken for a plan delivery itself — see the rule's doc.
+    if (order.subscriptionId) {
+      throw new BadRequestException(PLAN_DELIVERY_CANCEL_MESSAGE);
     }
     if (order.paymentStatus !== PaymentStatus.PAID) {
       throw new BadRequestException(
@@ -1157,21 +1233,25 @@ export class OrdersService {
       timezone,
     );
 
+    const weekAgo = DateUtil.addDays(now, -7);
+    // Revenue = real money in: paid food orders + plans bought. Kitchen
+    // figures below (active orders, status breakdown, top meals) still
+    // include a subscription's daily deliveries — they are real work.
     const [
       fixedWindowOrders,
+      fixedWindowPlans,
       rangeOrders,
+      rangePlans,
       activeOrders,
       totalCustomers,
       allTimeRevenue,
       statusBreakdown,
       topMeals,
     ] = await Promise.all([
-      this.ordersRepo.findPaidOrdersInRange(
-        tenantId,
-        DateUtil.addDays(now, -7),
-        now,
-      ),
+      this.ordersRepo.findPaidOrdersInRange(tenantId, weekAgo, now),
+      this.ordersRepo.findPlanSalesInRange(tenantId, weekAgo, now),
       this.ordersRepo.findPaidOrdersInRange(tenantId, queryStart, queryEnd),
+      this.ordersRepo.findPlanSalesInRange(tenantId, queryStart, queryEnd),
       this.ordersRepo.countActiveOrders(tenantId),
       this.usersRepo.countCustomers(tenantId),
       this.ordersRepo.getAllTimeRevenue(tenantId),
@@ -1184,14 +1264,15 @@ export class OrdersService {
       ),
     ]);
 
+    const fixedWindow = toRevenueRows(fixedWindowOrders, fixedWindowPlans);
     return {
-      today: sumOrdersSince(fixedWindowOrders, DateUtil.addDays(now, -1)),
-      last7Days: sumOrdersSince(fixedWindowOrders, DateUtil.addDays(now, -7)),
+      today: sumRevenueSince(fixedWindow, DateUtil.addDays(now, -1)),
+      last7Days: sumRevenueSince(fixedWindow, weekAgo),
       activeOrders,
       totalCustomers,
       allTimeRevenue,
-      revenueTrend: bucketOrdersByDay(
-        rangeOrders,
+      revenueTrend: bucketRevenueByDay(
+        toRevenueRows(rangeOrders, rangePlans),
         timezone,
         bucketStartStr,
         bucketEndStr,
@@ -1242,39 +1323,6 @@ function resolveRange(
     bucketStartStr: DateUtil.toTenantDateStr(rangeStart, timezone),
     bucketEndStr: DateUtil.toTenantDateStr(now, timezone),
   };
-}
-
-function sumOrdersSince(
-  orders: { createdAt: Date; totalInPaise: number }[],
-  since: Date,
-): { orders: number; revenueInPaise: number } {
-  const inWindow = orders.filter((o) => o.createdAt >= since);
-  return {
-    orders: inWindow.length,
-    revenueInPaise: inWindow.reduce((sum, o) => sum + o.totalInPaise, 0),
-  };
-}
-
-function bucketOrdersByDay(
-  orders: { createdAt: Date; totalInPaise: number }[],
-  timezone: string,
-  bucketStartStr: string,
-  bucketEndStr: string,
-): { date: string; orders: number; revenueInPaise: number }[] {
-  const buckets = new Map<string, { orders: number; revenueInPaise: number }>();
-  const dateStrs = DateUtil.enumerateDateStrs(bucketStartStr, bucketEndStr);
-  for (const dateStr of dateStrs) {
-    buckets.set(dateStr, { orders: 0, revenueInPaise: 0 });
-  }
-  for (const order of orders) {
-    const bucket = buckets.get(
-      DateUtil.toTenantDateStr(order.createdAt, timezone),
-    );
-    if (!bucket) continue; // outside the seeded window (timezone-edge order) — drop, not a ledger
-    bucket.orders += 1;
-    bucket.revenueInPaise += order.totalInPaise;
-  }
-  return Array.from(buckets, ([date, stats]) => ({ date, ...stats }));
 }
 
 function generateOrderNumber(): string {

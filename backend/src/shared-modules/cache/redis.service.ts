@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -56,6 +57,26 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async delByPattern(pattern: string): Promise<void> {
     const keys = await this.client.keys(pattern);
     if (keys.length) await this.client.del(...keys);
+  }
+
+  /** Takes `key` for `ttlSeconds` if nobody holds it. Returns the owner
+   * token to release it with, or null when it's already taken. The TTL is
+   * the safety net: a crashed holder's lock expires on its own. */
+  async acquireLock(key: string, ttlSeconds: number): Promise<string | null> {
+    const token = randomUUID();
+    const result = await this.client.set(key, token, 'EX', ttlSeconds, 'NX');
+    return result === 'OK' ? token : null;
+  }
+
+  /** Releases `key` only if `token` still owns it — never another
+   * holder's lock that was taken after ours expired. */
+  async releaseLock(key: string, token: string): Promise<void> {
+    await this.client.eval(
+      "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+      1,
+      key,
+      token,
+    );
   }
 
   async increment(key: string, ttlSeconds?: number): Promise<number> {

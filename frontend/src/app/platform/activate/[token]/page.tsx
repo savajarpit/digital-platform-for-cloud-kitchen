@@ -10,6 +10,7 @@ import {
 } from "@/lib/api/platform-activation";
 import { loadRazorpayScript } from "@/lib/razorpay/load-checkout-script";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { formatDate } from "@/lib/format/date";
 
 export default function ActivateTenantPage({
   params,
@@ -110,7 +111,7 @@ export default function ActivateTenantPage({
             </div>
             {invite.trialEndsAt && (
               <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400">
-                Free trial until {new Date(invite.trialEndsAt).toLocaleDateString()} — you won&apos;t
+                Free trial until {formatDate(invite.trialEndsAt)} — you won&apos;t
                 be charged until then.
               </p>
             )}

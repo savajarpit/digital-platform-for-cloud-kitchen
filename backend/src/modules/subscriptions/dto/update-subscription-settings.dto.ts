@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsEmail,
   IsEnum,
   IsInt,
   IsOptional,
@@ -37,9 +38,9 @@ export class UpdateSubscriptionSettingsDto {
     description: 'Minimum lead time (hours) for skip/pause/day-override edits',
   })
   @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(240)
+  @IsInt({ message: 'Notice must be a whole number of hours.' })
+  @Min(0, { message: 'Notice can’t be negative.' })
+  @Max(240, { message: 'Notice can be at most 240 hours (10 days).' })
   noticeHoursBeforeDelivery?: number;
 
   @ApiPropertyOptional({
@@ -48,9 +49,9 @@ export class UpdateSubscriptionSettingsDto {
       "Days before a new subscriber's first delivery — 0 for same-day (materialized immediately on payment instead of waiting for the nightly job)",
   })
   @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(14)
+  @IsInt({ message: 'Lead time must be a whole number of days.' })
+  @Min(0, { message: 'Lead time can’t be negative.' })
+  @Max(14, { message: 'Lead time can be at most 14 days.' })
   startDateLeadDays?: number;
 
   @ApiPropertyOptional({
@@ -135,7 +136,7 @@ export class UpdateSubscriptionSettingsDto {
     description: 'Falls back to Business Profile support email when unset',
   })
   @IsOptional()
-  @IsString()
+  @IsEmail({}, { message: 'Enter a valid contact email, or leave it empty.' })
   @MaxLength(120)
   contactEmail?: string;
 

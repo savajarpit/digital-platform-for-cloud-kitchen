@@ -1,6 +1,6 @@
-import { ImageOff } from "lucide-react";
 import type { PlanPreviewDay } from "@/lib/api/subscriptions";
 import { SLOT_DOT, SLOT_LABELS, SLOT_ORDER } from "./plan-calendar-styles";
+import { MealThumb } from "@/components/ui/MealThumb";
 
 /** A day's meals in slot order, with photo and a "to be announced" fallback. */
 export function PlanMealList({ meals }: { meals: PlanPreviewDay["meals"] }) {
@@ -19,20 +19,7 @@ export function PlanMealList({ meals }: { meals: PlanPreviewDay["meals"] }) {
           className="flex items-center gap-3 rounded-xl bg-zinc-50 p-2.5 dark:bg-zinc-800/60"
         >
           <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
-            {meal.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={meal.imageUrl}
-                alt={meal.name ?? ""}
-                className="h-full w-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <ImageOff
-                className="h-5 w-5 text-zinc-300 dark:text-zinc-600"
-                strokeWidth={1.5}
-              />
-            )}
+            <MealThumb src={meal.imageUrl} alt={meal.name ?? ""} />
           </div>
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400">

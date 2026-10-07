@@ -93,6 +93,23 @@ export function orderDayAvailability(
   return { open: true };
 }
 
+/** Why a scheduled order's date is outside [today, today + maxDays], or
+ * null when it's inside. Customer-facing, so dates read "Sun, 4 Oct". */
+export function deliveryDateRangeError(
+  dateStr: string,
+  todayStr: string,
+  maxDays: number,
+): string | null {
+  if (!DateUtil.isValidDateStr(dateStr)) {
+    return "That delivery date isn't a real date.";
+  }
+  if (dateStr < todayStr) return 'That delivery date has already passed.';
+  const lastDateStr = DateUtil.addDaysToDateStr(todayStr, maxDays);
+  if (dateStr <= lastDateStr) return null;
+  if (maxDays === 0) return 'Orders are for today only — please pick today.';
+  return `You can order up to ${maxDays} day${maxDays === 1 ? '' : 's'} ahead — please pick a date up to ${DateUtil.formatDateStrShort(lastDateStr)}.`;
+}
+
 /** Reason given while the owner has instant delivery switched off. */
 export const INSTANT_NOT_OFFERED_REASON =
   'Instant delivery is not offered right now.';

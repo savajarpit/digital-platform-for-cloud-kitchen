@@ -9,6 +9,7 @@ import {
   getOrderCustomerLabel,
   getOrderStatusLabel,
   getSettableStatusesFor,
+  canChangeOrderStatus,
   listAdminOrders,
   updateOrderStatus,
   type AdminOrder,
@@ -25,13 +26,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ViewOnlyNotice } from "@/components/admin/ViewOnlyNotice";
 import { usePendingCancellationCount } from "@/lib/hooks/usePendingCancellationCount";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { formatDate } from "@/lib/format/date";
+import { OrderTypeFilter } from "@/components/admin/OrderTypeFilter";
+import { orderStatusLabel } from "@/lib/format/order-status";
 
 /** Not an order status — a filter for orders whose customer asked to cancel. */
 const CANCEL_REQUESTED = "CANCEL_REQUESTED";
 
 const ALL_STATUSES = [
+  "PENDING_PAYMENT",
   "CONFIRMED",
   "PREPARING",
+  "READY",
   "OUT_FOR_DELIVERY",
   "DELIVERED",
   "CANCELLED",
@@ -41,6 +47,7 @@ const STATUS_STYLES: Record<string, string> = {
   PENDING_PAYMENT: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300",
   CONFIRMED: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
   PREPARING: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400",
+  READY: "bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-400",
   OUT_FOR_DELIVERY: "bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400",
   DELIVERED: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
   CANCELLED: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400",
@@ -77,29 +84,20 @@ export default function AdminOrdersPage() {
             Orders
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {canCreateManual && (
             <Link href="/admin/orders/new" className="btn-primary btn-sm">
               <ClipboardPlus className="h-4 w-4" />
               New Order
             </Link>
           )}
-          <Select
+          <OrderTypeFilter
             value={fulfillmentType}
-            onValueChange={(v) => {
+            onChange={(v) => {
               setFulfillmentType(v);
               setPage(1);
             }}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">Delivery & pickup</SelectItem>
-              <SelectItem value="DELIVERY">Delivery only</SelectItem>
-              <SelectItem value="PICKUP">Pickup only</SelectItem>
-            </SelectContent>
-          </Select>
+          />
           <Select
             value={status}
             onValueChange={(v) => {
@@ -117,7 +115,7 @@ export default function AdminOrdersPage() {
               </SelectItem>
               {ALL_STATUSES.map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s.replace(/_/g, " ")}
+                  {s === "READY" ? "Ready" : orderStatusLabel(s)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -219,6 +217,7 @@ function OrdersTable({
           {isPlaceholderData && <TableRowsSkeleton cols={7} rows={6} />}
           {!isPlaceholderData && orders.map((order) => {
             const isPaid = order.paymentStatus === "PAID";
+            const canMove = canChangeOrderStatus(order);
             const isFinal = order.status === "DELIVERED" || order.status === "CANCELLED";
             return (
               <tr key={order.id} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
@@ -235,7 +234,7 @@ function OrdersTable({
                     </span>
                   )}
                   <p className="mt-0.5 text-xs text-zinc-400">
-                    {new Date(order.createdAt).toLocaleDateString()}
+                    {formatDate(order.createdAt)}
                   </p>
                 </td>
                 <td className="px-5 py-3 text-zinc-700 dark:text-zinc-300">
@@ -251,10 +250,14 @@ function OrdersTable({
                   ) : (
                     <>
                       <p className="mt-1">
-                        {order.deliverySlotName} ·{" "}
-                        {new Date(order.deliveryDate).toLocaleDateString(undefined, {
+                        {order.planDelivery && order.deliveryWindowStart === "00:00" && order.deliveryWindowEnd === "23:59"
+                          ? "Any time"
+                          : order.deliverySlotName}{" "}
+                        ·{" "}
+                        {new Date(order.deliveryDate).toLocaleDateString("en-IN", {
                           month: "short",
                           day: "numeric",
+                          timeZone: "UTC",
                         })}
                       </p>
                       {order.fulfillmentType === "PICKUP" && order.pickupKitchenZone && (
@@ -264,7 +267,11 @@ function OrdersTable({
                   )}
                 </td>
                 <td className="px-5 py-3 font-medium text-zinc-900 dark:text-zinc-100">
-                  {formatPriceFromPaise(order.totalInPaise)}
+                  {order.planDelivery ? (
+                    <span className="text-xs font-normal text-primary-700 dark:text-primary-400">In plan</span>
+                  ) : (
+                    formatPriceFromPaise(order.totalInPaise)
+                  )}
                 </td>
                 <td className="px-5 py-3 text-xs text-zinc-500 dark:text-zinc-400">
                   {order.couponCode ? <span className="font-mono">{order.couponCode}</span> : "—"}
@@ -281,7 +288,7 @@ function OrdersTable({
                   </span>
                 </td>
                 <td className="px-5 py-3">
-                  {canEdit && isPaid && !isFinal ? (
+                  {canEdit && canMove && !isFinal ? (
                     <Select value={order.status} onValueChange={(v) => handleStatusChange(order, v)}>
                       <SelectTrigger
                         variant="unstyled"

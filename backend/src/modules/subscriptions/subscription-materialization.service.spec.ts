@@ -18,6 +18,8 @@ const mockRepo = {
   createMaterializedOrder: jest.fn(),
   advanceSubscriptionDay: jest.fn(),
   expireSubscription: jest.fn(),
+  claimMaterializationDate: jest.fn(),
+  releaseMaterializationDate: jest.fn(),
 };
 const mockSettingsRepo = { findClosedDates: jest.fn() };
 const mockBanking = { bankExtraDays: jest.fn() };
@@ -76,6 +78,7 @@ describe('SubscriptionMaterializationService — tenant closed dates', () => {
       mockSettingsRepo as never,
       mockBanking as never,
     );
+    mockRepo.claimMaterializationDate.mockResolvedValue(true);
     mockRepo.findSkipForDate.mockResolvedValue(null);
     mockRepo.findDayOverride.mockResolvedValue(null);
     mockRepo.findPlanDayWithSlots.mockResolvedValue({
@@ -89,6 +92,8 @@ describe('SubscriptionMaterializationService — tenant closed dates', () => {
     mockBanking.bankExtraDays.mockResolvedValue(
       new Date('2026-10-01T00:00:00.000Z'),
     );
+    // Every test's day is unclaimed unless it says otherwise.
+    mockRepo.claimMaterializationDate.mockResolvedValue(true);
     // WEEKLY_FIXED plans deliver Mon–Sat of week 1 ("week-weekday" keys);
     // TODAY is a Tuesday, key "1-2".
     mockRepo.findPlanDeliveryDayKeys.mockResolvedValue(
@@ -134,6 +139,62 @@ describe('SubscriptionMaterializationService — tenant closed dates', () => {
     );
     expect(mockRepo.extendCycleEnd).toHaveBeenCalledTimes(1);
     expect(mockRepo.findPlanDeliveryDayKeys).not.toHaveBeenCalled();
+  });
+
+  it('claims today, delivers once, and reports "processed"', async () => {
+    mockSettingsRepo.findClosedDates.mockResolvedValue([]);
+
+    const outcome = await service.materializeOne(subscription());
+
+    expect(outcome).toBe('processed');
+    expect(mockRepo.claimMaterializationDate).toHaveBeenCalledWith(
+      'sub1',
+      TODAY,
+    );
+    expect(mockRepo.createMaterializedOrder).toHaveBeenCalledTimes(1);
+    // Dated for the tenant-local day, like any other order — not run time.
+    expect(mockRepo.createMaterializedOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryDateStr: TODAY }),
+    );
+  });
+
+  it('does nothing when today is already claimed (second run / second server)', async () => {
+    mockRepo.claimMaterializationDate.mockResolvedValue(false);
+
+    const outcome = await service.materializeOne(subscription());
+
+    expect(outcome).toBe('already-done');
+    expect(mockRepo.createMaterializedOrder).not.toHaveBeenCalled();
+    expect(mockRepo.createSkip).not.toHaveBeenCalled();
+    expect(mockRepo.advanceSubscriptionDay).not.toHaveBeenCalled();
+  });
+
+  it('hands the day back when processing fails, so the next run retries', async () => {
+    mockSettingsRepo.findClosedDates.mockResolvedValue([]);
+    mockRepo.createMaterializedOrder.mockRejectedValue(new Error('db blip'));
+
+    await expect(
+      service.materializeOne({
+        ...subscription(),
+        lastMaterializedDate: '2026-09-21',
+      }),
+    ).rejects.toThrow('db blip');
+
+    expect(mockRepo.releaseMaterializationDate).toHaveBeenCalledWith(
+      'sub1',
+      TODAY,
+      '2026-09-21',
+    );
+  });
+
+  it('does not claim a day before the plan starts', async () => {
+    const outcome = await service.materializeOne({
+      ...subscription(),
+      startDate: new Date('2026-09-25T00:00:00.000Z'),
+    });
+
+    expect(outcome).toBe('not-due');
+    expect(mockRepo.claimMaterializationDate).not.toHaveBeenCalled();
   });
 
   it('delivers normally when there is no closure', async () => {
@@ -310,6 +371,7 @@ describe('SubscriptionMaterializationService — usesDateSelection', () => {
       mockSettingsRepo as never,
       mockBanking as never,
     );
+    mockRepo.claimMaterializationDate.mockResolvedValue(true);
     mockRepo.findSkipForDate.mockResolvedValue(null);
     mockRepo.findDayOverride.mockResolvedValue(null);
     mockSettingsRepo.findClosedDates.mockResolvedValue([]);

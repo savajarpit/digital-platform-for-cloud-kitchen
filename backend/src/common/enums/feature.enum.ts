@@ -94,6 +94,12 @@ export const FEATURE_CATALOG: FeatureDefinition[] = [
       "Lets OWNER/STAFF show a plan's meals as a month calendar (with a day-details panel) instead of, or alongside, the accordion list — and unlocks named closed dates/holidays on the calendar. Off by default; the storefront keeps the accordion view.",
   },
   {
+    key: 'kitchen-display',
+    name: 'Kitchen Display',
+    description:
+      "A Kitchen screen for chefs and staff: today's (or any upcoming day's) orders and plan deliveries with search and filters, a prep summary, and Start / Mark ready buttons. Off by default.",
+  },
+  {
     key: 'delivery-date-selection',
     name: 'Delivery Date Selection',
     description:

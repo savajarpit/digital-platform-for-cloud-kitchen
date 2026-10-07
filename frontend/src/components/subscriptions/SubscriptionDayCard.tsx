@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ImageOff, Lock, MapPin, SkipForward } from "lucide-react";
+import { ChevronDown, Lock, MapPin, SkipForward } from "lucide-react";
 import type { SubscriptionDetail, UpcomingPreviewDay } from "@/lib/api/subscriptions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { MealThumb } from "@/components/ui/MealThumb";
 import { formatTime12h } from "@/lib/format/time";
 import { formatLongDate } from "@/lib/plan-calendar/month-grid";
 
@@ -60,13 +61,17 @@ export function SubscriptionDayCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-              {new Date(day.date).toLocaleDateString(undefined, {
+              {new Date(`${day.date}T00:00:00Z`).toLocaleDateString("en-IN", {
                 weekday: "short",
                 month: "short",
                 day: "numeric",
+                timeZone: "UTC",
               })}
             </span>
-            {day.skipped && !day.disruptionReason && (
+            {day.onHold && (
+              <span className="badge bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-400">On hold</span>
+            )}
+            {day.skipped && !day.onHold && !day.disruptionReason && (
               <span className="badge bg-zinc-100 text-zinc-500 dark:bg-zinc-800">Skipped</span>
             )}
             {day.skipped && day.disruptionReason && (
@@ -74,12 +79,13 @@ export function SubscriptionDayCard({
                 {day.isHoliday ? "Holiday" : "Paused by the business"}
               </span>
             )}
-            {day.isOverridden && (
+            {/* A change made before the day was skipped no longer applies. */}
+            {day.isOverridden && !day.skipped && (
               <span className="badge bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400">
                 Changed
               </span>
             )}
-            {day.locked && (
+            {day.locked && !day.onHold && (
               <span className="badge inline-flex items-center gap-1 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
                 <Lock className="h-3 w-3" />
                 Locked
@@ -131,17 +137,7 @@ export function SubscriptionDayCard({
               {day.meals.map((meal, i) => (
                 <div key={i} className="flex items-center gap-3">
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                    {meal.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={meal.imageUrl}
-                        alt={meal.name ?? ""}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <ImageOff className="h-5 w-5 text-zinc-300 dark:text-zinc-600" strokeWidth={1.5} />
-                    )}
+                    <MealThumb src={meal.imageUrl} alt={meal.name ?? ""} />
                   </div>
                   <div className="min-w-0">
                     <p className="text-xs text-zinc-400">{SLOT_LABELS[meal.slotType] ?? meal.slotType}</p>
@@ -162,7 +158,17 @@ export function SubscriptionDayCard({
             </span>
           </div>
 
-          {day.locked ? (
+          {day.skipped ? (
+            // Nothing is delivered on a skipped day, so there's no address,
+            // time or note to change for it.
+            <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+              {day.onHold
+                ? "No delivery while the kitchen reviews your cancellation request. If they decline it, this day is added back at the end of your plan."
+                : day.disruptionReason
+                  ? "There's no delivery on this day, so there's nothing to change."
+                  : "You skipped this delivery, so there's nothing to change for this day."}
+            </p>
+          ) : day.locked ? (
             <>
               <p className="rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
                 Too close to delivery to change — this day is locked.

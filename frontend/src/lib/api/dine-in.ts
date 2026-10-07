@@ -128,6 +128,12 @@ export function seatWaitlistEntry(
   });
 }
 
+/** A dine-in/takeaway order for counter staff who take orders but can't
+ * manage every order (no orders.manage) — 404s for any other order type. */
+export function getDineInOrder(id: string): Promise<AdminOrderDetail> {
+  return proxyFetch<AdminOrderDetail>(`/orders/admin/dine-in/${id}`);
+}
+
 /** Appends another round of items to a still-open DINE_IN/TAKEAWAY order. */
 export function addOrderItems(
   orderId: string,

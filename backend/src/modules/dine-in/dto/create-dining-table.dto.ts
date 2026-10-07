@@ -1,5 +1,6 @@
 import {
   IsInt,
+  IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
@@ -7,7 +8,9 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { trimString } from '../../../common/utils/trim.util';
 
 export class CreateDiningTableDto {
   @ApiProperty({
@@ -18,7 +21,9 @@ export class CreateDiningTableDto {
   kitchenZoneId: string;
 
   @ApiProperty({ example: 'Table 4' })
+  @Transform(trimString)
   @IsString()
+  @IsNotEmpty({ message: 'Give the table a name.' })
   @MaxLength(40)
   label: string;
 

@@ -49,6 +49,14 @@ export function MoveDeliveryDateModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subscriptionId, date]);
 
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && !moving) onClose();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [moving, onClose]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -56,12 +64,18 @@ export function MoveDeliveryDateModal({
     >
       {/* Header and buttons stay put; only the date list scrolls. */}
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="move-delivery-title"
         className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-soft dark:bg-zinc-900"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-5 pb-4">
           <div>
-            <h3 className="font-display text-base font-bold text-zinc-900 dark:text-zinc-100">
+            <h3
+              id="move-delivery-title"
+              className="font-display text-base font-bold text-zinc-900 dark:text-zinc-100"
+            >
               Move {formatLongDate(date)}
             </h3>
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">

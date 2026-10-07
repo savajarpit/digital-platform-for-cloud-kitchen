@@ -16,7 +16,10 @@ export type SubscriptionDayKind =
   | 'OFF_DAY'
   | 'NOT_SCHEDULED'
   /** Past today's cycleEnd — the day an upcoming holiday will add back. */
-  | 'PROJECTED';
+  | 'PROJECTED'
+  /** No delivery while a cancellation request is pending (or a day that
+   * was held for one) — the kitchen is deciding whether to refund it. */
+  | 'ON_HOLD';
 
 export interface SubscriptionCalendarMeal {
   slotType: string;
@@ -54,6 +57,8 @@ interface CalendarSubscription {
     dateTo: string;
     reason: string | null;
     disruptionId: string | null;
+    /** Set on a day the materializer held for a cancellation request. */
+    cancellationRequestId?: string | null;
   }[];
   dayOverrides: {
     date: string;
@@ -103,6 +108,11 @@ interface CalendarSubscription {
  * materializer itself uses, so a past date's label can be reconstructed
  * without having persisted it.
  *
+ * `holdFromDateStr` (a pending cancellation request's heldFromDate) turns
+ * every delivery day from then on into ON_HOLD — nothing is delivered while
+ * the kitchen decides. A day the materializer already held (a skip linked
+ * to a cancellation request) is ON_HOLD too, never a "holiday".
+ *
  * `projection` (optional) extends the walk past cycleEnd to the days that
  * upcoming holidays will add back (PROJECTED), and tags each such holiday
  * with its replacementDate — display only, see projectHolidayReplacements.
@@ -115,6 +125,7 @@ export function buildSubscriptionCalendarDays(
   earliestEditableDateStr: string,
   closedDates: ClosedDateEntry[],
   projection?: HolidayProjection,
+  holdFromDateStr?: string | null,
 ): SubscriptionCalendarDay[] {
   const projectedDates = new Set(projection?.projectedDates ?? []);
   // Walk on past cycleEnd to the last day an upcoming holiday will add.
@@ -200,6 +211,8 @@ export function buildSubscriptionCalendarDays(
       !projectedDates.has(cursor)
     ) {
       kind = 'NOT_SCHEDULED';
+    } else if (skip?.cancellationRequestId) {
+      kind = 'ON_HOLD';
     } else if (skip?.disruptionId) {
       kind = 'DISRUPTED';
       reason = skip.reason;
@@ -234,7 +247,13 @@ export function buildSubscriptionCalendarDays(
           : cursor < todayStr
             ? 'DELIVERED'
             : 'UPCOMING';
-        if ('dayNumber' in key) {
+        if (
+          holdFromDateStr &&
+          kind !== 'DELIVERED' &&
+          cursor >= holdFromDateStr
+        ) {
+          kind = 'ON_HOLD';
+        } else if ('dayNumber' in key) {
           dayLabel = `Day ${key.dayNumber}`;
           meals = toMeals(byDayNumber.get(key.dayNumber));
         } else {
@@ -252,7 +271,8 @@ export function buildSubscriptionCalendarDays(
       kind !== 'NOT_SCHEDULED' &&
       kind !== 'SKIPPED' &&
       kind !== 'DISRUPTED' &&
-      kind !== 'HOLIDAY'
+      kind !== 'HOLIDAY' &&
+      kind !== 'ON_HOLD'
     ) {
       relativeCounter++;
     }
@@ -272,7 +292,7 @@ export function buildSubscriptionCalendarDays(
           ? (projection?.replacementByHoliday.get(cursor) ?? null)
           : null,
       // Not part of the subscription yet, so nothing on it can be changed.
-      locked: locked || beyondCycle,
+      locked: locked || beyondCycle || kind === 'ON_HOLD',
     });
     cursor = DateUtil.addDaysToDateStr(cursor, 1);
   }

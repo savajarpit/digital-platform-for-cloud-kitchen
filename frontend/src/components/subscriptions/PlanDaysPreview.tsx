@@ -1,5 +1,5 @@
-import { ImageOff } from "lucide-react";
 import type { PlanDetail, PlanPreviewDay } from "@/lib/api/subscriptions";
+import { MealThumb } from "@/components/ui/MealThumb";
 
 const SLOT_LABELS: Record<string, string> = {
   BREAKFAST: "Breakfast",
@@ -56,10 +56,11 @@ export function PlanDaysPreview({ plan }: { plan: PlanDetail }) {
             >
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  {new Date(day.date).toLocaleDateString(undefined, {
+                  {new Date(day.date).toLocaleDateString("en-IN", {
                     weekday: "short",
                     month: "short",
                     day: "numeric",
+                    timeZone: "UTC",
                   })}
                 </h3>
                 {day.badge && (
@@ -81,20 +82,7 @@ export function PlanDaysPreview({ plan }: { plan: PlanDetail }) {
                   day.meals.map((meal, i) => (
                     <div key={i} className="flex items-center gap-3">
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                        {meal.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={meal.imageUrl}
-                            alt={meal.name ?? ""}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <ImageOff
-                            className="h-5 w-5 text-zinc-300 dark:text-zinc-600"
-                            strokeWidth={1.5}
-                          />
-                        )}
+                        <MealThumb src={meal.imageUrl} alt={meal.name ?? ""} />
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs text-zinc-400">
@@ -130,20 +118,7 @@ export function PlanDaysPreview({ plan }: { plan: PlanDetail }) {
                   day.slots.map((slot) => (
                     <div key={slot.id} className="flex items-center gap-3">
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                        {slot.meal?.imageUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={slot.meal.imageUrl}
-                            alt={slot.meal.name}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <ImageOff
-                            className="h-5 w-5 text-zinc-300 dark:text-zinc-600"
-                            strokeWidth={1.5}
-                          />
-                        )}
+                        <MealThumb src={slot.meal?.imageUrl} alt={slot.meal?.name ?? ""} />
                       </div>
                       <div className="min-w-0">
                         <p className="text-xs text-zinc-400">

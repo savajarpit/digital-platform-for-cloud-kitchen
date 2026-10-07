@@ -15,6 +15,16 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Toggle } from "@/components/ui/Toggle";
 
+/** Number input value → number, keeping an emptied box empty (NaN) instead of 0. */
+const toWhole = (value: string) => (value === "" ? Number.NaN : Number(value));
+
+/** Same bounds as the API; null when the value can be saved. */
+function rangeError(value: number, max: number, unit: string): string | null {
+  return Number.isInteger(value) && value >= 0 && value <= max
+    ? null
+    : `Enter a whole number of ${unit} from 0 to ${max}.`;
+}
+
 export function SubscriptionSettingsTab({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
@@ -32,6 +42,7 @@ export function SubscriptionSettingsTab({ canEdit }: { canEdit: boolean }) {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!settings) return;
+    if (rangeError(settings.noticeHoursBeforeDelivery, 240, "hours") || rangeError(settings.startDateLeadDays, 14, "days")) return;
     setSaving(true);
     try {
       const updated = await updateSubscriptionSettings(settings);
@@ -75,6 +86,9 @@ export function SubscriptionSettingsTab({ canEdit }: { canEdit: boolean }) {
       </div>
     );
   }
+
+  const noticeError = rangeError(settings.noticeHoursBeforeDelivery, 240, "hours");
+  const leadError = rangeError(settings.startDateLeadDays, 14, "days");
 
   return (
     <form onSubmit={handleSave} className="card flex max-w-lg flex-col gap-4 p-6">
@@ -138,16 +152,21 @@ export function SubscriptionSettingsTab({ canEdit }: { canEdit: boolean }) {
           type="number"
           min={0}
           max={240}
-          value={settings.noticeHoursBeforeDelivery}
+          value={Number.isNaN(settings.noticeHoursBeforeDelivery) ? "" : settings.noticeHoursBeforeDelivery}
           onChange={(e) =>
-            setSettings({ ...settings, noticeHoursBeforeDelivery: Number(e.target.value) })
+            setSettings({ ...settings, noticeHoursBeforeDelivery: toWhole(e.target.value) })
           }
+          aria-invalid={Boolean(noticeError)}
           disabled={!canEdit}
           className="input w-32"
         />
-        <p className="text-xs text-zinc-400">
-          How far ahead a customer must skip/pause/change delivery for an already-active subscription.
-        </p>
+        {noticeError ? (
+          <p className="text-xs text-red-600 dark:text-red-400">{noticeError}</p>
+        ) : (
+          <p className="text-xs text-zinc-400">
+            How far ahead a customer must skip/pause/change delivery for an already-active subscription.
+          </p>
+        )}
       </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
@@ -157,18 +176,27 @@ export function SubscriptionSettingsTab({ canEdit }: { canEdit: boolean }) {
           type="number"
           min={0}
           max={14}
-          value={settings.startDateLeadDays}
-          onChange={(e) => setSettings({ ...settings, startDateLeadDays: Number(e.target.value) })}
+          value={Number.isNaN(settings.startDateLeadDays) ? "" : settings.startDateLeadDays}
+          onChange={(e) => setSettings({ ...settings, startDateLeadDays: toWhole(e.target.value) })}
+          aria-invalid={Boolean(leadError)}
           disabled={!canEdit}
           className="input w-32"
         />
-        <p className="text-xs text-zinc-400">
-          Days before a new subscriber&apos;s first delivery — 0 for same-day (delivered right after payment
-          instead of waiting for tonight&apos;s prep run).
-        </p>
+        {leadError ? (
+          <p className="text-xs text-red-600 dark:text-red-400">{leadError}</p>
+        ) : (
+          <p className="text-xs text-zinc-400">
+            Days before a new subscriber&apos;s first delivery — 0 for same-day (delivered right after payment
+            instead of waiting for tonight&apos;s prep run).
+          </p>
+        )}
       </div>
       {canEdit && (
-        <button type="submit" disabled={saving} className="btn-primary btn-sm self-start">
+        <button
+          type="submit"
+          disabled={saving || Boolean(noticeError || leadError)}
+          className="btn-primary btn-sm self-start"
+        >
           {saving ? "Saving…" : "Save settings"}
         </button>
       )}

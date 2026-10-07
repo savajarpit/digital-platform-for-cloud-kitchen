@@ -48,15 +48,15 @@ export function TodaysDeliveriesTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          {data.date && new Date(data.date).toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
+          {data.date && new Date(data.date).toLocaleDateString("en-IN", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" })}
         </p>
         <div className="flex gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
           <button
             type="button"
             onClick={() => setView("prep")}
-            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+            className={`cursor-pointer rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
               view === "prep"
                 ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
                 : "text-zinc-500 dark:text-zinc-400"
@@ -67,7 +67,7 @@ export function TodaysDeliveriesTab() {
           <button
             type="button"
             onClick={() => setView("dispatch")}
-            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+            className={`cursor-pointer rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
               view === "dispatch"
                 ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
                 : "text-zinc-500 dark:text-zinc-400"
@@ -78,7 +78,7 @@ export function TodaysDeliveriesTab() {
           <button
             type="button"
             onClick={() => setView("planner")}
-            className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+            className={`cursor-pointer rounded-md px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors ${
               view === "planner"
                 ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
                 : "text-zinc-500 dark:text-zinc-400"
@@ -130,10 +130,11 @@ export function TodaysDeliveriesTab() {
                     deliveryWindowStart: d.deliveryWindowStart,
                     deliveryWindowEnd: d.deliveryWindowEnd,
                     deliveryDateLabel: data.date
-                      ? new Date(data.date).toLocaleDateString(undefined, {
+                      ? new Date(data.date).toLocaleDateString("en-IN", {
                           weekday: "short",
                           month: "short",
                           day: "numeric",
+                          timeZone: "UTC",
                         })
                       : null,
                     // d.notes is the full materialized-order text (e.g.

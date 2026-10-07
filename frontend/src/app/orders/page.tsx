@@ -11,8 +11,10 @@ import { qk, STALE } from "@/lib/query/keys";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { ORDER_STATUS_STYLES } from "@/lib/format/status-styles";
+import { orderStatusLabel } from "@/lib/format/order-status";
 import { OrderCardSkeleton } from "@/components/orders/OrderCardSkeleton";
 import { PageHeader } from "@/components/account/PageHeader";
+import { formatDate } from "@/lib/format/date";
 
 export default function OrdersPage() {
   const t = useTranslations("order");
@@ -103,21 +105,33 @@ function OrdersList({
               <p className="font-mono text-sm text-zinc-500 dark:text-zinc-400">
                 {order.orderNumber}
               </p>
+              {order.planDelivery && (
+                <p className="mt-1 text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                  Plan delivery · {order.planDelivery.planName}
+                  {order.planDelivery.dayLabel && `, ${order.planDelivery.dayLabel}`}
+                </p>
+              )}
               <p className="mt-1 text-xs text-zinc-400">
-                {new Date(order.createdAt).toLocaleDateString()}
+                {formatDate(order.createdAt)}
               </p>
             </div>
             <div className="text-left md:text-right">
-              <p className="font-semibold text-zinc-900 dark:text-zinc-100">
-                {formatPriceFromPaise(order.totalInPaise)}
-              </p>
+              {/* A plan delivery was paid for with the plan — no price of its own. */}
+              {order.planDelivery ? (
+                <p className="text-sm font-medium text-primary-700 dark:text-primary-400">In your plan</p>
+              ) : (
+                <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                  {formatPriceFromPaise(order.totalInPaise)}
+                </p>
+              )}
               <span
                 className={`badge mt-1 ${ORDER_STATUS_STYLES[order.status] ?? ORDER_STATUS_STYLES.CONFIRMED}`}
               >
-                {order.status.replace(/_/g, " ")}
+                {orderStatusLabel(order.status, order.fulfillmentType)}
               </span>
             </div>
           </Link>
+          {!order.planDelivery && (
           <Link
             href={`/orders/${order.id}/invoice`}
             className="shrink-0 rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 hover:text-primary-600 dark:hover:bg-zinc-800"
@@ -126,6 +140,7 @@ function OrdersList({
           >
             <FileText className="h-4 w-4" />
           </Link>
+          )}
         </div>
       ))}
 

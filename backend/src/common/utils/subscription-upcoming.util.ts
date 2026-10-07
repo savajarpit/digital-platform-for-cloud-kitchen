@@ -35,6 +35,9 @@ export interface UpcomingPreviewDay {
   replacementDate: string | null;
   /** The kitchen's holiday (not a declared disruption or the customer's own skip). */
   isHoliday: boolean;
+  /** No delivery while the customer's cancellation request is pending (or
+   * a day already held for one). Always `skipped` and `locked` too. */
+  onHold: boolean;
 }
 
 interface UpcomingSubscription {
@@ -50,6 +53,7 @@ interface UpcomingSubscription {
     dateTo: string;
     reason: string | null;
     disruptionId?: string | null;
+    cancellationRequestId?: string | null;
   }[];
   dayOverrides: {
     date: string;
@@ -94,6 +98,8 @@ export function buildUpcomingPreview(
   earliestEditableDateStr: string,
   closedDates: ClosedDateEntry[],
   projection?: HolidayProjection,
+  /** A pending cancellation request's heldFromDate — see the calendar util. */
+  holdFromDateStr?: string | null,
 ): UpcomingPreviewDay[] {
   if (!subscription.cycleEnd || !subscription.startDate) return [];
   const cycleEndStr = DateUtil.toTenantDateStr(subscription.cycleEnd, timezone);
@@ -147,6 +153,24 @@ export function buildUpcomingPreview(
       (s) => s.dateFrom <= dateStr && dateStr <= s.dateTo,
     );
     const closure = closedByDate.get(dateStr);
+    const onHold =
+      Boolean(skip?.cancellationRequestId) ||
+      (!skip && !closure && !!holdFromDateStr && dateStr >= holdFromDateStr);
+    if (onHold) {
+      return {
+        day: {
+          ...base,
+          locked: true,
+          skipped: true,
+          meals: [],
+          disruptionReason: null,
+          replacementDate: null,
+          isHoliday: false,
+          onHold: true,
+        },
+        delivered: false,
+      };
+    }
     if (skip || closure) {
       return {
         day: {
@@ -166,6 +190,7 @@ export function buildUpcomingPreview(
           // Same rule as the calendar: a materialized closure is a skip with
           // a reason but no disruption; a future one is the closure itself.
           isHoliday: skip ? Boolean(skip.reason) && !skip.disruptionId : true,
+          onHold: false,
         },
         delivered: false,
       };
@@ -191,6 +216,7 @@ export function buildUpcomingPreview(
         disruptionReason: null,
         replacementDate: null,
         isHoliday: false,
+        onHold: false,
       },
       delivered: true,
     };

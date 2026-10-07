@@ -77,7 +77,7 @@ export class CreateOrderDto {
     description: 'Required unless fulfillmentType is PICKUP',
   })
   @ValidateIf((o: CreateOrderDto) => o.fulfillmentType !== 'PICKUP')
-  @IsUUID()
+  @IsUUID('all', { message: 'Choose a delivery address.' })
   addressId?: string;
 
   @ApiPropertyOptional({
@@ -85,7 +85,7 @@ export class CreateOrderDto {
     description: 'Required when fulfillmentType is PICKUP',
   })
   @ValidateIf((o: CreateOrderDto) => o.fulfillmentType === 'PICKUP')
-  @IsUUID()
+  @IsUUID('all', { message: 'Choose a pickup location.' })
   pickupKitchenZoneId?: string;
 
   @ApiProperty({ type: [OrderItemInputDto] })

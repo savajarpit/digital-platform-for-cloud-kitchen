@@ -98,6 +98,9 @@ export interface SubscriptionDayOverride {
   date: string;
   addressId: string | null;
   deliverySlotId: string | null;
+  note: string | null;
+  address: { label: string | null; line1: string; city: string } | null;
+  deliverySlot: { name: string; startTime: string; endTime: string } | null;
 }
 
 export interface SubscriptionInvoice {
@@ -144,6 +147,10 @@ export interface AdminSubscriptionDetail {
   refunds: Refund[];
   paymentMethod: "RAZORPAY" | "CASH" | "UPI";
   createdByUserId: string | null;
+  /** False when the SUPER_ADMIN locked delivery-time choice for this tenant's plans. */
+  canOverrideTime: boolean;
+  /** Delivery times offered to subscriptions — for changing one day's time. */
+  deliverySlots: { id: string; name: string; startTime: string; endTime: string }[];
 }
 
 export interface AdminSubscription {

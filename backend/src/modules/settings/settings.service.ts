@@ -51,6 +51,7 @@ import { UpdateServiceablePincodeDto } from './dto/update-serviceable-pincode.dt
 import { CreateKitchenZoneDto } from './dto/create-kitchen-zone.dto';
 import { UpdateKitchenZoneDto } from './dto/update-kitchen-zone.dto';
 import { CreateDeliverySlotDto } from './dto/create-delivery-slot.dto';
+import { kitchenZoneInUseMessage } from './kitchen-zone-rules';
 import {
   deliverySlotInUseMessage,
   type SlotFlow,
@@ -89,6 +90,35 @@ function toOrderAcceptanceView(
     ...settings,
     closedDates: normalizeClosedDates(settings.closedDates),
   };
+}
+
+/** A zone's admin-facing name, trimmed — blank isn't a name. */
+function requireZoneName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) throw new BadRequestException('Give the kitchen zone a name.');
+  return trimmed;
+}
+
+/** Trimmed pickup address; blank becomes null (cleared), absent stays
+ * undefined (unchanged). */
+function normalizePickupAddress(
+  value: string | null | undefined,
+): string | null | undefined {
+  if (value === undefined) return undefined;
+  return value?.trim() || null;
+}
+
+/** A zone offering pickup must say where — customers are shown this
+ * address as the pickup point. */
+function assertPickupHasAddress(
+  pickupEnabled: boolean,
+  pickupAddress: string | null | undefined,
+): void {
+  if (pickupEnabled && !pickupAddress) {
+    throw new BadRequestException(
+      'Add the pickup address customers will see before turning on pickup for this outlet.',
+    );
+  }
 }
 
 const PLAN_CALENDAR_FEATURE_KEY = 'plan-calendar-view';
@@ -264,7 +294,11 @@ export class SettingsService {
       this.settingsRepo.findBusinessProfile(tenantId),
       this.settingsRepo.findAllKitchenZones(tenantId),
     ]);
-    const eligibleZones = zones.filter((z) => z.isActive && z.pickupEnabled);
+    // A zone without a pickup address is never offered — order creation
+    // refuses it too, and a blank pickup point helps no customer.
+    const eligibleZones = zones.filter(
+      (z) => z.isActive && z.pickupEnabled && z.pickupAddress?.trim(),
+    );
     const available =
       Boolean(profile?.pickupEnabled) && eligibleZones.length > 0;
     return {
@@ -272,7 +306,7 @@ export class SettingsService {
       zones: available
         ? eligibleZones.map((z) => ({
             id: z.id,
-            pickupAddress: z.pickupAddress ?? '',
+            pickupAddress: z.pickupAddress!.trim(),
             lat: z.lat,
             lng: z.lng,
           }))
@@ -545,11 +579,17 @@ export class SettingsService {
     return this.settingsRepo.findAllKitchenZones(tenantId);
   }
 
-  createKitchenZone(
+  async createKitchenZone(
     tenantId: string,
     dto: CreateKitchenZoneDto,
   ): Promise<KitchenZone> {
-    return this.settingsRepo.createKitchenZone(tenantId, dto);
+    const pickupAddress = normalizePickupAddress(dto.pickupAddress);
+    assertPickupHasAddress(dto.pickupEnabled ?? false, pickupAddress);
+    return this.settingsRepo.createKitchenZone(tenantId, {
+      ...dto,
+      name: requireZoneName(dto.name),
+      ...(pickupAddress !== undefined ? { pickupAddress } : {}),
+    });
   }
 
   async updateKitchenZone(
@@ -559,12 +599,28 @@ export class SettingsService {
   ): Promise<KitchenZone> {
     const existing = await this.settingsRepo.findKitchenZoneById(tenantId, id);
     if (!existing) throw new NotFoundException('Kitchen zone not found');
-    return this.settingsRepo.updateKitchenZone(id, dto);
+    const pickupAddress = normalizePickupAddress(dto.pickupAddress);
+    // Checked on the zone as it will be saved — either field may change.
+    assertPickupHasAddress(
+      dto.pickupEnabled ?? existing.pickupEnabled,
+      pickupAddress !== undefined ? pickupAddress : existing.pickupAddress,
+    );
+    return this.settingsRepo.updateKitchenZone(id, {
+      ...dto,
+      ...(dto.name !== undefined ? { name: requireZoneName(dto.name) } : {}),
+      ...(pickupAddress !== undefined ? { pickupAddress } : {}),
+    });
   }
 
   async deleteKitchenZone(tenantId: string, id: string): Promise<void> {
     const existing = await this.settingsRepo.findKitchenZoneById(tenantId, id);
     if (!existing) throw new NotFoundException('Kitchen zone not found');
+    // Tables/waitlist entries would make the delete fail outright (FK
+    // RESTRICT), and past pickup/dine-in orders would lose their outlet.
+    const inUse = kitchenZoneInUseMessage(
+      await this.settingsRepo.countKitchenZoneUsage(tenantId, id),
+    );
+    if (inUse) throw new ConflictException(inUse);
     await this.settingsRepo.deleteKitchenZone(id);
   }
 

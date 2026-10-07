@@ -26,7 +26,7 @@ const APPLIES_TO_LABEL: Record<ClosedDateAppliesTo, string> = {
 };
 
 function formatDate(date: string): string {
-  return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, {
+  return new Date(`${date}T00:00:00`).toLocaleDateString("en-IN", {
     weekday: "short",
     day: "numeric",
     month: "short",

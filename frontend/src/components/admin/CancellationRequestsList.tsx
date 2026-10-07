@@ -150,7 +150,7 @@ export function CancellationRequestsList({ kind }: { kind: CancellationKind }) {
                       {STATUS_LABELS[r.status]}
                     </span>
                     <span className="text-xs text-zinc-400">
-                      {new Date(r.createdAt).toLocaleString(undefined, {
+                      {new Date(r.createdAt).toLocaleString("en-IN", {
                         day: "numeric",
                         month: "short",
                         hour: "numeric",

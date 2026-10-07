@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { MealCombobox } from "@/components/admin/MealCombobox";
 import { PlanMetaForm } from "@/components/subscriptions-admin/PlanMetaForm";
+import { formatDate } from "@/lib/format/date";
 
 const SLOT_TYPES: MealSlotType[] = ["BREAKFAST", "LUNCH", "DINNER"];
 const SLOT_LABELS: Record<MealSlotType, string> = {
@@ -328,8 +329,8 @@ export function PlanEditor({
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3.5 py-2.5 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
           A subscriber joining now would run{" "}
           <strong className="text-zinc-900 dark:text-zinc-100">
-            {new Date(cyclePreview.startDate).toLocaleDateString()} –{" "}
-            {new Date(cyclePreview.cycleEnd).toLocaleDateString()}
+            {formatDate(cyclePreview.startDate)} –{" "}
+            {formatDate(cyclePreview.cycleEnd)}
           </strong>{" "}
           — {cyclePreview.durationDays} paid delivery day{cyclePreview.durationDays === 1 ? "" : "s"}
           {cyclePreview.calendarSpanDays !== cyclePreview.durationDays &&

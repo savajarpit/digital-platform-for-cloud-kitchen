@@ -12,6 +12,7 @@ import { RazorpayClientService } from '../../shared-modules/razorpay/razorpay-cl
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
 import { PaymentStatus } from '../../generated/prisma';
 import { OrderConfirmedJob } from '../notifications/notifications.processor';
+import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 interface RazorpayWebhookPayload {
   event?: string;
@@ -33,6 +34,7 @@ export class PaymentsService {
     private readonly ordersRepo: OrdersRepository,
     private readonly razorpayClient: RazorpayClientService,
     private readonly webhookEventsRepo: WebhookEventsRepository,
+    private readonly subscriptionsService: SubscriptionsService,
     @InjectQueue('notifications')
     private readonly notificationsQueue: Queue<OrderConfirmedJob>,
   ) {}
@@ -81,9 +83,19 @@ export class PaymentsService {
       throw new BadRequestException('Payment verification failed');
     }
 
-    await this.ordersRepo.markPaid(order.id, dto.razorpayPaymentId);
-    await this.enqueueOrderConfirmation(tenantId, order.id);
+    await this.confirmOrderPayment(order, dto.razorpayPaymentId);
     return { confirmed: true };
+  }
+
+  /** A Razorpay payment for this order was captured — from the browser,
+   * the webhook or the payment-check job. Marks it paid and queues the
+   * confirmation (its fixed jobId makes a repeat a no-op). */
+  async confirmOrderPayment(
+    order: { id: string; tenantId: string },
+    razorpayPaymentId: string,
+  ): Promise<void> {
+    await this.ordersRepo.markPaid(order.id, razorpayPaymentId);
+    await this.enqueueOrderConfirmation(order.tenantId, order.id);
   }
 
   async handleWebhook(
@@ -109,7 +121,13 @@ export class PaymentsService {
 
     const order = await this.ordersRepo.findByRazorpayOrderId(razorpayOrderId);
     if (!order) {
-      this.logger.warn(`Webhook for unknown Razorpay order ${razorpayOrderId}`);
+      // Not a food order — it may be a subscription plan payment.
+      await this.handleSubscriptionWebhook(
+        razorpayOrderId,
+        payload,
+        rawBody,
+        signature,
+      );
       return;
     }
 
@@ -141,8 +159,7 @@ export class PaymentsService {
         payload.event === 'order.paid'
       ) {
         if (order.paymentStatus !== PaymentStatus.PAID && paymentEntity?.id) {
-          await this.ordersRepo.markPaid(order.id, paymentEntity.id);
-          await this.enqueueOrderConfirmation(order.tenantId, order.id);
+          await this.confirmOrderPayment(order, paymentEntity.id);
         }
       } else if (payload.event === 'payment.failed') {
         const changed = await this.ordersRepo.markFailed(order.id);
@@ -152,6 +169,58 @@ export class PaymentsService {
           );
         }
       }
+      await this.webhookEventsRepo.markProcessed(record.id);
+    } catch (error) {
+      await this.webhookEventsRepo.markFailed(
+        record.id,
+        (error as Error).message,
+      );
+      throw error;
+    }
+  }
+
+  /** A webhook for a subscription plan payment (its Razorpay order belongs
+   * to a SubscriptionInvoice, not an Order). A captured payment confirms
+   * the invoice and activates the subscription; a failed attempt is left
+   * alone — the customer can retry the same Razorpay order, and the
+   * payment-check job abandons it after 24 h. */
+  private async handleSubscriptionWebhook(
+    razorpayOrderId: string,
+    payload: RazorpayWebhookPayload,
+    rawBody: Buffer,
+    signature: string,
+  ): Promise<void> {
+    const invoice =
+      await this.subscriptionsService.findInvoiceByRazorpayOrderId(
+        razorpayOrderId,
+      );
+    if (!invoice) {
+      this.logger.warn(`Webhook for unknown Razorpay order ${razorpayOrderId}`);
+      return;
+    }
+    const valid = await this.razorpayClient.verifyWebhookSignature(
+      invoice.tenantId,
+      rawBody,
+      signature,
+    );
+    if (!valid) throw new BadRequestException('Invalid webhook signature');
+
+    const paymentId = payload.payload?.payment?.entity?.id;
+    const captured =
+      payload.event === 'payment.captured' || payload.event === 'order.paid';
+    if (!captured || !paymentId) return;
+
+    const eventId = `${razorpayOrderId}:${payload.event}:${paymentId}`;
+    const existing = await this.webhookEventsRepo.findByEventId(eventId);
+    if (existing?.status === 'PROCESSED') return;
+    const record =
+      existing ??
+      (await this.webhookEventsRepo.create(
+        eventId,
+        payload.event ?? 'unknown',
+      ));
+    try {
+      await this.subscriptionsService.confirmInvoicePayment(invoice, paymentId);
       await this.webhookEventsRepo.markProcessed(record.id);
     } catch (error) {
       await this.webhookEventsRepo.markFailed(

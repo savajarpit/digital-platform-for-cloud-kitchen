@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { MenuRepository } from './menu.repository';
 import { CreateMealDto } from './dto/create-meal.dto';
 import { UpdateMealDto } from './dto/update-meal.dto';
@@ -12,6 +16,7 @@ import { FeaturesService } from '../features/features.service';
 import { MENU_ADDONS_FEATURE_KEY } from '../addons/addons.constants';
 import { PaginationService } from '../../common/services/pagination.service';
 import { MealStockService } from './meal-stock.service';
+import { mealInPlansMessage } from './meal-plan-usage.util';
 
 export type MealWithPromotion = Meal & {
   activePromotion: { promotionName: string; discountPercentage: number } | null;
@@ -233,6 +238,12 @@ export class MealsService {
   async remove(tenantId: string, id: string): Promise<void> {
     const meal = await this.menuRepo.findMealById(tenantId, id);
     if (!meal) throw new NotFoundException('Meal not found');
+    // Plans read their meals directly, deleted or not, so a deleted meal
+    // would keep reaching subscribers and the kitchen. Arpit's call
+    // (2026-10-04): refuse until it's swapped out of every plan.
+    const usages = await this.menuRepo.findPlanSlotsUsingMeal(tenantId, id);
+    const inPlans = mealInPlansMessage(meal.name, usages);
+    if (inPlans) throw new ConflictException(inPlans);
     await this.menuRepo.softDeleteMeal(id);
   }
 

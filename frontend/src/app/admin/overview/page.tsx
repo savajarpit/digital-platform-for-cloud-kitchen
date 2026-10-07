@@ -16,10 +16,18 @@ import { StatCardsSkeleton } from "@/components/ui/skeletons/StatCardsSkeleton";
 import { BarRowsSkeleton, RevenueChartSkeleton } from "@/components/admin/OverviewSkeletons";
 import { formatCompactPriceFromPaise, formatPriceFromPaise } from "@/lib/format/currency";
 
+/** "3 orders · 1 plan" — revenue counts food orders and plans bought, never a plan's daily deliveries. */
+function salesLabel({ orders, plans }: { orders: number; plans: number }): string {
+  const parts = [`${orders} order${orders === 1 ? "" : "s"}`];
+  if (plans > 0) parts.push(`${plans} plan${plans === 1 ? "" : "s"}`);
+  return parts.join(" · ");
+}
+
 const STATUS_BAR_COLORS: Record<string, string> = {
   PENDING_PAYMENT: "bg-zinc-400 dark:bg-zinc-600",
   CONFIRMED: "bg-primary-500",
   PREPARING: "bg-amber-500",
+  READY: "bg-sky-500",
   OUT_FOR_DELIVERY: "bg-secondary-500",
   DELIVERED: "bg-primary-600",
   CANCELLED: "bg-red-500",
@@ -29,6 +37,7 @@ const STATUS_LABELS: Record<string, string> = {
   PENDING_PAYMENT: "Pending Payment",
   CONFIRMED: "Confirmed",
   PREPARING: "Preparing",
+  READY: "Ready",
   OUT_FOR_DELIVERY: "Out for Delivery",
   DELIVERED: "Delivered",
   CANCELLED: "Cancelled",
@@ -85,13 +94,13 @@ export default function OverviewPage() {
             icon={IndianRupee}
             label="Today's Revenue"
             value={formatPriceFromPaise(overview.today.revenueInPaise)}
-            sublabel={`${overview.today.orders} order${overview.today.orders === 1 ? "" : "s"}`}
+            sublabel={salesLabel(overview.today)}
           />
           <StatTile
             icon={IndianRupee}
             label="Last 7 Days Revenue"
             value={formatPriceFromPaise(overview.last7Days.revenueInPaise)}
-            sublabel={`${overview.last7Days.orders} order${overview.last7Days.orders === 1 ? "" : "s"}`}
+            sublabel={salesLabel(overview.last7Days)}
           />
           <StatTile
             icon={ClipboardList}
@@ -202,7 +211,7 @@ function RevenueTrendChart({
   const [showTable, setShowTable] = useState(false);
   const max = Math.max(1, ...(trend ?? []).map((t) => t.revenueInPaise));
   const today = new Date().toISOString().slice(0, 10);
-  const hasData = (trend ?? []).some((t) => t.orders > 0);
+  const hasData = (trend ?? []).some((t) => t.orders + t.plans > 0);
   // Aim for ~12 visible x-axis labels regardless of range length — every day
   // on a 14-day view, every ~30th on a full year, never a cramped smear.
   const labelEvery = trend ? Math.max(1, Math.ceil(trend.length / 12)) : 1;
@@ -214,8 +223,12 @@ function RevenueTrendChart({
   // beyond that the hover tooltip is the only way to read an exact amount.
   const showValueLabels = barWidthClass === "w-6";
   const rangeTotal = (trend ?? []).reduce(
-    (acc, t) => ({ orders: acc.orders + t.orders, revenueInPaise: acc.revenueInPaise + t.revenueInPaise }),
-    { orders: 0, revenueInPaise: 0 },
+    (acc, t) => ({
+      orders: acc.orders + t.orders,
+      plans: acc.plans + t.plans,
+      revenueInPaise: acc.revenueInPaise + t.revenueInPaise,
+    }),
+    { orders: 0, plans: 0, revenueInPaise: 0 },
   );
 
   return (
@@ -278,7 +291,7 @@ function RevenueTrendChart({
             No data for this period
           </p>
           <p className="text-xs text-zinc-400 dark:text-zinc-600">
-            No paid orders between {trend[0]?.date} and {trend[trend.length - 1]?.date}
+            No paid orders or plan sales between {trend[0]?.date} and {trend[trend.length - 1]?.date}
           </p>
         </div>
       ) : showTable ? (
@@ -287,7 +300,7 @@ function RevenueTrendChart({
             <thead>
               <tr className="border-b border-zinc-100 text-left text-xs font-semibold text-zinc-500 uppercase dark:border-zinc-800 dark:text-zinc-400">
                 <th className="py-2 pr-4">Date</th>
-                <th className="py-2 pr-4">Orders</th>
+                <th className="py-2 pr-4">Sales</th>
                 <th className="py-2">Revenue</th>
               </tr>
             </thead>
@@ -295,7 +308,7 @@ function RevenueTrendChart({
               {trend.map((day) => (
                 <tr key={day.date} className="border-b border-zinc-50 last:border-none dark:border-zinc-900">
                   <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">{day.date}</td>
-                  <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">{day.orders}</td>
+                  <td className="py-2 pr-4 text-zinc-600 dark:text-zinc-400">{salesLabel(day)}</td>
                   <td className="py-2 font-medium text-zinc-900 dark:text-zinc-100">
                     {formatPriceFromPaise(day.revenueInPaise)}
                   </td>
@@ -352,7 +365,7 @@ function RevenueTrendChart({
                         {formatPriceFromPaise(day.revenueInPaise)}
                       </div>
                       <div className="text-zinc-500 dark:text-zinc-400">
-                        {day.orders} order{day.orders === 1 ? "" : "s"}
+                        {salesLabel(day)}
                       </div>
                     </div>
                   )}
@@ -382,7 +395,7 @@ function RevenueTrendChart({
               {formatPriceFromPaise(rangeTotal.revenueInPaise)}
             </p>
             <p className="text-xs text-zinc-400 dark:text-zinc-500">
-              {rangeTotal.orders} order{rangeTotal.orders === 1 ? "" : "s"}
+              {salesLabel(rangeTotal)}
             </p>
           </div>
           <div>
@@ -393,7 +406,7 @@ function RevenueTrendChart({
                   {formatPriceFromPaise(allTimeRevenue.revenueInPaise)}
                 </p>
                 <p className="text-xs text-zinc-400 dark:text-zinc-500">
-                  {allTimeRevenue.orders} order{allTimeRevenue.orders === 1 ? "" : "s"}
+                  {salesLabel(allTimeRevenue)}
                 </p>
               </>
             )}

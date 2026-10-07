@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { SUBSCRIPTION_STATUS_STYLES } from "@/lib/format/status-styles";
 import { PageHeader } from "@/components/account/PageHeader";
+import { subscriptionPeriodLabel } from "@/lib/format/subscription-period";
 
 export default function MySubscriptionsPage() {
   const router = useRouter();
@@ -83,9 +84,9 @@ export default function MySubscriptionsPage() {
                   {sub.status.replace("_", " ")}
                 </span>
               </div>
-              {sub.cycleEnd && (
+              {subscriptionPeriodLabel(sub.status, sub.cycleEnd) && (
                 <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  Active through {new Date(sub.cycleEnd).toLocaleDateString()}
+                  {subscriptionPeriodLabel(sub.status, sub.cycleEnd)}
                 </p>
               )}
             </div>

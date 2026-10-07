@@ -9,6 +9,11 @@ import {
   IsStrongPassword,
   Matches,
 } from 'class-validator';
+import {
+  trimLowercase,
+  trimString,
+  trimToUndefined,
+} from '../../../common/utils/trim.util';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
@@ -19,7 +24,7 @@ import {
 export class RegisterDto {
   @ApiProperty({ example: 'john@example.com' })
   @IsEmail({}, { message: 'Must be a valid email address' })
-  @Transform(({ value }) => value?.toLowerCase().trim())
+  @Transform(trimLowercase)
   email: string;
 
   @ApiProperty({ example: 'MyP@ssw0rd!', minLength: 8 })
@@ -32,13 +37,15 @@ export class RegisterDto {
   password: string;
 
   @ApiProperty({ example: 'John' })
+  @Transform(trimString)
   @IsString()
-  @MinLength(2)
+  @MinLength(2, { message: 'First name must be at least 2 characters.' })
   @MaxLength(50)
   firstName: string;
 
   @ApiPropertyOptional({ example: 'Doe' })
   @IsOptional()
+  @Transform(trimToUndefined)
   @IsString()
   @MaxLength(50)
   lastName?: string;

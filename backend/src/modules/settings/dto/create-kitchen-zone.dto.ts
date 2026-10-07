@@ -6,9 +6,15 @@ import {
   IsOptional,
   IsString,
   MaxLength,
+  Max,
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  MAX_DELIVERY_AMOUNT_PAISE,
+  MAX_ZONE_RADIUS_METERS,
+  MIN_ZONE_RADIUS_METERS,
+} from '../kitchen-zone-rules';
 
 export class CreateKitchenZoneDto {
   @ApiProperty({ example: 'Nikol Branch' })
@@ -26,13 +32,21 @@ export class CreateKitchenZoneDto {
 
   @ApiProperty({ example: 3000, description: 'Delivery radius in meters' })
   @IsInt()
-  @Min(0)
+  @Min(MIN_ZONE_RADIUS_METERS, {
+    message: 'Delivery radius must be at least 100 m.',
+  })
+  @Max(MAX_ZONE_RADIUS_METERS, {
+    message: 'Delivery radius can be at most 50 km.',
+  })
   radiusMeters: number;
 
   @ApiPropertyOptional({ example: 3000, description: 'Delivery fee in paise' })
   @IsOptional()
   @IsInt()
-  @Min(0)
+  @Min(0, { message: 'Delivery fee can’t be negative.' })
+  @Max(MAX_DELIVERY_AMOUNT_PAISE, {
+    message: 'Delivery fee can be at most ₹10,000.',
+  })
   deliveryFee?: number;
 
   @ApiPropertyOptional({
@@ -41,7 +55,10 @@ export class CreateKitchenZoneDto {
   })
   @IsOptional()
   @IsInt()
-  @Min(0)
+  @Min(0, { message: 'Minimum order amount can’t be negative.' })
+  @Max(MAX_DELIVERY_AMOUNT_PAISE, {
+    message: 'Minimum order amount can be at most ₹10,000.',
+  })
   minOrderAmount?: number;
 
   @ApiPropertyOptional({
@@ -50,7 +67,10 @@ export class CreateKitchenZoneDto {
   })
   @IsOptional()
   @IsInt()
-  @Min(0)
+  @Min(0, { message: 'Free-delivery threshold can’t be negative.' })
+  @Max(MAX_DELIVERY_AMOUNT_PAISE, {
+    message: 'Free-delivery threshold can be at most ₹10,000.',
+  })
   freeDeliveryAboveAmount?: number;
 
   @ApiPropertyOptional({ example: true })

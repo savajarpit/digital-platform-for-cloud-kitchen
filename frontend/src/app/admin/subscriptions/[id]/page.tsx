@@ -23,8 +23,10 @@ import { SubscriptionActionsForm } from "@/components/admin/SubscriptionActionsF
 import { CancelRefundForm } from "@/components/admin/CancelRefundForm";
 import { CANCEL_REFUND_ANCHOR, PendingCancellationBanner } from "@/components/admin/PendingCancellationBanner";
 import { RefundHistoryCard } from "@/components/admin/RefundHistoryCard";
+import { SubscriptionSkipsCard } from "@/components/admin/SubscriptionSkipsCard";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatTime12h } from "@/lib/format/time";
+import { formatDate } from "@/lib/format/date";
 
 const SUBSCRIPTION_STATUS_STYLES: Record<string, string> = {
   PENDING_PAYMENT: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400",
@@ -136,10 +138,11 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
             {sub.planNameSnapshot}
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Subscribed {new Date(sub.createdAt).toLocaleDateString()}
+            Subscribed {formatDate(sub.createdAt)}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Wraps: an opened action form takes its own full-width row. */}
+        <div className="flex flex-1 flex-wrap items-center justify-end gap-2 has-[.basis-full]:basis-full">
           {sub.paymentMethod !== "RAZORPAY" && (
             <span className="badge bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
               {sub.paymentMethod}
@@ -165,11 +168,12 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
             <SubscriptionActionsForm
               subscriptionId={sub.id}
               customerUserId={sub.userId}
+              deliverySlots={sub.canOverrideTime ? sub.deliverySlots : []}
               onDone={refresh}
             />
           )}
           {canCancelRefund && sub.status === "ACTIVE" && (
-            <div id={CANCEL_REFUND_ANCHOR} className="scroll-mt-24">
+            <div id={CANCEL_REFUND_ANCHOR} className="scroll-mt-24 has-[.basis-full]:basis-full">
               <CancelRefundForm
                 kind="subscription"
                 id={sub.id}
@@ -203,9 +207,9 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
         <div className="card flex flex-col gap-2 p-6 text-sm">
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Cycle</h3>
           <p className="text-zinc-600 dark:text-zinc-400">
-            {sub.startDate ? new Date(sub.startDate).toLocaleDateString() : "—"}
+            {sub.startDate ? formatDate(sub.startDate) : "—"}
             {" – "}
-            {sub.cycleEnd ? new Date(sub.cycleEnd).toLocaleDateString() : "—"}
+            {sub.cycleEnd ? formatDate(sub.cycleEnd) : "—"}
           </p>
           <p className="text-xs text-zinc-400">
             {sub.durationDaysSnapshot} days
@@ -294,44 +298,7 @@ export default function AdminSubscriberDetailPage({ params }: { params: Promise<
         </div>
       )}
 
-      {(sub.skips.length > 0 || sub.dayOverrides.length > 0) && (
-        <div className="card flex flex-col gap-3 p-6">
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Skips &amp; changes</h3>
-          {sub.skips.length > 0 && (
-            <div>
-              <p className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">Skipped / paused</p>
-              <div className="flex flex-wrap gap-1.5">
-                {sub.skips.map((skip) => (
-                  <span
-                    key={skip.id}
-                    title={skip.reason ?? undefined}
-                    className={`badge ${
-                      skip.reason
-                        ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-400"
-                        : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
-                    }`}
-                  >
-                    {skip.dateFrom === skip.dateTo ? skip.dateFrom : `${skip.dateFrom} – ${skip.dateTo}`}
-                    {skip.reason && ` — ${skip.reason}`}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-          {sub.dayOverrides.length > 0 && (
-            <div>
-              <p className="mb-1 text-xs font-medium text-zinc-500 dark:text-zinc-400">Per-day changes</p>
-              <div className="flex flex-wrap gap-1.5">
-                {sub.dayOverrides.map((o) => (
-                  <span key={o.id} className="badge bg-secondary-50 text-secondary-700 dark:bg-secondary-950 dark:text-secondary-400">
-                    {o.date}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      <SubscriptionSkipsCard skips={sub.skips} dayOverrides={sub.dayOverrides} />
 
       <div className="card flex flex-col gap-3 p-6">
         <div className="flex items-center justify-between">

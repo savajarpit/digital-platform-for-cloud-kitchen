@@ -13,12 +13,6 @@ import { Toggle } from "@/components/ui/Toggle";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { qk, STALE } from "@/lib/query/keys";
 
-const FALLBACK_SETTINGS: InstantDeliverySettings = {
-  isEnabled: false,
-  etaMinMinutes: 30,
-  etaMaxMinutes: 45,
-};
-
 /** Same limit the API enforces — beyond 4 hours it isn't "ASAP". */
 const MAX_ETA_MINUTES = 240;
 
@@ -37,14 +31,16 @@ export function InstantDeliveryCard({ canEdit }: { canEdit: boolean }) {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const queryKey = qk.admin("settings", "instant-delivery");
-  const { data, isError } = useQuery({
+  const { data, isError, refetch, isFetching } = useQuery({
     queryKey,
     queryFn: getInstantDeliverySettings,
     staleTime: STALE.list,
   });
   // Unsaved edits live in `draft`; a background refetch never overwrites them.
   const [draft, setDraft] = useState<InstantDeliverySettings | null>(null);
-  const settings = draft ?? data ?? (isError ? FALLBACK_SETTINGS : null);
+  // Never fall back to defaults on a load error — an editable "off" form
+  // would let one Save overwrite the real settings.
+  const settings = draft ?? data ?? null;
   const setSettings = setDraft;
   const [saving, setSaving] = useState(false);
 
@@ -68,6 +64,25 @@ export function InstantDeliveryCard({ canEdit }: { canEdit: boolean }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (!settings && isError) {
+    return (
+      <div className="card flex flex-col gap-3 p-6">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Instant delivery</h3>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+          Couldn&apos;t load your instant delivery settings, so they can&apos;t be edited right now.
+        </p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          disabled={isFetching}
+          className="btn-outline btn-sm w-fit cursor-pointer"
+        >
+          {isFetching ? "Retrying…" : "Try again"}
+        </button>
+      </div>
+    );
   }
 
   if (!settings) {

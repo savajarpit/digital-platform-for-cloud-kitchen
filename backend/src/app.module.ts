@@ -42,6 +42,7 @@ import { TenantContextMiddleware } from './common/middleware/tenant-context.midd
 // Shared modules
 import { QueueModule } from './shared-modules/queue/queue.module';
 import { RedisModule } from './shared-modules/cache/redis.module';
+import { JobsModule } from './shared-modules/jobs/jobs.module';
 import { StorageModule } from './shared-modules/storage/storage.module';
 import { TenantResolverModule } from './common/tenant-resolver.module';
 
@@ -77,6 +78,7 @@ import { NotificationTemplatesModule } from './modules/notification-templates/no
 import { PlatformSettingsModule } from './modules/platform-settings/platform-settings.module';
 import { DineInModule } from './modules/dine-in/dine-in.module';
 import { AddonsModule } from './modules/addons/addons.module';
+import { KitchenModule } from './modules/kitchen/kitchen.module';
 
 @Module({
   imports: [
@@ -148,6 +150,7 @@ import { AddonsModule } from './modules/addons/addons.module';
     // ── Shared Modules ───────────────────────────────────
     TenantResolverModule,
     RedisModule,
+    JobsModule,
     QueueModule,
     StorageModule,
     ScheduleModule.forRoot(),
@@ -161,6 +164,7 @@ import { AddonsModule } from './modules/addons/addons.module';
     AddressesModule,
     DineInModule,
     AddonsModule,
+    KitchenModule,
     OrdersModule,
     PaymentsModule,
     PermissionsModule,

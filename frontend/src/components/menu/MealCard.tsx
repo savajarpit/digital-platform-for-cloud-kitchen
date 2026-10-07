@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { ImageOff, Star } from "lucide-react";
+import { Star } from "lucide-react";
 import type { Meal } from "@/lib/api/menu";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { formatMealWeight } from "@/lib/format/weight";
 import { AddToCartButton } from "./AddToCartButton";
 import { MealStockNote } from "./MealStockNote";
+import { MealThumb } from "@/components/ui/MealThumb";
 
 const MACRO_KEYS = ["calories", "protein", "carbs", "fat"] as const;
 const MACRO_LABELS: Record<(typeof MACRO_KEYS)[number], string> = {
@@ -55,19 +56,7 @@ export function MealCard({
     >
       <Link href={`/menu/${meal.id}`} className="flex flex-1 flex-col">
         <div className="relative aspect-4/3 w-full bg-zinc-100 dark:bg-zinc-800">
-          {meal.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={meal.imageUrl}
-              alt={meal.name}
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-zinc-300 dark:text-zinc-700">
-              <ImageOff className="h-10 w-10" strokeWidth={1.5} />
-            </div>
-          )}
+          <MealThumb src={meal.imageUrl} alt={meal.name} iconClassName="h-10 w-10" />
           <span
             className={`absolute top-3 left-3 inline-flex h-4 w-4 items-center justify-center rounded-sm border-2 bg-white ${
               meal.isVegetarian ? "border-green-600" : "border-red-600"

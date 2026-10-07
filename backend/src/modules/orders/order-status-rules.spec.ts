@@ -20,9 +20,25 @@ describe('assertStatusChangeAllowed', () => {
     ).not.toThrow();
   });
 
-  it('blocks any other change on an unpaid order', () => {
-    expect(() => assertStatusChangeAllowed(unpaidCash, 'PREPARING')).toThrow(
-      BadRequestException,
+  it('moves an unpaid cash/UPI order along before payment (cash on delivery)', () => {
+    for (const next of [
+      'PREPARING',
+      'READY',
+      'OUT_FOR_DELIVERY',
+      'DELIVERED',
+    ] as const) {
+      expect(() => assertStatusChangeAllowed(unpaidCash, next)).not.toThrow();
+    }
+  });
+
+  it('blocks any change on an unpaid online (Razorpay) order', () => {
+    expect(() =>
+      assertStatusChangeAllowed(
+        { ...unpaidCash, paymentMethod: 'RAZORPAY' },
+        'PREPARING',
+      ),
+    ).toThrow(
+      'Cannot update the status of an order that has not been paid yet.',
     );
   });
 
@@ -48,5 +64,20 @@ describe('assertStatusChangeAllowed', () => {
     expect(() =>
       assertStatusChangeAllowed({ ...paid, status: 'CANCELLED' }, 'PREPARING'),
     ).toThrow('already cancelled');
+  });
+
+  it('never cancels a plan delivery on its own, but still lets the kitchen move it along', () => {
+    const planDelivery = {
+      status: 'CONFIRMED' as const,
+      paymentStatus: 'PAID' as const,
+      paymentMethod: 'RAZORPAY' as const,
+      subscriptionId: 'sub1',
+    };
+    expect(() => assertStatusChangeAllowed(planDelivery, 'CANCELLED')).toThrow(
+      'part of a meal plan',
+    );
+    expect(() =>
+      assertStatusChangeAllowed(planDelivery, 'OUT_FOR_DELIVERY'),
+    ).not.toThrow();
   });
 });

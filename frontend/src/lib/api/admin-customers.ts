@@ -31,6 +31,7 @@ export interface CustomerOrder {
   id: string;
   orderNumber: string;
   status: string;
+  fulfillmentType: string;
   paymentStatus: string;
   totalInPaise: number;
   createdAt: string;

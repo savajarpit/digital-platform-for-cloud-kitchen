@@ -59,7 +59,7 @@ export default function AdminSubscriptionsPage() {
             Subscription Plans
           </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/admin/subscriptions/disruptions"
             className="flex items-center gap-1.5 text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"

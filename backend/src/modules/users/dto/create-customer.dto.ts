@@ -8,6 +8,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { trimString, trimToUndefined } from '../../../common/utils/trim.util';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -29,13 +30,15 @@ export class CreateCustomerDto {
   email: string;
 
   @ApiProperty({ example: 'Priya' })
+  @Transform(trimString)
   @IsString()
-  @MinLength(2)
+  @MinLength(2, { message: 'First name must be at least 2 characters.' })
   @MaxLength(50)
   firstName: string;
 
   @ApiPropertyOptional({ example: 'Shah' })
   @IsOptional()
+  @Transform(trimToUndefined)
   @IsString()
   @MaxLength(50)
   lastName?: string;

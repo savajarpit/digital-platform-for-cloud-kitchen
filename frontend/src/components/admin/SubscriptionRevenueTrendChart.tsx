@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatCompactPriceFromPaise, formatPriceFromPaise } from "@/lib/format/currency";
+import { formatDateStrShort } from "@/lib/format/date";
 import type { SubscriptionAnalytics } from "@/lib/api/admin-subscriptions";
 
 type RangePreset = "14" | "30" | "custom";
@@ -170,7 +171,7 @@ export function SubscriptionRevenueTrendChart({
                     <div
                       className={`absolute bottom-full ${tooltipPositionClass} z-20 mb-1.5 w-max rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs shadow-lg dark:border-zinc-700 dark:bg-zinc-800`}
                     >
-                      <div className="font-medium text-zinc-900 dark:text-zinc-100">{day.date}</div>
+                      <div className="font-medium text-zinc-900 dark:text-zinc-100">{formatDateStrShort(day.date)}</div>
                       <div className="font-semibold text-primary-600 dark:text-primary-400">
                         {formatPriceFromPaise(day.valueInPaise)}
                       </div>
@@ -241,9 +242,10 @@ function RangePresetButton({
   );
 }
 
-/** Short "Jul 24" form for an x-axis label — the tooltip still shows the full YYYY-MM-DD. */
+/** Short "24 Jul" form for an x-axis label (Indian day-month order, like
+ * every other date in the app). */
 function formatShortDate(dateStr: string): string {
   const [, m, d] = dateStr.split("-").map(Number);
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${months[m - 1]} ${d}`;
+  return `${d} ${months[m - 1]}`;
 }

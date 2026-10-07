@@ -2,7 +2,6 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
-  IsDateString,
   IsEnum,
   IsInt,
   IsOptional,
@@ -17,11 +16,18 @@ import {
   SubscriptionOffDayHandling,
   SubscriptionPlanSchedulingMode,
 } from '../../../generated/prisma';
+import { IsDateStr } from '../../../common/decorators/is-date-str.decorator';
+
+/** Longest plan — a year; materialization, calendars and previews all walk
+ * the plan day by day. */
+export const MAX_PLAN_DURATION_DAYS = 365;
+/** ₹5,00,000 — the usual per-transaction ceiling for an online payment. */
+export const MAX_PLAN_PRICE_PAISE = 50_000_000;
 
 export class CreatePlanDto {
   @ApiProperty({ example: '7-Day Weight Loss Plan' })
   @IsString()
-  @MaxLength(100)
+  @MaxLength(100, { message: 'Plan name can be at most 100 characters.' })
   name: string;
 
   @ApiPropertyOptional({
@@ -29,16 +35,26 @@ export class CreatePlanDto {
   })
   @IsOptional()
   @IsString()
+  @MaxLength(2000, {
+    message: 'Description can be at most 2,000 characters.',
+  })
   description?: string;
 
   @ApiProperty({ example: 7 })
-  @IsInt()
-  @Min(1)
+  @IsInt({ message: 'Duration must be a whole number of days.' })
+  @Min(1, { message: 'A plan must last at least 1 day.' })
+  @Max(MAX_PLAN_DURATION_DAYS, {
+    message: `A plan can last at most ${MAX_PLAN_DURATION_DAYS} days.`,
+  })
   durationDays: number;
 
   @ApiProperty({ example: 199900, description: 'Full plan price in paise' })
-  @IsInt()
-  @Min(1)
+  @IsInt({ message: 'Price must be in whole paise.' })
+  @Min(1, { message: 'Price must be at least ₹0.01.' })
+  @Max(MAX_PLAN_PRICE_PAISE, {
+    message:
+      'Price can be at most ₹5,00,000 — the most one online payment can take.',
+  })
   priceInPaise: number;
 
   @ApiPropertyOptional({
@@ -48,7 +64,11 @@ export class CreatePlanDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  @ArrayMaxSize(10)
+  @MaxLength(80, {
+    each: true,
+    message: 'Each feature can be at most 80 characters.',
+  })
+  @ArrayMaxSize(10, { message: 'Add at most 10 features.' })
   features?: string[];
 
   @ApiPropertyOptional({ example: 'Most Popular' })
@@ -101,7 +121,7 @@ export class CreatePlanDto {
       'WEEKLY_FIXED only — YYYY-MM-DD, tenant-local. The date that defines "week 1" for every subscriber on this plan.',
   })
   @IsOptional()
-  @IsDateString()
+  @IsDateStr()
   scheduleAnchorDate?: string;
 
   @ApiPropertyOptional({

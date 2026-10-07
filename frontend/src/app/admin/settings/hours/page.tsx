@@ -65,7 +65,7 @@ export default function OrderHoursPage() {
 
   const queryClient = useQueryClient();
   const queryKey = qk.admin("settings", "hours");
-  const { data, isError } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey,
     queryFn: getOrderAcceptance,
     staleTime: STALE.list,
@@ -147,7 +147,16 @@ export default function OrderHoursPage() {
 
   if (!form) {
     return isError ? (
-      <EmptyState compact icon={Clock} title="Couldn't load order hours." />
+      <EmptyState
+        compact
+        icon={Clock}
+        title="Couldn't load order hours."
+        action={
+          <button type="button" onClick={() => void refetch()} className="btn-outline btn-sm cursor-pointer">
+            Try again
+          </button>
+        }
+      />
     ) : (
       <OrderHoursSkeleton />
     );

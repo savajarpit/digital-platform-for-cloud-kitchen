@@ -110,6 +110,23 @@ export class MenuRepository {
     return this.prisma.meal.update({ where: { id }, data });
   }
 
+  /** Every plan day (draft or published) that still serves this meal. */
+  findPlanSlotsUsingMeal(tenantId: string, mealId: string) {
+    return this.prisma.subscriptionPlanSlot.findMany({
+      where: { mealId, planDay: { plan: { tenantId } } },
+      select: {
+        planDay: {
+          select: {
+            dayNumber: true,
+            weekNumber: true,
+            weekday: true,
+            plan: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+  }
+
   softDeleteMeal(id: string): Promise<Meal> {
     return this.prisma.meal.update({
       where: { id },

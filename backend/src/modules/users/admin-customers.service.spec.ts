@@ -4,6 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { AdminCustomersService } from './admin-customers.service';
+import {
+  emailTakenMessage,
+  REMOVED_ACCOUNT_EMAIL_MESSAGE,
+} from './email-taken.util';
 import { UsersRepository } from './users.repository';
 import { CustomerInviteService } from './customer-invite.service';
 import { AddressesService } from '../addresses/addresses.service';
@@ -12,7 +16,7 @@ import { CreateAddressDto } from '../addresses/dto/create-address.dto';
 import { HashUtil } from '../../common/utils/hash.util';
 
 const mockUsersRepo = {
-  findByEmail: jest.fn(),
+  findByEmailIncludingRemoved: jest.fn(),
   create: jest.fn(),
   findCustomerById: jest.fn(),
 };
@@ -60,15 +64,27 @@ describe('AdminCustomersService', () => {
 
   describe('createCustomer', () => {
     it('rejects an email already used in this tenant', async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue({ id: 'existing' });
+      mockUsersRepo.findByEmailIncludingRemoved.mockResolvedValue({
+        id: 'existing',
+      });
       await expect(service.createCustomer('t1', dto)).rejects.toBeInstanceOf(
         ConflictException,
       );
       expect(mockUsersRepo.create).not.toHaveBeenCalled();
     });
 
+    it("says so when the email is a staff member's, not a customer's", async () => {
+      mockUsersRepo.findByEmailIncludingRemoved.mockResolvedValue({
+        id: 'owner',
+        role: 'OWNER',
+      });
+      await expect(service.createCustomer('t1', dto)).rejects.toThrow(
+        'This email belongs to a staff account here — use a different email for the customer.',
+      );
+    });
+
     it('always creates a verified CUSTOMER in the admin tenant, with an unknown password', async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(null);
+      mockUsersRepo.findByEmailIncludingRemoved.mockResolvedValue(null);
       // Extra fields a client might smuggle past the DTO type.
       const smuggled = {
         ...dto,
@@ -91,7 +107,7 @@ describe('AdminCustomersService', () => {
     });
 
     it('sends the invite by default and skips it when sendInvite is false', async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(null);
+      mockUsersRepo.findByEmailIncludingRemoved.mockResolvedValue(null);
 
       await service.createCustomer('t1', dto);
       expect(mockInvites.sendInvite).toHaveBeenCalledTimes(1);
@@ -101,7 +117,7 @@ describe('AdminCustomersService', () => {
     });
 
     it('saves the first address as the default for the new customer', async () => {
-      mockUsersRepo.findByEmail.mockResolvedValue(null);
+      mockUsersRepo.findByEmailIncludingRemoved.mockResolvedValue(null);
       mockAddresses.createOnBehalf.mockResolvedValue({ id: 'a1' });
 
       const result = await service.createCustomer('t1', { ...dto, address });
@@ -150,5 +166,19 @@ describe('AdminCustomersService', () => {
         address,
       );
     });
+  });
+});
+
+describe('emailTakenMessage', () => {
+  it('is null for a free email', () => {
+    expect(emailTakenMessage(null, 'signup')).toBeNull();
+  });
+
+  it("explains a removed account's email instead of crashing", () => {
+    for (const context of ['customer', 'signup', 'staff'] as const) {
+      expect(
+        emailTakenMessage({ role: 'CUSTOMER', deletedAt: new Date() }, context),
+      ).toBe(REMOVED_ACCOUNT_EMAIL_MESSAGE);
+    }
   });
 });

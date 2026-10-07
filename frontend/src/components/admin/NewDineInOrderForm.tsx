@@ -14,6 +14,10 @@ import { invalidateOrderAreas } from "@/lib/query/admin-invalidation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
 import { useToast } from "@/context/ToastContext";
 import { formatPriceFromPaise } from "@/lib/format/currency";
+import { MAX_ITEM_QUANTITY } from "@/lib/constants/order-limits";
+import { PhoneInput } from "@/components/ui/PhoneInput";
+import { usePermission } from "@/context/PermissionsContext";
+import { PERMISSIONS } from "@/lib/constants/permissions";
 
 interface CartRow {
   mealId: string;
@@ -43,6 +47,8 @@ export function NewDineInOrderForm({
   onCancel: () => void;
 }) {
   const { showToast } = useToast();
+  // The customer picker searches the customer list — only for staff who may see it.
+  const canViewCustomers = usePermission(PERMISSIONS.CUSTOMERS_VIEW);
   const [fulfillmentType, setFulfillmentType] = useState<"DINE_IN" | "TAKEAWAY">(
     defaultTableId ? "DINE_IN" : "TAKEAWAY",
   );
@@ -92,7 +98,7 @@ export function NewDineInOrderForm({
         kitchenZoneId,
         fulfillmentType,
         tableId: fulfillmentType === "DINE_IN" && tableId ? tableId : undefined,
-        customerUserId: linkCustomer && customer ? customer.id : undefined,
+        customerUserId: linkCustomer && canViewCustomers && customer ? customer.id : undefined,
         guestName: guestName.trim() || undefined,
         guestPhone: guestPhone.trim() || undefined,
         items: validRows.map((r) => ({ mealId: r.mealId, quantity: r.quantity })),
@@ -154,16 +160,18 @@ export function NewDineInOrderForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setLinkCustomer((v) => !v)}
-            className="cursor-pointer text-xs font-medium text-primary-600 hover:underline dark:text-primary-400"
-          >
-            {linkCustomer ? "Enter guest details instead" : "Link an existing customer instead"}
-          </button>
-        </div>
-        {linkCustomer ? (
+        {canViewCustomers && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setLinkCustomer((v) => !v)}
+              className="cursor-pointer text-xs font-medium text-primary-600 hover:underline dark:text-primary-400"
+            >
+              {linkCustomer ? "Enter guest details instead" : "Link an existing customer instead"}
+            </button>
+          </div>
+        )}
+        {linkCustomer && canViewCustomers ? (
           <CustomerCombobox value={customer} onChange={setCustomer} />
         ) : (
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -173,12 +181,7 @@ export function NewDineInOrderForm({
               placeholder="Guest name (optional)"
               className="input"
             />
-            <input
-              value={guestPhone}
-              onChange={(e) => setGuestPhone(e.target.value)}
-              placeholder="Phone (optional)"
-              className="input"
-            />
+            <PhoneInput value={guestPhone} onChange={setGuestPhone} placeholder="Phone (optional)" />
           </div>
         )}
       </div>
@@ -198,14 +201,18 @@ export function NewDineInOrderForm({
               <input
                 type="number"
                 min={1}
+                max={MAX_ITEM_QUANTITY}
                 value={row.quantity}
-                onChange={(e) => updateRow(i, { quantity: Math.max(1, Number(e.target.value) || 1) })}
+                onChange={(e) =>
+                  updateRow(i, { quantity: Math.min(MAX_ITEM_QUANTITY, Math.max(1, Number(e.target.value) || 1)) })
+                }
                 className="input w-16 shrink-0 py-1.5 text-center"
               />
               <button
                 type="button"
                 onClick={() => removeRow(i)}
-                className="shrink-0 rounded p-1.5 text-zinc-400 hover:text-red-600"
+                aria-label="Remove this item"
+                className="shrink-0 cursor-pointer rounded p-1.5 text-zinc-400 hover:text-red-600"
               >
                 <Trash2 className="h-4 w-4" />
               </button>

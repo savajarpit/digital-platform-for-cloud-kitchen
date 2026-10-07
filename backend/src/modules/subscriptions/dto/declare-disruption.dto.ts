@@ -1,5 +1,4 @@
 import {
-  IsDateString,
   IsIn,
   IsInt,
   IsOptional,
@@ -11,13 +10,14 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDateStr } from '../../../common/decorators/is-date-str.decorator';
 
 export class DeclareDisruptionDto {
   @ApiProperty({
     example: '2026-09-01',
     description: 'YYYY-MM-DD, tenant-local — must not be in the past',
   })
-  @IsDateString()
+  @IsDateStr()
   date: string;
 
   @ApiProperty({

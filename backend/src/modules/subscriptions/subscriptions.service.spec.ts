@@ -30,11 +30,22 @@ const mockRepo = {
   findScheduledDate: jest.fn(),
   updateScheduledDateDate: jest.fn(),
   activateSubscription: jest.fn(),
+  activatePendingSubscription: jest.fn(),
   findSubscriptionForMaterialization: jest.fn(),
   findMySubscriptionById: jest.fn(),
   findSubscriptionById: jest.fn(),
   findPlanScheduleConfig: jest.fn(),
   countActiveSubscriptionsAffectedByDate: jest.fn(),
+  findPlanByIdAdmin: jest.fn(),
+  countSubscriptionsForPlan: jest.fn(),
+  countTenantMeals: jest.fn(),
+  replacePlanDays: jest.fn(),
+  findSkipForDate: jest.fn(),
+  findSkipRanges: jest.fn(),
+  findByIdForTenantAdmin: jest.fn(),
+  cancelWithRefund: jest.fn(),
+  upsertDayOverride: jest.fn(),
+  deletePlan: jest.fn(),
 };
 const mockSettingsRepo = {
   findOrderAcceptanceSettings: jest.fn(),
@@ -62,6 +73,8 @@ const mockNotifier = { notifyApproved: jest.fn() };
 
 /** Only the two collaborators the settings/entitlement logic touches are
  * real mocks — the rest of the constructor args are never reached. */
+const mockRedis = { acquireLock: jest.fn(), releaseLock: jest.fn() };
+
 function build(): SubscriptionsService {
   const unused = {} as never;
   return new SubscriptionsService(
@@ -78,6 +91,7 @@ function build(): SubscriptionsService {
     unused,
     mockBanking as never,
     mockNotifier as never,
+    mockRedis as never,
   );
 }
 
@@ -99,6 +113,7 @@ function buildForSubscribe(): SubscriptionsService {
     unused,
     mockBanking as never,
     mockNotifier as never,
+    mockRedis as never,
   );
 }
 
@@ -111,6 +126,140 @@ function grant(...keys: string[]) {
 
 const dto = (d: Partial<UpdateSubscriptionSettingsDto>) =>
   d as UpdateSubscriptionSettingsDto;
+
+describe('SubscriptionsService — day change on a skipped day', () => {
+  let service: SubscriptionsService;
+
+  beforeEach(() => {
+    service = build();
+    const internals = service as unknown as Record<string, jest.Mock>;
+    internals.getTenantActiveSubscription = jest.fn().mockResolvedValue({
+      id: 'sub1',
+      userId: 'u1',
+      planId: 'p1',
+      usesDateSelection: false,
+      startDate: new Date('2026-10-03T00:00:00.000Z'),
+      cycleEnd: new Date('2026-10-09T00:00:00.000Z'),
+    });
+    internals.assertWithinNoticeWindow = jest.fn().mockResolvedValue(undefined);
+    mockSettingsRepo.findClosedDates.mockResolvedValue([]);
+    mockRepo.findSkipRanges.mockResolvedValue([]);
+    mockRepo.findPlanScheduleConfig.mockResolvedValue({
+      schedulingMode: 'RELATIVE_DAY',
+      durationDays: 7,
+      weekCount: null,
+      scheduleAnchorDate: null,
+    });
+  });
+
+  afterEach(() => jest.resetAllMocks());
+
+  it('refuses a change for a day outside the plan', async () => {
+    await expect(
+      service.setDayOverrideAdmin('t1', 'sub1', {
+        date: '2026-11-20',
+        note: 'Leave at gate',
+      } as never),
+    ).rejects.toThrow("There's no delivery on that day.");
+    expect(mockRepo.upsertDayOverride).not.toHaveBeenCalled();
+  });
+
+  it('refuses an address/time/note change for a skipped date', async () => {
+    mockRepo.findSkipForDate.mockResolvedValue({ id: 'skip1' });
+
+    await expect(
+      service.setDayOverrideAdmin('t1', 'sub1', {
+        date: '2026-10-05',
+        note: 'Leave at gate',
+      } as never),
+    ).rejects.toThrow(
+      "This day is skipped, so there's nothing to change for it.",
+    );
+    expect(mockRepo.findSkipForDate).toHaveBeenCalledWith('sub1', '2026-10-05');
+    expect(mockRepo.upsertDayOverride).not.toHaveBeenCalled();
+  });
+});
+
+describe('SubscriptionsService.replacePlanDays', () => {
+  let service: SubscriptionsService;
+  const relativePlan = {
+    id: 'p1',
+    schedulingMode: SubscriptionPlanSchedulingMode.RELATIVE_DAY,
+    durationDays: 7,
+    weekCount: null,
+  };
+  const day = (dayNumber: number, mealId?: string) => ({
+    dayNumber,
+    slots: [{ slotType: 'LUNCH', ...(mealId ? { mealId } : {}) }],
+  });
+
+  beforeEach(() => {
+    service = build();
+    mockRepo.findPlanByIdAdmin.mockResolvedValue(relativePlan);
+  });
+
+  afterEach(() => jest.resetAllMocks());
+
+  it("refuses a meal that isn't on this tenant's menu", async () => {
+    mockRepo.countTenantMeals.mockResolvedValue(1); // 2 asked, 1 found
+
+    await expect(
+      service.replacePlanDays('t1', 'p1', {
+        days: [day(1, 'own-meal'), day(2, 'other-tenant-meal')],
+      } as never),
+    ).rejects.toThrow(/aren't on your menu/);
+    expect(mockRepo.countTenantMeals).toHaveBeenCalledWith('t1', [
+      'own-meal',
+      'other-tenant-meal',
+    ]);
+    expect(mockRepo.replacePlanDays).not.toHaveBeenCalled();
+  });
+
+  it('refuses a day number past the end of the plan', async () => {
+    await expect(
+      service.replacePlanDays('t1', 'p1', { days: [day(8)] } as never),
+    ).rejects.toThrow('Day 8 is past the end of this 7-day plan.');
+  });
+
+  it('saves days whose meals are all the tenant’s own (TBD slots allowed)', async () => {
+    mockRepo.countTenantMeals.mockResolvedValue(1);
+
+    await service.replacePlanDays('t1', 'p1', {
+      days: [day(1, 'own-meal'), day(2, 'own-meal'), day(3)],
+    } as never);
+
+    expect(mockRepo.countTenantMeals).toHaveBeenCalledWith('t1', ['own-meal']);
+    expect(mockRepo.replacePlanDays).toHaveBeenCalled();
+  });
+});
+
+describe('SubscriptionsService.deletePlan', () => {
+  let service: SubscriptionsService;
+
+  beforeEach(() => {
+    service = build();
+    mockRepo.findPlanByIdAdmin.mockResolvedValue({ id: 'p1' });
+  });
+
+  afterEach(() => jest.resetAllMocks());
+
+  it('refuses to delete a plan that has (or had) subscriptions', async () => {
+    mockRepo.countSubscriptionsForPlan.mockResolvedValue(2);
+
+    await expect(service.deletePlan('t1', 'p1')).rejects.toThrow(
+      /2 subscriptions \(current or past\).*Unpublish it instead/,
+    );
+    expect(mockRepo.deletePlan).not.toHaveBeenCalled();
+  });
+
+  it('deletes a plan nobody ever subscribed to', async () => {
+    mockRepo.countSubscriptionsForPlan.mockResolvedValue(0);
+
+    await service.deletePlan('t1', 'p1');
+
+    expect(mockRepo.deletePlan).toHaveBeenCalledWith('p1');
+  });
+});
 
 describe('SubscriptionsService — calendar settings', () => {
   let service: SubscriptionsService;
@@ -351,6 +500,8 @@ describe('SubscriptionsService — skipping a closed date', () => {
   const subscription = {
     id: 'sub1',
     planId: 'p1',
+    usesDateSelection: false,
+    startDate: new Date('2026-09-20T00:00:00.000Z'),
     cycleEnd: new Date('2026-09-30T00:00:00.000Z'),
   };
 
@@ -364,6 +515,13 @@ describe('SubscriptionsService — skipping a closed date', () => {
     mockBanking.bankExtraDays.mockResolvedValue(
       new Date('2026-10-01T00:00:00.000Z'),
     );
+    mockRepo.findSkipRanges.mockResolvedValue([]);
+    mockRepo.findPlanScheduleConfig.mockResolvedValue({
+      schedulingMode: 'RELATIVE_DAY',
+      durationDays: 11,
+      weekCount: null,
+      scheduleAnchorDate: null,
+    });
   });
 
   afterEach(() => jest.resetAllMocks());
@@ -420,6 +578,88 @@ describe('SubscriptionsService — skipping a closed date', () => {
       expect.objectContaining({ id: 'sub1', planId: 'p1' }),
       1,
     );
+  });
+
+  it('never credits a day outside the plan or one already skipped', async () => {
+    mockSettingsRepo.findClosedDates.mockResolvedValue([]);
+    mockRepo.findSkipRanges.mockResolvedValue([
+      { dateFrom: '2026-09-25', dateTo: '2026-09-25' },
+    ]);
+
+    await expect(
+      service.skipDayAdmin('t1', 'sub1', { date: '2026-11-20' }),
+    ).rejects.toThrow("That day isn't part of this plan.");
+    await expect(
+      service.skipDayAdmin('t1', 'sub1', { date: '2026-09-25' }),
+    ).rejects.toThrow('That day is already skipped.');
+    expect(mockRepo.createSkip).not.toHaveBeenCalled();
+    expect(mockBanking.bankExtraDays).not.toHaveBeenCalled();
+  });
+});
+
+describe('SubscriptionsService — pause', () => {
+  let service: SubscriptionsService;
+  const subscription = {
+    id: 'sub1',
+    planId: 'p1',
+    usesDateSelection: false,
+    startDate: new Date('2026-09-20T00:00:00.000Z'),
+    cycleEnd: new Date('2026-09-30T00:00:00.000Z'),
+  };
+
+  beforeEach(() => {
+    service = build();
+    const internals = service as unknown as Record<string, jest.Mock>;
+    internals.getTenantActiveSubscription = jest
+      .fn()
+      .mockResolvedValue(subscription);
+    internals.assertWithinNoticeWindow = jest.fn().mockResolvedValue(undefined);
+    mockBanking.bankExtraDays.mockResolvedValue(
+      new Date('2026-10-05T00:00:00.000Z'),
+    );
+    mockSettingsRepo.findClosedDates.mockResolvedValue([]);
+    mockRepo.findPlanScheduleConfig.mockResolvedValue({
+      schedulingMode: 'RELATIVE_DAY',
+      durationDays: 11,
+      weekCount: null,
+      scheduleAnchorDate: null,
+    });
+  });
+
+  afterEach(() => jest.resetAllMocks());
+
+  it('credits only the plan days it stops and resumes them after the pause', async () => {
+    // 28 (already skipped), 29, 30 are plan days; 1–3 Oct are past the end.
+    mockRepo.findSkipRanges.mockResolvedValue([
+      { dateFrom: '2026-09-28', dateTo: '2026-09-28' },
+    ]);
+
+    await service.pauseAdmin('t1', 'sub1', {
+      dateFrom: '2026-09-28',
+      dateTo: '2026-10-03',
+    });
+
+    expect(mockRepo.createSkip).toHaveBeenCalledWith(
+      expect.objectContaining({ bankedDays: 2 }),
+    );
+    expect(mockBanking.bankExtraDays).toHaveBeenCalledWith(
+      't1',
+      expect.objectContaining({ id: 'sub1' }),
+      2,
+      '2026-10-03',
+    );
+  });
+
+  it('rejects a pause starting outside the plan without crediting anything', async () => {
+    mockRepo.findSkipRanges.mockResolvedValue([]);
+
+    await expect(
+      service.pauseAdmin('t1', 'sub1', {
+        dateFrom: '2026-12-01',
+        dateTo: '2026-12-10',
+      }),
+    ).rejects.toThrow('A pause has to start on a day within the plan.');
+    expect(mockRepo.createSkip).not.toHaveBeenCalled();
   });
 });
 
@@ -883,7 +1123,7 @@ describe('SubscriptionsService — activating a date-selection subscription', ()
   beforeEach(() => {
     jest.useFakeTimers().setSystemTime(new Date('2026-09-22T03:00:00Z'));
     service = buildForSubscribe();
-    mockRepo.activateSubscription.mockResolvedValue({});
+    mockRepo.activatePendingSubscription.mockResolvedValue(true);
     mockSettingsRepo.findBusinessProfile.mockResolvedValue({
       timezone: 'Asia/Kolkata',
     });
@@ -908,7 +1148,7 @@ describe('SubscriptionsService — activating a date-selection subscription', ()
       usesDateSelection: true,
     });
 
-    expect(mockRepo.activateSubscription).toHaveBeenCalledWith('sub1', {
+    expect(mockRepo.activatePendingSubscription).toHaveBeenCalledWith('sub1', {
       startDate: new Date('2026-09-25T00:00:00.000Z'),
       cycleEnd: new Date('2026-09-27T00:00:00.000Z'),
     });
@@ -935,6 +1175,23 @@ describe('SubscriptionsService — activating a date-selection subscription', ()
     expect(mockMaterialization.materializeOne).toHaveBeenCalledWith({
       id: 'sub1',
     });
+  });
+
+  it('does nothing more when a concurrent request already activated it', async () => {
+    // Same-day start, so the winner materializes today — the loser must not.
+    mockRepo.findScheduledDates.mockResolvedValue([
+      { date: '2026-09-22', sequence: 1 },
+    ]);
+    mockRepo.activatePendingSubscription.mockResolvedValue(false);
+
+    await (service as unknown as Internals).activateSubscriptionNow('t1', {
+      id: 'sub1',
+      planId: 'p1',
+      durationDaysSnapshot: 1,
+      usesDateSelection: true,
+    });
+
+    expect(mockMaterialization.materializeOne).not.toHaveBeenCalled();
   });
 });
 
@@ -1092,6 +1349,7 @@ describe('SubscriptionsService — moving a delivery date', () => {
       { date: '2026-09-21', sequence: 2 },
       { date: '2026-09-22', sequence: 3 },
     ]);
+    mockRepo.findSkipRanges.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -1100,6 +1358,35 @@ describe('SubscriptionsService — moving a delivery date', () => {
   });
 
   describe('getMoveCandidates', () => {
+    it('refuses to move a skipped day (it was already credited back)', async () => {
+      grant('subscriptions', CALENDAR, SELECTION);
+      mockRepo.findSkipRanges.mockResolvedValue([
+        { dateFrom: '2026-09-21', dateTo: '2026-09-21' },
+      ]);
+
+      await expect(
+        service.getMoveCandidates('t1', 'u1', 'sub1', '2026-09-21'),
+      ).rejects.toThrow("This day is skipped, so there's nothing to move.");
+    });
+
+    it('never offers a skipped or paused date as a target', async () => {
+      grant('subscriptions', CALENDAR, SELECTION);
+      mockRepo.findSkipRanges.mockResolvedValue([
+        { dateFrom: '2026-09-23', dateTo: '2026-09-24' },
+      ]);
+
+      const candidates = await service.getMoveCandidates(
+        't1',
+        'u1',
+        'sub1',
+        '2026-09-21',
+      );
+
+      expect(candidates).not.toContain('2026-09-23');
+      expect(candidates).not.toContain('2026-09-24');
+      expect(candidates).toContain('2026-09-25');
+    });
+
     it('rejects when the tenant has not enabled moving dates', async () => {
       grant('subscriptions', CALENDAR, SELECTION);
       mockRepo.findSettings.mockResolvedValue({
@@ -1171,12 +1458,14 @@ describe('SubscriptionsService — moving a delivery date', () => {
       grant('subscriptions', CALENDAR, SELECTION);
       mockRepo.updateScheduledDateDate.mockResolvedValue({});
       // After moving 09-21 -> 09-24, the stored rows (as re-fetched) look like this.
+      const before = [
+        { date: '2026-09-20', sequence: 1 },
+        { date: '2026-09-21', sequence: 2 },
+        { date: '2026-09-22', sequence: 3 },
+      ];
       mockRepo.findScheduledDates
-        .mockResolvedValueOnce([
-          { date: '2026-09-20', sequence: 1 },
-          { date: '2026-09-21', sequence: 2 },
-          { date: '2026-09-22', sequence: 3 },
-        ])
+        .mockResolvedValueOnce(before) // delivery calendar (skip check)
+        .mockResolvedValueOnce(before) // move candidates
         .mockResolvedValueOnce([
           { date: '2026-09-20', sequence: 1 },
           { date: '2026-09-22', sequence: 3 },
@@ -1289,5 +1578,46 @@ describe('bankHeldDays (cancellation request rejected/withdrawn)', () => {
     });
     await expect(build().bankHeldDays('t1', 's1', 'r1')).resolves.toBe(0);
     expect(mockRepo.extendCycleEnd).not.toHaveBeenCalled();
+  });
+});
+
+describe('SubscriptionsService.cancelWithRefund', () => {
+  beforeEach(() => {
+    mockRedis.acquireLock.mockResolvedValue('tok');
+  });
+
+  afterEach(() => jest.resetAllMocks());
+
+  it('never records a refund for a plan that was never paid', async () => {
+    mockRepo.findByIdForTenantAdmin.mockResolvedValue({
+      id: 's1',
+      status: 'PENDING_PAYMENT',
+      priceInPaiseSnapshot: 100000,
+    });
+
+    await expect(
+      build().cancelWithRefund('t1', 'staff1', 's1', {
+        method: 'MANUAL',
+        amountInPaise: 100000,
+      } as never),
+    ).rejects.toThrow('never paid');
+    expect(mockRepo.cancelWithRefund).not.toHaveBeenCalled();
+    // The lock is released even when the refund is refused.
+    expect(mockRedis.releaseLock).toHaveBeenCalledWith(
+      'refund-lock:subscription:s1',
+      'tok',
+    );
+  });
+
+  it('refuses a second refund while one is already running', async () => {
+    mockRedis.acquireLock.mockResolvedValue(null);
+
+    await expect(
+      build().cancelWithRefund('t1', 'staff1', 's1', {
+        method: 'MANUAL',
+        amountInPaise: 0,
+      } as never),
+    ).rejects.toThrow('already being processed');
+    expect(mockRepo.findByIdForTenantAdmin).not.toHaveBeenCalled();
   });
 });

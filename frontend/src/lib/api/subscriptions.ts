@@ -130,6 +130,8 @@ export interface UpcomingPreviewDay {
   replacementDate: string | null;
   /** The kitchen's holiday (not a declared disruption or the customer's own skip). */
   isHoliday: boolean;
+  /** No delivery while a cancellation request is pending — also skipped + locked. */
+  onHold: boolean;
 }
 
 export interface SubscriptionSummary {
@@ -155,7 +157,9 @@ export type SubscriptionDayKind =
   | "OFF_DAY"
   | "NOT_SCHEDULED"
   /** After the plan's current end — the day an upcoming holiday adds back. */
-  | "PROJECTED";
+  | "PROJECTED"
+  /** No delivery while a cancellation request is pending (or a day held for one). */
+  | "ON_HOLD";
 
 export interface SubscriptionCalendarDay {
   date: string;
@@ -175,6 +179,9 @@ export interface SubscriptionCalendarDay {
 }
 
 export interface SubscriptionDetail extends SubscriptionSummary {
+  cancelledAt: string | null;
+  /** What was refunded to the customer, newest first. */
+  refunds: { netRefundInPaise: number; method: "MANUAL" | "RAZORPAY"; createdAt: string }[];
   addressId: string;
   deliverySlotId: string | null;
   plan: SubscriptionSummary["plan"] & { durationDays: number; days: PlanDay[] };

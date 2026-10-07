@@ -18,6 +18,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { CreateInviteForm } from "@/components/admin/CreateInviteForm";
+import { formatDate, formatDateTime } from "@/lib/format/date";
 
 const SUBSCRIPTION_STATUS_STYLES: Record<string, string> = {
   ACTIVE: "bg-primary-50 text-primary-700 dark:bg-primary-950 dark:text-primary-400",
@@ -121,7 +122,7 @@ export function TenantBillingCard({
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3.5 py-2.5 text-sm dark:border-emerald-900 dark:bg-emerald-950/30">
               <span className="text-emerald-700 dark:text-emerald-400">
                 On trial — first charge on{" "}
-                {new Date(subscription.trialEndsAt).toLocaleDateString()}.
+                {formatDate(subscription.trialEndsAt)}.
               </span>
             </div>
           )}
@@ -132,7 +133,7 @@ export function TenantBillingCard({
             subscription.currentPeriodEnd && (
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
                 Upcoming invoice: {formatPriceFromPaise(subscription.amountInPaise)} on{" "}
-                {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                {formatDate(subscription.currentPeriodEnd)}
                 {subscription.scheduledPlan && " (before the scheduled plan change below)"}
               </p>
             )}
@@ -142,7 +143,7 @@ export function TenantBillingCard({
               <span className="text-sky-700 dark:text-sky-400">
                 Switching to <strong>{subscription.scheduledPlan.name}</strong>
                 {subscription.scheduledPlanChangeAt &&
-                  ` on ${new Date(subscription.scheduledPlanChangeAt).toLocaleDateString()}`}
+                  ` on ${formatDate(subscription.scheduledPlanChangeAt)}`}
               </span>
             </div>
           )}
@@ -168,7 +169,7 @@ export function TenantBillingCard({
               <span className="text-amber-700 dark:text-amber-400">
                 Cancels on{" "}
                 {subscription.currentPeriodEnd
-                  ? new Date(subscription.currentPeriodEnd).toLocaleDateString()
+                  ? formatDate(subscription.currentPeriodEnd)
                   : "the end of the current period"}
                 . This can&apos;t be undone — Razorpay doesn&apos;t support reversing a scheduled
                 cancellation.
@@ -218,7 +219,7 @@ export function TenantBillingCard({
                       {formatPriceFromPaise(invoice.amountInPaise)}
                     </span>
                     <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
-                      {new Date(invoice.createdAt).toLocaleString()}
+                      {formatDateTime(invoice.createdAt)}
                     </span>
                   </div>
                   {invoice.invoiceUrl && (

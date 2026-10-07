@@ -10,6 +10,7 @@ import { OrderStatus } from '../../../generated/prisma';
  */
 const ADMIN_SETTABLE_STATUSES = [
   OrderStatus.PREPARING,
+  OrderStatus.READY,
   OrderStatus.OUT_FOR_DELIVERY,
   OrderStatus.DELIVERED,
   OrderStatus.CANCELLED,

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +8,7 @@ import { WaitlistRepository } from './waitlist.repository';
 import { CreateWaitlistEntryDto } from './dto/create-waitlist-entry.dto';
 import { SettingsRepository } from '../settings/settings.repository';
 import { WaitlistEntry, WaitlistStatus } from '../../generated/prisma';
+import { WAITLIST_ALREADY_SEATED_MESSAGE } from './dine-in-rules';
 
 @Injectable()
 export class WaitlistService {
@@ -40,19 +42,24 @@ export class WaitlistService {
     return this.waitlistRepo.findActiveForTenant(tenantId, kitchenZoneId);
   }
 
-  /** Used by OrdersService.seatWaitlistEntry — must still be WAITING. */
-  async findWaitingForTenant(
-    tenantId: string,
-    id: string,
-  ): Promise<WaitlistEntry | null> {
+  /**
+   * Used by OrdersService.seatWaitlistEntry: reserves a WAITING party before
+   * its order is opened, so two staff seating the same party at once can't
+   * open two orders. Pair with releaseClaim (order failed) or markSeated
+   * (order opened) — there is no bare "seat" action from a controller.
+   */
+  async claimForSeating(tenantId: string, id: string): Promise<WaitlistEntry> {
     const entry = await this.waitlistRepo.findById(tenantId, id);
-    if (!entry || entry.status !== WaitlistStatus.WAITING) return null;
+    if (!entry) throw new NotFoundException('Waitlist entry not found');
+    const claimed = await this.waitlistRepo.claimForSeating(tenantId, id);
+    if (!claimed) throw new ConflictException(WAITLIST_ALREADY_SEATED_MESSAGE);
     return entry;
   }
 
-  /** Called by OrdersService once the seating order is actually created —
-   * never call this directly from a controller (there is no bare "seat"
-   * action, only "seat + create the order"). */
+  releaseClaim(id: string): Promise<void> {
+    return this.waitlistRepo.releaseClaim(id);
+  }
+
   markSeated(id: string, seatedOrderId: string): Promise<WaitlistEntry> {
     return this.waitlistRepo.markSeated(id, seatedOrderId);
   }

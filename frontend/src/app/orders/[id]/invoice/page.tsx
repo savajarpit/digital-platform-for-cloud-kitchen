@@ -12,6 +12,7 @@ import { qk, STALE } from "@/lib/query/keys";
 import { formatPriceFromPaise } from "@/lib/format/currency";
 import { InvoiceSkeleton } from "@/components/invoice/InvoiceSkeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { formatDate } from "@/lib/format/date";
 
 export default function OrderInvoicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -54,6 +55,24 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
       );
     }
     return <InvoiceSkeleton itemRows={2} summaryRows={3} wideTable />;
+  }
+
+  // A plan delivery was paid for with the plan — its bill is the plan's invoice.
+  if (order.planDelivery) {
+    return (
+      <main className="container-app flex-1 py-10">
+        <EmptyState
+          icon={FileText}
+          title="This delivery is part of your meal plan."
+          description="It has no bill of its own — your plan's invoice covers every delivery."
+          action={
+            <Link href={`/account/subscriptions/${order.planDelivery.subscriptionId}/invoice`} className="btn-primary">
+              View plan invoice
+            </Link>
+          }
+        />
+      </main>
+    );
   }
 
   return (
@@ -107,7 +126,7 @@ export default function OrderInvoicePage({ params }: { params: Promise<{ id: str
               {t("orderNumber")}: <span className="font-mono">{order.orderNumber}</span>
             </p>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 print:text-zinc-600">
-              {t("orderDate")}: {new Date(order.createdAt).toLocaleDateString()}
+              {t("orderDate")}: {formatDate(order.createdAt)}
             </p>
           </div>
         </div>

@@ -60,6 +60,8 @@ enum OrderStatus {
   PENDING_PAYMENT
   CONFIRMED
   PREPARING
+  // Cooked and packed — "Ready for delivery/pickup", "Ready to serve".
+  READY
   OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
@@ -1617,6 +1619,11 @@ model Subscription {
   // from the calendar (see PlanScheduleUtil), not a per-subscriber counter.
   nextPlanDayNumber Int       @default(1)
   bankedDays        Int       @default(0)
+  // Tenant-local YYYY-MM-DD this subscription was last materialized for.
+  // Claimed atomically before a day is processed, so the hourly job (and a
+  // second server) never materializes the same day twice; released again
+  // if processing fails, so the next run retries it.
+  lastMaterializedDate String?
   // True when this subscriber chose individual delivery dates at signup
   // (see SubscriptionScheduledDate) instead of the plan's default contiguous
   // schedule — set once at creation, never toggled later. Changes how both

@@ -13,6 +13,7 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { CreateCustomerDialog } from "@/components/admin/CreateCustomerDialog";
 import { usePermission } from "@/context/PermissionsContext";
 import { PERMISSIONS } from "@/lib/constants/permissions";
+import { formatDate } from "@/lib/format/date";
 
 export default function CustomersPage() {
   const router = useRouter();
@@ -128,7 +129,7 @@ function CustomersTable({
                 {customer.phone && <p className="text-xs text-zinc-400">{customer.phone}</p>}
               </td>
               <td className="px-5 py-3 text-xs text-zinc-500 dark:text-zinc-400">
-                {new Date(customer.createdAt).toLocaleDateString()}
+                {formatDate(customer.createdAt)}
               </td>
               <td className="px-5 py-3 text-zinc-700 dark:text-zinc-300">{customer.orderCount}</td>
               <td className="px-5 py-3">

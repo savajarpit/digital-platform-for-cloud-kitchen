@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarOff, ImageOff, Lock, SkipForward } from "lucide-react";
+import { CalendarOff, Lock, SkipForward } from "lucide-react";
 import type {
   SubscriptionCalendarDay,
   SubscriptionDetail,
@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/Select";
 import { formatTime12h } from "@/lib/format/time";
 import { STATUS_BADGE, STATUS_LABELS } from "./subscription-calendar-styles";
+import { MealThumb } from "@/components/ui/MealThumb";
+import { SheetActions } from "@/components/ui/SheetActions";
 
 const SLOT_LABELS: Record<string, string> = {
   BREAKFAST: "Breakfast",
@@ -89,6 +91,14 @@ export function SubscriptionDayDetailsPanel({
         </div>
       )}
 
+      {day.kind === "ON_HOLD" && (
+        <p className="rounded-xl bg-sky-50 px-3 py-2.5 text-xs text-sky-700 dark:bg-sky-950/40 dark:text-sky-400">
+          {day.date < new Date().toLocaleDateString("en-CA")
+            ? "This delivery was on hold while your cancellation request was reviewed."
+            : "No delivery while the kitchen reviews your cancellation request. If they decline it, this day is added back at the end of your plan."}
+        </p>
+      )}
+
       {day.kind === "PROJECTED" && (
         <p className="rounded-xl bg-primary-50 px-3 py-2.5 text-xs text-primary-700 dark:bg-primary-950/40 dark:text-primary-400">
           Added to make up for a holiday in your plan. It becomes a regular
@@ -122,20 +132,7 @@ export function SubscriptionDayDetailsPanel({
               className="flex items-center gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-zinc-800/60"
             >
               <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                {meal.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={meal.imageUrl}
-                    alt={meal.name ?? ""}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                ) : (
-                  <ImageOff
-                    className="h-5 w-5 text-zinc-300 dark:text-zinc-600"
-                    strokeWidth={1.5}
-                  />
-                )}
+                <MealThumb src={meal.imageUrl} alt={meal.name ?? ""} />
               </div>
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
@@ -166,10 +163,17 @@ export function SubscriptionDayDetailsPanel({
         </div>
       )}
 
+      {day.kind === "SKIPPED" && (
+        <p className="rounded-xl bg-zinc-50 px-3 py-2.5 text-xs text-zinc-500 dark:bg-zinc-800/60 dark:text-zinc-400">
+          You skipped this delivery, so there&apos;s nothing to change for this day.
+        </p>
+      )}
+
       {day.kind === "UPCOMING" && day.locked && (
         <p className="flex items-center gap-1.5 rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
           <Lock className="h-3.5 w-3.5" />
-          Changes are closed — less than 24h before delivery.
+          {/* The notice window is a tenant setting, not always 24h. */}
+          Too close to delivery to change — this day is locked.
         </p>
       )}
 
@@ -223,45 +227,49 @@ export function SubscriptionDayDetailsPanel({
             onChange={(e) => setNote(e.target.value)}
             maxLength={500}
             rows={2}
-            placeholder="Note for this delivery (optional)"
+            placeholder="Note for the kitchen or rider (optional)"
             className="input w-full resize-none text-sm"
           />
-          <button
-            type="button"
-            onClick={() =>
-              onSaveOverride(
-                day.date,
-                addressId,
-                canChangeTime ? slotId : "",
-                note,
-              )
-            }
-            disabled={busy}
-            className="btn-primary btn-sm cursor-pointer self-start"
-          >
-            Save changes
-          </button>
-          <div className="flex flex-wrap gap-2">
-            {subscription.canMoveDates && (
-              <button
-                type="button"
-                onClick={() => onOpenMove(day.date)}
-                disabled={busy}
-                className="btn-outline btn-sm cursor-pointer"
-              >
-                Move to another date
-              </button>
-            )}
+          {/* In the phone sheet these sit in its fixed footer; on the
+              desktop panel they render here as before. */}
+          <SheetActions inlineClassName="flex flex-col items-start gap-3">
             <button
               type="button"
-              onClick={() => onSkip(day.date)}
+              onClick={() =>
+                onSaveOverride(
+                  day.date,
+                  addressId,
+                  canChangeTime ? slotId : "",
+                  note,
+                )
+              }
               disabled={busy}
-              className="btn-outline btn-sm cursor-pointer text-red-600"
+              className="btn-primary btn-sm cursor-pointer"
             >
-              <SkipForward className="h-3.5 w-3.5" />
-              Skip this delivery
+              Save changes
             </button>
-          </div>
+            <div className="flex flex-wrap gap-2">
+              {subscription.canMoveDates && (
+                <button
+                  type="button"
+                  onClick={() => onOpenMove(day.date)}
+                  disabled={busy}
+                  className="btn-outline btn-sm cursor-pointer"
+                >
+                  Move to another date
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => onSkip(day.date)}
+                disabled={busy}
+                className="btn-outline btn-sm cursor-pointer text-red-600"
+              >
+                <SkipForward className="h-3.5 w-3.5" />
+                Skip this delivery
+              </button>
+            </div>
+          </SheetActions>
         </div>
       )}
     </div>

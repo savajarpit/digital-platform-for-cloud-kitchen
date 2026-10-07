@@ -3,6 +3,7 @@ import { PrismaService } from '../../database/prisma/prisma.service';
 import {
   Address,
   CancellationRequestStatus,
+  KitchenZone,
   Order,
   OrderFulfillmentType,
   PaymentMethod,
@@ -10,8 +11,10 @@ import {
   PaymentStatus,
   Prisma,
   Refund,
+  SubscriptionStatus,
 } from '../../generated/prisma';
 import { CreateRefundInput } from '../../shared-modules/refunds/refunds.repository';
+import { type PlanDelivery, planDeliveryOf } from './plan-delivery.util';
 
 export interface OrderItemAddonInput {
   addonItemId: string;
@@ -40,6 +43,15 @@ export interface AddressSnapshotInput {
   lng?: number | null;
 }
 
+/** A PICKUP order's pickup point at order time. Stored in the same
+ * address-snapshot columns a delivery order uses (a pickup order has no
+ * delivery address, so they're otherwise empty). */
+export interface PickupSnapshotInput {
+  address: string;
+  lat: number;
+  lng: number;
+}
+
 export interface CreateOrderInput {
   tenantId: string;
   // Absent only for a DINE_IN/TAKEAWAY walk-in with no linked account —
@@ -50,6 +62,7 @@ export interface CreateOrderInput {
   fulfillmentType: OrderFulfillmentType;
   addressId?: string;
   addressSnapshot?: AddressSnapshotInput;
+  pickupSnapshot?: PickupSnapshotInput;
   pickupKitchenZoneId?: string;
   // Which outlet took a DINE_IN/TAKEAWAY order — distinct from
   // pickupKitchenZoneId's "advance-booked pickup point" semantics.
@@ -130,17 +143,55 @@ export type OrderWithAdminDetails = Prisma.OrderGetPayload<{
 }>;
 
 /**
- * Overlays the snapshotted delivery-address fields (captured at order time)
- * onto the live `address` relation, so every display surface shows what was
- * actually delivered to — not a later edit to that Address row. Falls back
- * to the live relation untouched for a PICKUP order or a pre-snapshot
- * historical order (addressLine1Snapshot null), since there's nothing to
- * retroactively snapshot for those.
+ * Overlays the snapshotted address fields (captured at order time) onto the
+ * live relation, so every display surface shows what the order was actually
+ * placed with — not a later edit. A delivery order's snapshot replaces its
+ * `address`; a PICKUP order's (pickup address + map point, in the same
+ * columns) replaces its `pickupKitchenZone` pickup details. A pre-snapshot
+ * historical order (addressLine1Snapshot null) keeps the live relation.
+ * Also marks a subscription's daily delivery (`planDelivery`), which every
+ * order screen shows as part of a plan, not as a priced order.
  */
+/**
+ * A Razorpay order still PENDING_PAYMENT is an abandoned checkout (the
+ * customer closed the payment window) — never a real order to list. An
+ * unpaid cash/UPI order is different: staff took it, and under cash on
+ * delivery (Arpit, 2026-10-04) it's cooked and delivered before payment.
+ */
+export const NOT_ABANDONED_CHECKOUT: Prisma.OrderWhereInput = {
+  NOT: {
+    status: OrderStatus.PENDING_PAYMENT,
+    paymentMethod: PaymentMethod.RAZORPAY,
+  },
+};
+
 export function withAddressSnapshot<
   T extends { address: Address | null } & Order,
->(order: T): T {
-  if (!order.address || !order.addressLine1Snapshot) return order;
+>(order: T): T & { planDelivery: PlanDelivery | null } {
+  return {
+    ...overlayAddressSnapshot(order),
+    planDelivery: planDeliveryOf(order),
+  };
+}
+
+function overlayAddressSnapshot<T extends { address: Address | null } & Order>(
+  order: T,
+): T {
+  if (!order.addressLine1Snapshot) return order;
+  const zone = (order as { pickupKitchenZone?: KitchenZone | null })
+    .pickupKitchenZone;
+  if (order.fulfillmentType === OrderFulfillmentType.PICKUP && zone) {
+    return {
+      ...order,
+      pickupKitchenZone: {
+        ...zone,
+        pickupAddress: order.addressLine1Snapshot,
+        lat: order.addressLatSnapshot ?? zone.lat,
+        lng: order.addressLngSnapshot ?? zone.lng,
+      },
+    };
+  }
+  if (!order.address) return order;
   return {
     ...order,
     address: {
@@ -172,14 +223,17 @@ export class OrdersRepository {
           guestPhone: input.guestPhone,
           fulfillmentType: input.fulfillmentType,
           addressId: input.addressId,
-          addressLine1Snapshot: input.addressSnapshot?.line1,
+          addressLine1Snapshot:
+            input.addressSnapshot?.line1 ?? input.pickupSnapshot?.address,
           addressLine2Snapshot: input.addressSnapshot?.line2,
           addressCitySnapshot: input.addressSnapshot?.city,
           addressStateSnapshot: input.addressSnapshot?.state,
           addressPincodeSnapshot: input.addressSnapshot?.pincode,
           addressContactPhoneSnapshot: input.addressSnapshot?.contactPhone,
-          addressLatSnapshot: input.addressSnapshot?.lat,
-          addressLngSnapshot: input.addressSnapshot?.lng,
+          addressLatSnapshot:
+            input.addressSnapshot?.lat ?? input.pickupSnapshot?.lat,
+          addressLngSnapshot:
+            input.addressSnapshot?.lng ?? input.pickupSnapshot?.lng,
           pickupKitchenZoneId: input.pickupKitchenZoneId,
           dineInKitchenZoneId: input.dineInKitchenZoneId,
           tableId: input.tableId,
@@ -269,11 +323,9 @@ export class OrdersRepository {
   }
 
   /**
-   * Excludes orders still stuck at PENDING_PAYMENT — a legitimate order
-   * always flips to CONFIRMED (or FAILED) before the customer is ever
-   * redirected back to look at their order list, so anything still
-   * PENDING_PAYMENT by the time this query runs is an abandoned checkout
-   * (closed the payment modal, never paid), not a real order to show.
+   * Excludes abandoned online checkouts (see NOT_ABANDONED_CHECKOUT); a
+   * cash/UPI order staff took for this customer shows even before it's
+   * paid — it's a real cash-on-delivery order.
    */
   async findAllForUser(
     tenantId: string,
@@ -281,10 +333,10 @@ export class OrdersRepository {
     skip: number,
     take: number,
   ): Promise<[OrderWithDetails[], number]> {
-    const where = {
+    const where: Prisma.OrderWhereInput = {
       tenantId,
       userId,
-      status: { not: OrderStatus.PENDING_PAYMENT },
+      ...NOT_ABANDONED_CHECKOUT,
     };
     const [data, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({
@@ -311,6 +363,42 @@ export class OrdersRepository {
     });
   }
 
+  /** Online orders still awaiting payment, created in [from, to) — the
+   * payment-check job asks Razorpay about each. Oldest first, capped. */
+  findPendingRazorpayOrders(
+    from: Date,
+    to: Date,
+    limit: number,
+  ): Promise<Order[]> {
+    return this.prisma.order.findMany({
+      where: {
+        paymentMethod: PaymentMethod.RAZORPAY,
+        paymentStatus: PaymentStatus.PENDING,
+        razorpayOrderId: { not: null },
+        createdAt: { gte: from, lt: to },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
+  }
+
+  /** Online orders still PENDING created before `before` — the customer
+   * never paid — become FAILED. Only orders that actually went to Razorpay
+   * checkout (paymentMethod merely defaults to RAZORPAY, e.g. on a dine-in
+   * tab). Returns how many. */
+  async markStaleRazorpayOrdersFailed(before: Date): Promise<number> {
+    const { count } = await this.prisma.order.updateMany({
+      where: {
+        paymentMethod: PaymentMethod.RAZORPAY,
+        paymentStatus: PaymentStatus.PENDING,
+        razorpayOrderId: { not: null },
+        createdAt: { lt: before },
+      },
+      data: { paymentStatus: PaymentStatus.FAILED },
+    });
+    return count;
+  }
+
   /** Never downgrades a PAID order: Razorpay can deliver a stale
    * `payment.failed` (an earlier attempt) after a retry already captured,
    * since webhooks arrive out of order and get retried. Returns whether
@@ -329,12 +417,18 @@ export class OrdersRepository {
    * TAKEAWAY, where staff genuinely doesn't know cash-vs-UPI until the guest
    * pays at the end of the meal — every other manual order already commits
    * to CASH/UPI at creation and never changes it here. */
-  markPaidManually(id: string, paymentMethod?: PaymentMethod): Promise<Order> {
+  markPaidManually(
+    id: string,
+    paymentMethod?: PaymentMethod,
+    keepStatus = false,
+  ): Promise<Order> {
     return this.prisma.order.update({
       where: { id },
       data: {
         paymentStatus: PaymentStatus.PAID,
-        status: OrderStatus.CONFIRMED,
+        // keepStatus: the kitchen already moved it on (a dine-in table pays
+        // after eating) — paying must not pull it back to CONFIRMED.
+        ...(keepStatus ? {} : { status: OrderStatus.CONFIRMED }),
         ...(paymentMethod ? { paymentMethod } : {}),
       },
     });
@@ -351,16 +445,30 @@ export class OrdersRepository {
     additionalDiscountInPaise: number,
   ): Promise<OrderWithAdminDetails> {
     return this.prisma.$transaction(async (tx) => {
-      await tx.orderItem.createMany({
-        data: items.map((item) => ({
-          orderId: id,
-          mealId: item.mealId,
-          nameSnapshot: item.nameSnapshot,
-          priceInPaiseSnapshot: item.priceInPaiseSnapshot,
-          quantity: item.quantity,
-          isFreeItem: item.isFreeItem ?? false,
-        })),
-      });
+      // One create per line (not createMany) so each line's add-ons are
+      // saved with it — the round's subtotal already charges for them.
+      for (const item of items) {
+        await tx.orderItem.create({
+          data: {
+            orderId: id,
+            mealId: item.mealId,
+            nameSnapshot: item.nameSnapshot,
+            priceInPaiseSnapshot: item.priceInPaiseSnapshot,
+            quantity: item.quantity,
+            isFreeItem: item.isFreeItem ?? false,
+            addons: item.addons?.length
+              ? {
+                  create: item.addons.map((addon) => ({
+                    addonItemId: addon.addonItemId,
+                    nameSnapshot: addon.nameSnapshot,
+                    priceInPaiseSnapshot: addon.priceInPaiseSnapshot,
+                    quantity: addon.quantity,
+                  })),
+                }
+              : undefined,
+          },
+        });
+      }
       const order = await tx.order.update({
         where: { id },
         data: {
@@ -393,9 +501,10 @@ export class OrdersRepository {
   }
 
   /**
-   * Excludes PENDING_PAYMENT by default — same "abandoned checkout" reasoning
-   * as findAllForUser, but here it's unconditional: admin never opts back
-   * into seeing them, since ADMIN_SETTABLE_STATUSES doesn't include it either.
+   * Hides abandoned online checkouts (see NOT_ABANDONED_CHECKOUT) but keeps
+   * a staff-taken cash/UPI order that's still awaiting payment — cash on
+   * delivery is cooked and delivered first, then marked paid. Filtering by
+   * PENDING_PAYMENT therefore lists just those awaiting-payment orders.
    */
   async findAllForTenant(
     tenantId: string,
@@ -407,7 +516,8 @@ export class OrdersRepository {
   ): Promise<[OrderWithAdminDetails[], number]> {
     const where: Prisma.OrderWhereInput = {
       tenantId,
-      status: status ?? { not: OrderStatus.PENDING_PAYMENT },
+      ...(status ? { status } : {}),
+      ...NOT_ABANDONED_CHECKOUT,
       ...(fulfillmentType ? { fulfillmentType } : {}),
       ...(cancelRequested
         ? {
@@ -496,7 +606,7 @@ export class OrdersRepository {
 
   // ── Overview dashboard aggregates ─────────────────────────
 
-  /** Paid orders in [since, until] — the raw dataset both the fixed today/last-7-days tiles and the (separately ranged) revenue trend are bucketed from. */
+  /** Paid food orders in [since, until] — the raw dataset both the fixed today/last-7-days tiles and the (separately ranged) revenue trend are bucketed from. A subscription's daily delivery is excluded: no money changes hands for it (the plan was paid for up front — see findPlanSalesInRange). */
   findPaidOrdersInRange(
     tenantId: string,
     since: Date,
@@ -506,10 +616,28 @@ export class OrdersRepository {
       where: {
         tenantId,
         paymentStatus: PaymentStatus.PAID,
+        subscriptionId: null,
         createdAt: { gte: since, lte: until },
       },
       select: { createdAt: true, totalInPaise: true },
       orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /** Plans bought in [since, until] (an abandoned checkout never counts) —
+   * the same definition Subscriptions → Analytics uses for gross revenue. */
+  findPlanSalesInRange(
+    tenantId: string,
+    since: Date,
+    until: Date,
+  ): Promise<{ createdAt: Date; priceInPaiseSnapshot: number }[]> {
+    return this.prisma.subscription.findMany({
+      where: {
+        tenantId,
+        status: { not: SubscriptionStatus.PENDING_PAYMENT },
+        createdAt: { gte: since, lte: until },
+      },
+      select: { createdAt: true, priceInPaiseSnapshot: true },
     });
   }
 
@@ -521,6 +649,7 @@ export class OrdersRepository {
           in: [
             OrderStatus.CONFIRMED,
             OrderStatus.PREPARING,
+            OrderStatus.READY,
             OrderStatus.OUT_FOR_DELIVERY,
           ],
         },
@@ -541,17 +670,36 @@ export class OrdersRepository {
     return grouped.map((g) => ({ status: g.status, count: g._count._all }));
   }
 
+  /** Paid food orders plus plans bought — real money in, never a
+   * subscription's daily deliveries. */
   async getAllTimeRevenue(
     tenantId: string,
-  ): Promise<{ orders: number; revenueInPaise: number }> {
-    const result = await this.prisma.order.aggregate({
-      where: { tenantId, paymentStatus: PaymentStatus.PAID },
-      _sum: { totalInPaise: true },
-      _count: { _all: true },
-    });
+  ): Promise<{ orders: number; plans: number; revenueInPaise: number }> {
+    const [orders, plans] = await Promise.all([
+      this.prisma.order.aggregate({
+        where: {
+          tenantId,
+          paymentStatus: PaymentStatus.PAID,
+          subscriptionId: null,
+        },
+        _sum: { totalInPaise: true },
+        _count: { _all: true },
+      }),
+      this.prisma.subscription.aggregate({
+        where: {
+          tenantId,
+          status: { not: SubscriptionStatus.PENDING_PAYMENT },
+        },
+        _sum: { priceInPaiseSnapshot: true },
+        _count: { _all: true },
+      }),
+    ]);
     return {
-      orders: result._count._all,
-      revenueInPaise: result._sum.totalInPaise ?? 0,
+      orders: orders._count._all,
+      plans: plans._count._all,
+      revenueInPaise:
+        (orders._sum.totalInPaise ?? 0) +
+        (plans._sum.priceInPaiseSnapshot ?? 0),
     };
   }
 

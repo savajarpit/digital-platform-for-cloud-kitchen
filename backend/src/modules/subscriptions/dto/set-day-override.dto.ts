@@ -1,18 +1,13 @@
-import {
-  IsDateString,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-} from 'class-validator';
+import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDateStr } from '../../../common/decorators/is-date-str.decorator';
 
 export class SetDayOverrideDto {
   @ApiProperty({
     example: '2026-08-10',
     description: 'YYYY-MM-DD, tenant-local',
   })
-  @IsDateString()
+  @IsDateStr()
   date: string;
 
   @ApiPropertyOptional({
@@ -35,6 +30,6 @@ export class SetDayOverrideDto {
   })
   @IsOptional()
   @IsString()
-  @MaxLength(500)
+  @MaxLength(500, { message: 'Keep the note under 500 characters.' })
   note?: string;
 }
